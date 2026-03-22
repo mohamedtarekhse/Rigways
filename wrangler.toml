@@ -1,0 +1,28 @@
+# wrangler.toml — Rigways ACM
+# Cloudflare Pages + Worker (Option A — full-stack)
+
+name                   = "rigways-acm"
+pages_build_output_dir = "."
+compatibility_date     = "2024-09-23"
+compatibility_flags    = ["nodejs_compat"]
+
+[vars]
+# Update this to your actual Pages URL after first deploy
+CORS_ALLOW_ORIGIN    = "https://rigways-acm.pages.dev"
+DISABLE_HASH_ENDPOINT = "false"   # set to "true" after creating all users
+
+# ── Secrets (set via Dashboard or CLI — never commit values) ──
+# wrangler pages secret put SUPABASE_URL             --project-name rigways-acm
+# wrangler pages secret put SUPABASE_SERVICE_ROLE_KEY --project-name rigways-acm
+# wrangler pages secret put SUPABASE_ANON_KEY         --project-name rigways-acm
+# wrangler pages secret put JWT_SECRET                --project-name rigways-acm
+# wrangler pages secret put JWT_EXPIRES_SEC           --project-name rigways-acm
+# wrangler pages secret put RESEND_API_KEY            --project-name rigways-acm  (optional)
+
+[env.preview.vars]
+CORS_ALLOW_ORIGIN     = "https://rigways-acm.pages.dev"
+DISABLE_HASH_ENDPOINT = "false"
+
+[env.production.vars]
+CORS_ALLOW_ORIGIN     = "https://rigways-acm.pages.dev"
+DISABLE_HASH_ENDPOINT = "true"

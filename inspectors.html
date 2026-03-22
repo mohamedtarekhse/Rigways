@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data: blob:;
+    connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787;
+    frame-ancestors 'self';
+    object-src 'none';
+    base-uri 'self';
+  "/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Inspectors – Rigways Group</title>
+  <script src="app.js"></script>
+  <link rel="stylesheet" href="styles.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    /* ── Inspector avatar ── */
+    .inspector-avatar {
+      width: 40px; height: 40px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 800; color: #fff; flex-shrink: 0;
+    }
+    .inspector-avatar--lg {
+      width: 56px; height: 56px; border-radius: 14px;
+      font-size: 20px; border-radius: 50%;
+    }
+
+    /* ── ID chip ── */
+    .inspector-id-chip {
+      font-family: monospace; font-size: 11px; font-weight: 700;
+      background: var(--sap-page-bg); border: 1px solid var(--sap-table-border);
+      border-radius: 4px; padding: 2px 6px; color: var(--sap-brand);
+    }
+
+    /* ── CV / file chip ── */
+    .cv-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 600; color: var(--sap-brand);
+      background: var(--sap-brand-light); border: 1px solid #90caf9;
+      border-radius: 4px; padding: 2px 7px; cursor: pointer;
+      text-decoration: none; transition: all .15s; white-space: nowrap;
+    }
+    .cv-chip:hover { background: #d0e8ff; border-color: var(--sap-brand); text-decoration: none; }
+    .cv-chip svg { width: 11px; height: 11px; flex-shrink: 0; }
+
+    /* ── Training certificate link chip (table cell) ── */
+    .tc-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: #f0faf0; border: 1px solid var(--sap-success-border);
+      border-radius: 4px; padding: 3px 7px;
+      font-size: 11px; font-weight: 600; color: var(--sap-success);
+      cursor: pointer; text-decoration: none; white-space: nowrap;
+      transition: background .12s;
+      max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tc-chip:hover { background: #e4f7e4; border-color: var(--sap-success); text-decoration: none; }
+    .tc-chip svg { width: 11px; height: 11px; flex-shrink: 0; }
+    .tc-chip--url { background: var(--sap-brand-light); border-color: var(--sap-info-border); color: var(--sap-brand); }
+    .tc-chip--url:hover { background: #d0e8ff; }
+    .tc-chip-list { display: flex; flex-direction: column; gap: 3px; }
+
+    /* ── Training tag ── */
+    .training-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: var(--sap-page-bg); border: 1px solid var(--sap-table-border);
+      border-radius: 12px; padding: 2px 8px;
+      font-size: 10px; font-weight: 600; color: var(--sap-text-secondary);
+    }
+
+    /* ── Status dot ── */
+    .inspector-status { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; }
+    .inspector-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .inspector-status--active::before   { background: var(--sap-success); box-shadow: 0 0 0 2px rgba(24,137,24,.2); }
+    .inspector-status--inactive::before { background: var(--sap-neutral); }
+
+    /* ── Dynamic row (modal) ── */
+    .dynamic-row {
+      display: flex; align-items: flex-start; gap: var(--sp-sm);
+      padding: var(--sp-sm) var(--sp-md);
+      background: var(--sap-page-bg); border: 1px solid var(--sap-table-border);
+      border-radius: 6px; margin-bottom: 6px;
+    }
+    .dynamic-row:last-child { margin-bottom: 0; }
+    .dynamic-row__fields { flex: 1; display: grid; gap: var(--sp-sm); }
+    .dynamic-row__remove {
+      width: 28px; height: 28px; flex-shrink: 0;
+      border: none; border-radius: 4px; cursor: pointer;
+      background: var(--sap-error-bg); color: var(--sap-error);
+      display: flex; align-items: center; justify-content: center;
+      margin-top: 22px; transition: background .15s;
+    }
+    .dynamic-row__remove:hover { background: var(--sap-error); color: #fff; }
+    .dynamic-row__remove svg { width: 13px; height: 13px; }
+
+    /* ── File-or-URL toggle ── */
+    .file-url-toggle {
+      display: inline-flex; gap: 2px;
+      background: var(--sap-page-bg); border: 1px solid var(--sap-table-border);
+      border-radius: 4px; padding: 2px; margin-bottom: 5px;
+    }
+    .file-url-btn {
+      padding: 3px 10px; border-radius: 3px; border: none;
+      font-size: 11px; font-weight: 600; cursor: pointer;
+      background: transparent; color: var(--sap-text-secondary); transition: all .15s;
+    }
+    .file-url-btn.active { background: #fff; color: var(--sap-brand); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+
+    /* ── Add-row button ── */
+    .add-row-btn {
+      display: flex; align-items: center; justify-content: center; gap: 5px;
+      padding: 7px 12px; width: 100%; margin-top: 6px;
+      border: 1px dashed var(--sap-brand); border-radius: 6px;
+      background: var(--sap-brand-light); color: var(--sap-brand);
+      font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s;
+    }
+    .add-row-btn:hover { background: #d0e8ff; }
+    .add-row-btn svg { width: 13px; height: 13px; }
+
+    /* ── Modal section separator ── */
+    .modal-section { margin-bottom: var(--sp-lg); }
+    .modal-section__title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .8px; color: var(--sap-text-secondary);
+      margin-bottom: var(--sp-sm); padding-bottom: 6px;
+      border-bottom: 2px solid var(--sap-table-border);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .modal-section__title svg { width: 14px; height: 14px; color: var(--sap-brand); }
+
+    /* ── Detail drawer ── */
+    .sap-drawer-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.35);
+      z-index: 900; opacity: 0; pointer-events: none; transition: opacity .25s;
+    }
+    .sap-drawer-overlay.open { opacity: 1; pointer-events: all; }
+    .sap-drawer {
+      position: fixed; top: 48px; right: 0; bottom: 0; width: 560px;
+      background: #fff; box-shadow: -8px 0 32px rgba(0,0,0,.15);
+      z-index: 901; display: flex; flex-direction: column;
+      transform: translateX(100%); transition: transform .3s ease;
+    }
+    [dir="rtl"] .sap-drawer { right: auto; left: 0; transform: translateX(-100%); box-shadow: 8px 0 32px rgba(0,0,0,.15); }
+    .sap-drawer-overlay.open .sap-drawer { transform: translateX(0); }
+    .sap-drawer__header {
+      padding: var(--sp-md) var(--sp-lg); color: #fff;
+      display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+    }
+    .sap-drawer__title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: var(--sp-sm); }
+    .sap-drawer__title svg { width: 18px; height: 18px; }
+    .sap-drawer__close { background: rgba(255,255,255,.2); border: none; color: #fff; border-radius: 4px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .sap-drawer__close:hover { background: rgba(255,255,255,.35); }
+    .sap-drawer__close svg { width: 16px; height: 16px; }
+    .sap-drawer__body { flex: 1; overflow-y: auto; padding: var(--sp-lg); }
+    .sap-drawer__footer { padding: var(--sp-md) var(--sp-lg); border-top: var(--sap-card-border); display: flex; gap: var(--sp-sm); justify-content: flex-end; background: #fafbfc; flex-shrink: 0; }
+
+    .drawer-section { margin-bottom: var(--sp-lg); }
+    .drawer-section__title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .8px; color: var(--sap-text-secondary);
+      margin-bottom: var(--sp-sm); padding-bottom: 6px;
+      border-bottom: 1px solid var(--sap-table-border);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .drawer-section__title svg { width: 13px; height: 13px; }
+
+    /* ── Education card in drawer ── */
+    .edu-card {
+      background: var(--sap-brand-light); border: 1px solid var(--sap-info-border);
+      border-radius: 6px; padding: 10px 12px; margin-bottom: 6px;
+      display: flex; align-items: center; gap: var(--sp-sm);
+    }
+    .edu-card:last-child { margin-bottom: 0; }
+    .edu-card__icon { width: 32px; height: 32px; border-radius: 8px; background: var(--sap-brand); color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .edu-card__icon svg { width: 16px; height: 16px; }
+    .edu-card__degree { font-size: 12px; font-weight: 700; color: var(--sap-text-primary); }
+    .edu-card__meta   { font-size: 11px; color: var(--sap-text-secondary); margin-top: 2px; }
+
+    /* ── Training item in drawer ── */
+    .training-item {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 8px 0; border-bottom: 1px solid var(--sap-table-border);
+    }
+    .training-item:last-child { border-bottom: none; }
+    .training-item__bullet { width: 6px; height: 6px; border-radius: 50%; background: var(--sap-brand); flex-shrink: 0; margin-top: 5px; }
+    .training-item__name   { font-size: 12px; font-weight: 600; color: var(--sap-text-primary); }
+    .training-item__meta   { font-size: 11px; color: var(--sap-text-secondary); margin-top: 1px; }
+
+    /* ── Linked cert row in drawer ── */
+    .linked-cert-row {
+      display: flex; align-items: center; gap: var(--sp-sm);
+      padding: 8px var(--sp-md); border-bottom: 1px solid var(--sap-table-border);
+      cursor: pointer; transition: background var(--transition);
+    }
+    .linked-cert-row:last-child { border-bottom: none; }
+    .linked-cert-row:hover { background: var(--sap-page-bg); }
+    .linked-cert-row__icon { width: 28px; height: 28px; border-radius: 6px; background: #f0faf0; color: var(--sap-success); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .linked-cert-row__icon svg { width: 14px; height: 14px; }
+
+    /* ── Filter chips ── */
+    .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .filter-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px; border-radius: 16px; font-size: 11px; font-weight: 600;
+      border: 1px solid var(--sap-input-border); background: #fff;
+      cursor: pointer; transition: all .15s; color: var(--sap-text-secondary);
+    }
+    .filter-chip.active { background: var(--sap-brand); color: #fff; border-color: var(--sap-brand); }
+    .filter-chip:hover:not(.active) { border-color: var(--sap-brand); color: var(--sap-brand); }
+    .filter-chip__dot { width: 7px; height: 7px; border-radius: 50%; }
+
+    /* ── Column selector ── */
+    .col-selector-wrap { position: relative; flex-shrink: 0; }
+    .col-selector-btn {
+      display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px;
+      border: 1px solid var(--sap-input-border); border-radius: 4px; background: #fff;
+      font-size: 12px; font-weight: 600; color: var(--sap-text-secondary); cursor: pointer; transition: all .15s;
+    }
+    .col-selector-btn:hover { border-color: var(--sap-brand); color: var(--sap-brand); }
+    .col-selector-btn svg { width: 13px; height: 13px; }
+    .col-selector-btn .badge { background: var(--sap-brand); color: #fff; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 8px; }
+    .col-dropdown {
+      position: absolute; top: calc(100% + 4px); right: 0;
+      background: #fff; border: 1px solid var(--sap-table-border);
+      border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.13);
+      z-index: 500; min-width: 200px; padding: 6px 0; display: none;
+    }
+    [dir="rtl"] .col-dropdown { right: auto; left: 0; }
+    .col-dropdown.open { display: block; }
+    .col-dropdown__header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 14px 8px; font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--sap-text-secondary); border-bottom: 1px solid var(--sap-table-border);
+    }
+    .col-dropdown__reset { font-size: 10px; font-weight: 600; color: var(--sap-brand); cursor: pointer; background: none; border: none; padding: 0; }
+    .col-dropdown__reset:hover { text-decoration: underline; }
+    .col-dropdown__item {
+      display: flex; align-items: center; gap: 10px; padding: 7px 14px; cursor: pointer;
+      font-size: 12px; font-weight: 500; color: var(--sap-text-primary); transition: background .12s;
+    }
+    .col-dropdown__item:hover { background: var(--sap-page-bg); }
+    .col-dropdown__item input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--sap-brand); cursor: pointer; flex-shrink: 0; }
+    .col-dropdown__item--locked { opacity: .45; cursor: not-allowed; }
+
+    /* ── Mass action bar ── */
+    .mass-action-bar {
+      display: none; align-items: center; gap: 6px; padding: 5px 12px;
+      background: #e8f3ff; border-bottom: 1px solid #90caf9; border-top: 1px solid #90caf9;
+      flex-wrap: wrap;
+    }
+    .mass-action-bar.visible { display: flex; }
+    .mass-action-bar__count { font-size: 12px; font-weight: 700; color: var(--sap-brand); white-space: nowrap; padding-right: 6px; border-right: 1px solid #90caf9; margin-right: 2px; }
+    .mass-action-bar__spacer { flex: 1; }
+    .mass-action-bar .btn { height: 26px; font-size: 11px; padding: 0 9px; }
+
+    .cell-check { width: 36px; text-align: center; }
+    .sap-checkbox { width: 16px; height: 16px; accent-color: var(--sap-brand); cursor: pointer; }
+
+    @media(max-width:900px) {
+      .sap-drawer { width: 100%; }
+      .hide-mobile { display: none !important; }
+    }
+  
+  /* ── Rigways Logo ── */
+  .rigways-shell-logo {
+    height: 22px;
+    width: auto;
+    flex-shrink: 0;
+    /* Make logo white on dark shell header */
+    filter: brightness(0) invert(1);
+  }
+  .rigways-login-logo-dark {
+    height: 36px;
+    width: auto;
+    /* White version for dark backgrounds */
+    filter: brightness(0) invert(1);
+  }
+  .rigways-login-logo {
+    height: 32px;
+    width: auto;
+    /* Original colors for light backgrounds */
+  }
+
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════ SHELL ═══════════════════════ -->
+<header class="sap-shell">
+  <a href="dashboard.html" class="sap-shell__logo">
+    <svg class="rigways-shell-logo" height="22" aria-label="Rigways Group" xmlns="http://www.w3.org/2000/svg"   viewBox="0 0 190.81 25.51"><defs><style>      .cls-1 {        fill: #231f20;      }      .cls-2 {        fill: #00aded;      }      .cls-3 {        fill: #2e3d54;      }    </style></defs><g  ><g><path class="cls-2" d="M74.28,0c0,.13-.08.18-.14.25-1.61,2.01-3.23,4.01-4.83,6.03-.14.17-.29.2-.48.2-18.2,0-36.39,0-54.59,0-1.71,0-3.08,1.43-2.97,3.11.09,1.42,1.26,2.6,2.67,2.71.28.02.56.03.84.03,7.99,0,15.99,0,23.98,0q.37,0,.37.38c0,4.16,0,8.31,0,12.47,0,.28-.08.33-.34.33-2.53-.01-5.06,0-7.59,0-.24,0-.32-.04-.31-.3.01-1.95,0-3.89.01-5.84,0-.24-.07-.29-.3-.29-3.64,0-7.28,0-10.92,0-.2,0-.35.06-.5.19-2.4,2.03-4.81,4.07-7.22,6.1-.11.09-.21.14-.35.14-3.83,0-7.65,0-11.48,0-.03,0-.05,0-.15-.02,3.1-2.56,6.17-5.09,9.23-7.62-2.24-.69-3.72-2.27-4.96-4.12-.69-1.03-1.15-2.15-1.37-3.37-.31-1.74-.1-3.43.65-5.03C4.85,2.55,7.07.88,10.06.2,10.72.05,11.4,0,12.08,0c20.65,0,41.3,0,61.95,0h.25Z"></path><path class="cls-3" d="M74.36,25.21c0,.25-.05.31-.3.31-5.81,0-11.62,0-17.43,0-3.24,0-6.25-.82-8.96-2.6-3.69-2.42-6-5.8-6.83-10.16-.15-.78-.2-1.56-.23-2.35,0-.17.02-.24.22-.24,2.77,0,5.55,0,8.32,0,.17,0,.22.05.23.22.04,1.02.2,2.02.6,2.97.87,2.07,2.29,3.63,4.3,4.66,1.38.71,2.84,1.01,4.38,1.01,2.43.01,4.87,0,7.31.01.26,0,.31-.08.3-.32-.02-.64-.02-1.28,0-1.92,0-.23-.06-.28-.28-.28-3.31,0-6.62,0-9.93,0-.17,0-.29-.04-.41-.18-1.71-2.02-3.42-4.03-5.13-6.04-.03-.03-.06-.07-.13-.16h.34c7.77,0,15.53,0,23.3,0,.26,0,.34.05.34.33-.01,4.92,0,9.84,0,14.75"></path><g><path class="cls-1" d="M91.12,10.1l-1.35-1.95h-1.49v1.95h-1.62V3.1h3.03c1.87,0,3.04.97,3.04,2.54,0,1.05-.53,1.82-1.44,2.21l1.57,2.25h-1.74ZM89.6,4.42h-1.32v2.44h1.32c.99,0,1.49-.46,1.49-1.22s-.5-1.22-1.49-1.22Z"></path><path class="cls-1" d="M94.21,3.1c0-.49.39-.87.97-.87s.97.36.97.84c0,.52-.39.9-.97.9s-.97-.38-.97-.87ZM94.4,4.72h1.56v5.38h-1.56v-5.38Z"></path><path class="cls-1" d="M103.46,4.72v4.48c0,2-1.08,2.92-3.02,2.92-1.02,0-2.01-.25-2.64-.74l.62-1.12c.46.37,1.21.61,1.9.61,1.1,0,1.58-.5,1.58-1.47v-.23c-.41.45-1,.67-1.7.67-1.49,0-2.69-1.03-2.69-2.6s1.2-2.6,2.69-2.6c.75,0,1.37.25,1.78.77v-.69h1.48ZM101.92,7.24c0-.79-.59-1.32-1.41-1.32s-1.42.53-1.42,1.32.6,1.32,1.42,1.32,1.41-.53,1.41-1.32Z"></path><path class="cls-1" d="M114.04,4.72l-1.95,5.38h-1.5l-1.21-3.34-1.25,3.34h-1.5l-1.94-5.38h1.47l1.27,3.64,1.32-3.64h1.32l1.28,3.64,1.31-3.64h1.38Z"></path><path class="cls-1" d="M120.04,7.03v3.07h-1.46v-.67c-.29.49-.85.75-1.64.75-1.26,0-2.01-.7-2.01-1.63s.67-1.61,2.31-1.61h1.24c0-.67-.4-1.06-1.24-1.06-.57,0-1.16.19-1.55.5l-.56-1.09c.59-.42,1.46-.65,2.32-.65,1.64,0,2.59.76,2.59,2.39ZM118.48,8.4v-.55h-1.07c-.73,0-.96.27-.96.63,0,.39.33.65.88.65.52,0,.97-.24,1.15-.73Z"></path><path class="cls-1" d="M127.29,4.72l-2.43,5.71c-.52,1.3-1.26,1.69-2.23,1.69-.55,0-1.15-.18-1.5-.49l.57-1.11c.24.21.57.34.88.34.43,0,.67-.19.88-.67l.02-.05-2.33-5.42h1.61l1.51,3.65,1.52-3.65h1.5Z"></path><path class="cls-1" d="M127.91,9.6l.52-1.12c.48.31,1.21.52,1.87.52.72,0,.99-.19.99-.49,0-.88-3.25.02-3.25-2.13,0-1.02.92-1.74,2.49-1.74.74,0,1.56.17,2.07.47l-.52,1.11c-.53-.3-1.06-.4-1.55-.4-.7,0-1,.22-1,.5,0,.92,3.25.03,3.25,2.15,0,1-.93,1.71-2.54,1.71-.91,0-1.83-.25-2.33-.58Z"></path><path class="cls-1" d="M142.41,6.49h1.48v2.84c-.77.58-1.83.89-2.83.89-2.2,0-3.82-1.51-3.82-3.62s1.62-3.62,3.85-3.62c1.23,0,2.25.42,2.93,1.21l-1.04.96c-.51-.54-1.1-.79-1.81-.79-1.36,0-2.29.91-2.29,2.24s.93,2.24,2.27,2.24c.44,0,.85-.08,1.26-.3v-2.05Z"></path><path class="cls-1" d="M149.12,4.64v1.44c-.13,0-.23-.02-.35-.02-.86,0-1.43.47-1.43,1.5v2.54h-1.56v-5.38h1.49v.71c.38-.52,1.02-.79,1.85-.79Z"></path><path class="cls-1" d="M150.19,7.41c0-1.62,1.25-2.77,2.96-2.77s2.95,1.15,2.95,2.77-1.24,2.77-2.95,2.77-2.96-1.15-2.96-2.77ZM154.52,7.41c0-.93-.59-1.49-1.37-1.49s-1.38.56-1.38,1.49.6,1.49,1.38,1.49,1.37-.56,1.37-1.49Z"></path><path class="cls-1" d="M163.06,4.72v5.38h-1.48v-.64c-.41.47-1.01.72-1.67.72-1.35,0-2.3-.76-2.3-2.42v-3.04h1.56v2.81c0,.9.4,1.3,1.09,1.3s1.24-.46,1.24-1.45v-2.66h1.56Z"></path><path class="cls-1" d="M170.86,7.41c0,1.69-1.17,2.77-2.68,2.77-.67,0-1.22-.21-1.62-.65v2.51h-1.56v-7.32h1.49v.62c.39-.47.97-.7,1.69-.7,1.51,0,2.68,1.08,2.68,2.77ZM169.29,7.41c0-.93-.59-1.49-1.37-1.49s-1.37.56-1.37,1.49.59,1.49,1.37,1.49,1.37-.56,1.37-1.49Z"></path></g><g><path class="cls-1" d="M86.31,18.6c0-2.05,1.58-3.58,3.73-3.58s3.71,1.52,3.71,3.58-1.58,3.58-3.71,3.58-3.73-1.53-3.73-3.58ZM92.75,18.6c0-1.55-1.16-2.69-2.71-2.69s-2.73,1.14-2.73,2.69,1.16,2.69,2.73,2.69,2.71-1.14,2.71-2.69Z"></path><path class="cls-1" d="M95.47,15.16c0-.35.28-.63.65-.63s.65.27.65.61c0,.36-.27.64-.65.64s-.65-.27-.65-.62ZM95.64,16.8h.96v5.3h-.96v-5.3Z"></path><path class="cls-1" d="M98.93,14.68h.96v7.42h-.96v-7.42Z"></path><path class="cls-1" d="M110.67,22.21l-.93-.93c-.61.59-1.41.9-2.34.9-1.42,0-2.45-.75-2.45-1.82,0-.86.49-1.46,1.7-2.15-.63-.63-.84-1.08-.84-1.6,0-.94.74-1.57,1.89-1.57,1.06,0,1.74.55,1.74,1.46,0,.71-.42,1.22-1.49,1.83l1.73,1.72c.19-.36.34-.78.43-1.27l.77.25c-.12.62-.33,1.16-.61,1.6l.94.94-.54.64ZM109.17,20.72l-1.99-1.98c-.98.55-1.29.96-1.29,1.52,0,.67.63,1.12,1.57,1.12.67,0,1.26-.22,1.71-.66ZM106.7,16.59c0,.36.14.62.71,1.2.92-.52,1.22-.84,1.22-1.28s-.33-.77-.93-.77c-.63,0-1,.35-1,.85Z"></path><path class="cls-1" d="M120.95,18.56h.96v2.73c-.7.59-1.67.89-2.65.89-2.15,0-3.73-1.51-3.73-3.58s1.58-3.58,3.75-3.58c1.11,0,2.05.37,2.69,1.08l-.62.62c-.58-.56-1.24-.81-2.03-.81-1.62,0-2.79,1.13-2.79,2.69s1.17,2.69,2.78,2.69c.59,0,1.14-.13,1.64-.45v-2.28Z"></path><path class="cls-1" d="M128.38,18.9v3.2h-.91v-.7c-.32.48-.91.76-1.74.76-1.2,0-1.96-.64-1.96-1.56,0-.85.55-1.55,2.13-1.55h1.52v-.19c0-.81-.47-1.28-1.42-1.28-.63,0-1.27.22-1.68.57l-.4-.72c.55-.44,1.34-.68,2.19-.68,1.45,0,2.27.7,2.27,2.15ZM127.42,20.48v-.74h-1.48c-.95,0-1.22.37-1.22.82,0,.53.44.86,1.17.86s1.29-.33,1.53-.94Z"></path><path class="cls-1" d="M129.99,21.54l.4-.76c.45.32,1.17.55,1.86.55.89,0,1.26-.27,1.26-.72,0-1.19-3.35-.16-3.35-2.27,0-.95.85-1.59,2.21-1.59.69,0,1.47.18,1.93.48l-.41.76c-.48-.31-1.01-.42-1.53-.42-.84,0-1.25.31-1.25.73,0,1.25,3.36.23,3.36,2.29,0,.96-.88,1.57-2.29,1.57-.88,0-1.75-.27-2.19-.62Z"></path><path class="cls-1" d="M138.93,18.6c0-2.07,1.58-3.58,3.71-3.58,1.08,0,2.02.37,2.66,1.09l-.65.63c-.54-.57-1.2-.83-1.97-.83-1.58,0-2.75,1.14-2.75,2.69s1.17,2.69,2.75,2.69c.77,0,1.43-.27,1.97-.84l.65.63c-.64.72-1.58,1.1-2.67,1.1-2.12,0-3.7-1.51-3.7-3.58Z"></path><path class="cls-1" d="M146.6,19.45c0-1.58,1.17-2.7,2.76-2.7s2.75,1.12,2.75,2.7-1.16,2.71-2.75,2.71-2.76-1.13-2.76-2.71ZM151.14,19.45c0-1.13-.76-1.86-1.78-1.86s-1.79.73-1.79,1.86.77,1.87,1.79,1.87,1.78-.74,1.78-1.87Z"></path><path class="cls-1" d="M162.73,19.05v3.05h-.96v-2.94c0-1.04-.5-1.55-1.37-1.55-.96,0-1.59.61-1.59,1.76v2.73h-.96v-2.94c0-1.04-.5-1.55-1.37-1.55-.96,0-1.59.61-1.59,1.76v2.73h-.96v-5.3h.92v.79c.38-.54,1.03-.84,1.83-.84s1.49.32,1.84.98c.4-.6,1.14-.98,2.04-.98,1.29,0,2.17.74,2.17,2.3Z"></path><path class="cls-1" d="M170.49,19.45c0,1.63-1.13,2.71-2.68,2.71-.75,0-1.41-.29-1.85-.86v2.74h-.96v-7.24h.92v.84c.43-.59,1.11-.89,1.89-.89,1.55,0,2.68,1.08,2.68,2.7ZM169.53,19.45c0-1.12-.77-1.86-1.79-1.86s-1.78.74-1.78,1.86.77,1.87,1.78,1.87,1.79-.74,1.79-1.87Z"></path><path class="cls-1" d="M176.53,18.9v3.2h-.91v-.7c-.32.48-.91.76-1.74.76-1.2,0-1.96-.64-1.96-1.56,0-.85.55-1.55,2.13-1.55h1.52v-.19c0-.81-.47-1.28-1.42-1.28-.63,0-1.27.22-1.68.57l-.4-.72c.55-.44,1.34-.68,2.19-.68,1.45,0,2.27.7,2.27,2.15ZM175.57,20.48v-.74h-1.48c-.95,0-1.22.37-1.22.82,0,.53.44.86,1.17.86s1.29-.33,1.53-.94Z"></path><path class="cls-1" d="M183.83,19.05v3.05h-.96v-2.94c0-1.04-.52-1.55-1.43-1.55-1.02,0-1.68.61-1.68,1.76v2.73h-.96v-5.3h.92v.8c.39-.54,1.07-.85,1.91-.85,1.29,0,2.2.74,2.2,2.3Z"></path><path class="cls-1" d="M190.81,16.8l-2.57,5.83c-.47,1.12-1.08,1.47-1.89,1.47-.51,0-1.03-.17-1.36-.49l.41-.72c.26.25.59.39.95.39.46,0,.75-.21,1.01-.82l.17-.37-2.34-5.29h1l1.85,4.24,1.83-4.24h.94Z"></path></g></g></g></svg>
+    <span class="sap-shell__logo-badge">ACM</span>
+  </a>
+  <div class="sap-shell__divider"></div>
+  <span class="sap-shell__app-title" data-en="Inspector Management" data-ar="إدارة المفتشين">Inspector Management</span>
+  <div class="sap-shell__spacer"></div>
+  <div class="sap-shell__actions">
+    <button class="sap-shell__lang-btn" onclick="toggleLang()" id="langBtn">AR</button>
+    <button class="sap-shell__btn" onclick="window.location.href='notifications.html'">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span class="sap-shell__badge" id="notifBadge" style="display:none;"></span>
+    </button>
+    <div class="sap-shell__avatar" id="shellAvatar" onclick="toggleUserMenu()">AD</div>
+  </div>
+  <div class="sap-user-menu" id="userMenu">
+    <div class="sap-user-menu__header">
+      <div class="sap-user-menu__name" id="menuUserName">Admin</div>
+      <div class="sap-user-menu__role" id="menuUserRole">Administrator</div>
+    </div>
+    <div class="sap-user-menu__item" onclick="window.location.href='dashboard.html'">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span data-en="Dashboard" data-ar="لوحة التحكم">Dashboard</span>
+    </div>
+    <div class="sap-user-menu__sep"></div>
+    <div class="sap-user-menu__item sap-user-menu__item--danger" onclick="logout()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      <span data-en="Sign Out" data-ar="تسجيل الخروج">Sign Out</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════ NAVBAR ═══════════════════════ -->
+<nav class="sap-navbar" id="navbar">
+  <div class="sap-navbar__inner">
+    <a href="dashboard.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span data-en="Dashboard" data-ar="لوحة التحكم">Dashboard</span>
+    </a>
+    <a href="assets.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      <span data-en="Assets" data-ar="الأصول">Assets</span>
+    </a>
+    <a href="certificates.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+      <span data-en="Certificates" data-ar="الشهادات">Certificates</span>
+    </a>
+    <a href="notifications.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span data-en="Notifications" data-ar="الإشعارات">Notifications</span>
+    </a>
+    <div class="sap-navbar__divider" id="adminSection"></div>
+    <a href="clients.html" class="sap-nav-item sap-nav-item--admin" id="adminClientsLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+      <span data-en="Clients" data-ar="العملاء">Clients</span>
+    </a>
+    <a href="inspectors.html" class="sap-nav-item sap-nav-item--admin active" id="inspectorsLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M9 12l2 2 4-4"/></svg>
+      <span data-en="Inspectors" data-ar="المفتشون">Inspectors</span>
+    </a>
+
+    <a href="functional-locations.html" class="sap-nav-item sap-nav-item--admin" id="funcLocsLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      <span>Func. Locations</span>
+    </a>
+  </div>
+</nav>
+
+<!-- ═══════════════════════ MAIN ═══════════════════════ -->
+<main class="sap-main" id="mainContent">
+
+  <!-- Access denied -->
+  <div id="accessDenied" style="display:none; text-align:center; padding:80px 20px;">
+    <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:64px;height:64px;margin:0 auto 16px;color:var(--sap-error);opacity:.6;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    <div style="font-size:20px;font-weight:700;margin-bottom:8px;" data-en="Access Restricted" data-ar="وصول مقيد">Access Restricted</div>
+    <p style="color:var(--sap-text-secondary);font-size:14px;max-width:400px;margin:0 auto 24px;" data-en="Inspector Management is accessible to Administrators and Managers only." data-ar="إدارة المفتشين متاحة للمسؤولين والمديرين فقط.">Inspector Management is accessible to Administrators and Managers only.</p>
+    <a href="dashboard.html" class="btn btn-primary" data-en="Back to Dashboard" data-ar="العودة للوحة التحكم">Back to Dashboard</a>
+  </div>
+
+  <!-- Admin/Manager content -->
+  <div id="mainBody">
+    <!-- Page header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-sm);flex-wrap:wrap;gap:var(--sp-sm);">
+      <div>
+        <div class="sap-page-header__breadcrumb">
+          <a href="dashboard.html" data-en="Home" data-ar="الرئيسية">Home</a>
+          <span>›</span>
+          <span data-en="Administration" data-ar="الإدارة">Administration</span>
+          <span>›</span>
+          <span data-en="Inspectors" data-ar="المفتشون">Inspectors</span>
+        </div>
+        <span style="font-size:16px;font-weight:700;color:var(--sap-text-primary);" data-en="Inspector Management" data-ar="إدارة المفتشين">Inspector Management</span>
+        <span style="font-size:12px;color:var(--sap-text-secondary);margin-left:8px;" data-en="Manage inspector profiles, qualifications & linked certificates" data-ar="إدارة ملفات المفتشين ومؤهلاتهم وشهاداتهم المرتبطة">Manage inspector profiles, qualifications &amp; linked certificates</span>
+      </div>
+      <div id="headerActions"></div>
+    </div>
+
+    <!-- KPI strip -->
+    <div class="sap-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:var(--sp-md);">
+      <div class="sap-kpi sap-kpi--blue"><div class="sap-kpi__accent"></div><div class="sap-kpi__value" id="kpiTotal">0</div><div class="sap-kpi__label" data-en="Total Inspectors" data-ar="إجمالي المفتشين">Total Inspectors</div></div>
+      <div class="sap-kpi sap-kpi--green"><div class="sap-kpi__accent"></div><div class="sap-kpi__value" id="kpiActive">0</div><div class="sap-kpi__label" data-en="Active" data-ar="نشطون">Active</div></div>
+      <div class="sap-kpi sap-kpi--orange"><div class="sap-kpi__accent"></div><div class="sap-kpi__value" id="kpiAvgExp">0</div><div class="sap-kpi__label" data-en="Avg Experience (yrs)" data-ar="متوسط الخبرة (سنوات)">Avg Experience (yrs)</div></div>
+      <div class="sap-kpi sap-kpi--green"><div class="sap-kpi__accent"></div><div class="sap-kpi__value" id="kpiCerts">0</div><div class="sap-kpi__label" data-en="Linked Certificates" data-ar="شهادات مرتبطة">Linked Certificates</div></div>
+    </div>
+
+    <!-- Table card -->
+    <div class="sap-card">
+      <!-- Toolbar -->
+      <div class="sap-toolbar" style="gap:6px;flex-wrap:wrap;padding:6px 12px;border-bottom:1px solid var(--sap-table-border);">
+        <input type="checkbox" class="sap-checkbox" onchange="toggleSelectAll(this)" style="margin-right:4px;"/>
+
+        <div class="filter-chips" style="flex-shrink:0;">
+          <div class="filter-chip active" onclick="filterStatus('all',this)" data-en="All" data-ar="الكل">All</div>
+          <div class="filter-chip" onclick="filterStatus('active',this)"><span class="filter-chip__dot" style="background:#188918"></span><span data-en="Active" data-ar="نشط">Active</span></div>
+          <div class="filter-chip" onclick="filterStatus('inactive',this)"><span class="filter-chip__dot" style="background:#9ea3a8"></span><span data-en="Inactive" data-ar="غير نشط">Inactive</span></div>
+        </div>
+
+        <div style="width:1px;height:20px;background:var(--sap-table-border);flex-shrink:0;"></div>
+
+        <div class="sap-search-box" style="flex:1;min-width:160px;height:28px;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="searchInput" data-ph-en="Search inspectors…" data-ph-ar="البحث في المفتشين…" placeholder="Search inspectors…" oninput="applyFilters()"/>
+        </div>
+
+        <span class="sap-toolbar__count" id="tableCount" style="flex-shrink:0;">0</span>
+        <div style="width:1px;height:20px;background:var(--sap-table-border);flex-shrink:0;"></div>
+
+        <!-- Column selector -->
+        <div class="col-selector-wrap">
+          <button class="col-selector-btn" onclick="toggleColDropdown()">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            <span data-en="Columns" data-ar="الأعمدة">Columns</span>
+            <span class="badge" id="colBadge">7</span>
+          </button>
+          <div class="col-dropdown" id="colDropdown">
+            <div class="col-dropdown__header">
+              <span data-en="VISIBLE COLUMNS" data-ar="الأعمدة المرئية">VISIBLE COLUMNS</span>
+              <button class="col-dropdown__reset" onclick="resetColumns()" data-en="Reset" data-ar="إعادة تعيين">Reset</button>
+            </div>
+            <label class="col-dropdown__item col-dropdown__item--locked"><input type="checkbox" checked disabled/><span data-en="Name / Title" data-ar="الاسم / اللقب">Name / Title</span></label>
+            <label class="col-dropdown__item"><input type="checkbox" id="col_inspectorId" checked onchange="applyColVisibility()"/><span data-en="Inspector ID" data-ar="رقم المفتش">Inspector ID</span></label>
+            <label class="col-dropdown__item"><input type="checkbox" id="col_education" checked onchange="applyColVisibility()"/><span data-en="Education" data-ar="التعليم">Education</span></label>
+            <label class="col-dropdown__item"><input type="checkbox" id="col_experience" checked onchange="applyColVisibility()"/><span data-en="Experience" data-ar="الخبرة">Experience</span></label>
+            <label class="col-dropdown__item"><input type="checkbox" id="col_cv" checked onchange="applyColVisibility()"/><span data-en="CV" data-ar="السيرة الذاتية">CV</span></label>
+            <label class="col-dropdown__item"><input type="checkbox" id="col_trainingCerts" checked onchange="applyColVisibility()"/><span data-en="Training Certificates" data-ar="شهادات التدريب">Training Certificates</span></label>
+            <label class="col-dropdown__item"><input type="checkbox" id="col_status" checked onchange="applyColVisibility()"/><span data-en="Status" data-ar="الحالة">Status</span></label>
+          </div>
+        </div>
+
+        <div style="width:1px;height:20px;background:var(--sap-table-border);flex-shrink:0;"></div>
+
+        <button class="btn btn-ghost btn-sm" onclick="exportCSV()" style="height:28px;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          CSV
+        </button>
+      </div>
+
+      <!-- Mass action bar -->
+      <div class="mass-action-bar" id="massActionBar">
+        <span class="mass-action-bar__count" id="massCount">0 selected</span>
+        <div class="mass-action-bar__spacer"></div>
+        <button class="btn btn-danger" id="massDeleteBtn" onclick="massDelete()">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+          <span data-en="Delete Selected" data-ar="حذف المحدد">Delete Selected</span>
+        </button>
+        <button class="btn btn-ghost" onclick="clearSelection()">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="12" height="12"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <span data-en="Deselect All" data-ar="إلغاء التحديد">Deselect All</span>
+        </button>
+      </div>
+
+      <!-- Table -->
+      <div class="sap-table-wrapper">
+        <table class="sap-table">
+          <thead>
+            <tr>
+              <th class="cell-check"><input type="checkbox" class="sap-checkbox" onchange="toggleSelectAll(this)"/></th>
+              <th data-col="inspectorId" onclick="sortTable('inspectorId')" data-en="Inspector ID" data-ar="رقم المفتش">Inspector ID <span class="sort-icon">↕</span></th>
+              <th onclick="sortTable('name')" data-en="Name / Title" data-ar="الاسم / اللقب">Name / Title <span class="sort-icon">↕</span></th>
+              <th data-col="education" onclick="sortTable('education')" data-en="Education" data-ar="التعليم">Education <span class="sort-icon">↕</span></th>
+              <th data-col="experience" onclick="sortTable('experienceYears')" data-en="Experience" data-ar="الخبرة">Experience <span class="sort-icon">↕</span></th>
+              <th data-col="cv" data-en="CV" data-ar="السيرة الذاتية">CV</th>
+              <th data-col="trainingCerts" data-en="Training Certificates" data-ar="شهادات التدريب">Training Certificates</th>
+              <th data-col="status" onclick="sortTable('status')" data-en="Status" data-ar="الحالة">Status <span class="sort-icon">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="inspectorTableBody"></tbody>
+        </table>
+        <div class="sap-table__empty" id="emptyState" style="display:none;">
+          <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <p data-en="No inspectors match your filters." data-ar="لا يوجد مفتشون يطابقون معايير البحث.">No inspectors match your filters.</p>
+        </div>
+      </div>
+
+      <!-- Pagination -->
+      <div class="sap-pagination" id="pagination">
+        <div class="sap-pagination__info" id="paginationInfo"></div>
+        <div class="sap-pagination__controls" id="paginationControls"></div>
+      </div>
+    </div>
+  </div><!-- /mainBody -->
+</main>
+
+<!-- ═══════════════════════ ADD / EDIT MODAL ═══════════════════════ -->
+<div class="sap-modal-overlay" id="inspectorModal">
+  <div class="sap-modal sap-modal--lg">
+    <div class="sap-modal__header">
+      <div class="sap-modal__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M9 12l2 2 4-4"/></svg>
+        <span id="modalTitle" data-en="Add Inspector" data-ar="إضافة مفتش">Add Inspector</span>
+      </div>
+      <button class="sap-modal__close" onclick="closeModal()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="sap-modal__body">
+      <input type="hidden" id="editInspectorId"/>
+      <form id="inspectorForm" novalidate onsubmit="return false;">
+
+        <!-- ── Basic Info ── -->
+        <div class="modal-section">
+          <div class="modal-section__title">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span data-en="Basic Information" data-ar="المعلومات الأساسية">Basic Information</span>
+          </div>
+          <div class="sap-form-grid sap-form-grid--2col">
+            <div class="sap-field">
+              <label class="sap-label" data-en="Full Name" data-ar="الاسم الكامل">Full Name <span class="required">*</span></label>
+              <input type="text" id="f_name" class="sap-input" data-ph-en="e.g. Ahmed Al-Rashidi" data-ph-ar="مثال: أحمد الراشدي"/>
+            </div>
+            <div class="sap-field">
+              <label class="sap-label" data-en="Job Title / Specialization" data-ar="المسمى الوظيفي / التخصص">Job Title / Specialization <span class="required">*</span></label>
+              <input type="text" id="f_title" class="sap-input" data-ph-en="e.g. Senior Mechanical Inspector" data-ph-ar="مثال: مفتش ميكانيكي أول"/>
+            </div>
+            <div class="sap-field">
+              <label class="sap-label" data-en="Email Address" data-ar="البريد الإلكتروني">Email Address <span class="required">*</span></label>
+              <input type="email" id="f_email" class="sap-input" data-ph-en="inspector@company.com" data-ph-ar="البريد الإلكتروني"/>
+            </div>
+            <div class="sap-field">
+              <label class="sap-label" data-en="Phone Number" data-ar="رقم الهاتف">Phone Number</label>
+              <input type="tel" id="f_phone" class="sap-input" data-ph-en="+971 50 000 0000" data-ph-ar="+971 50 000 0000"/>
+            </div>
+            <div class="sap-field">
+              <label class="sap-label" data-en="Status" data-ar="الحالة">Status <span class="required">*</span></label>
+              <select id="f_status" class="sap-select">
+                <option value="active"   data-en="Active"   data-ar="نشط">Active</option>
+                <option value="inactive" data-en="Inactive" data-ar="غير نشط">Inactive</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Education ── -->
+        <div class="modal-section">
+          <div class="modal-section__title">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+            <span data-en="Education Background" data-ar="المؤهلات الدراسية">Education Background</span>
+          </div>
+          <div id="educationContainer"></div>
+          <button type="button" class="add-row-btn" onclick="addEducationRow()">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span data-en="Add Education Entry" data-ar="إضافة مؤهل دراسي">Add Education Entry</span>
+          </button>
+        </div>
+
+        <!-- ── Experience ── -->
+        <div class="modal-section">
+          <div class="modal-section__title">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+            <span data-en="Work Experience" data-ar="الخبرة العملية">Work Experience</span>
+          </div>
+          <div class="sap-form-grid sap-form-grid--2col">
+            <div class="sap-field">
+              <label class="sap-label" data-en="Years of Experience" data-ar="سنوات الخبرة">Years of Experience <span class="required">*</span></label>
+              <input type="number" id="f_expYears" class="sap-input" min="0" max="60" placeholder="e.g. 10"/>
+            </div>
+            <div class="sap-field span-full">
+              <label class="sap-label" data-en="Experience Description" data-ar="وصف الخبرة">Experience Description</label>
+              <textarea id="f_expDesc" class="sap-textarea" rows="3" data-ph-en="Describe key areas of expertise and experience…" data-ph-ar="اشرح المجالات الرئيسية للخبرة والكفاءة…"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Training List ── -->
+        <div class="modal-section">
+          <div class="modal-section__title">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            <span data-en="List of Training Courses" data-ar="قائمة الدورات التدريبية">List of Training Courses</span>
+          </div>
+          <div id="trainingContainer"></div>
+          <button type="button" class="add-row-btn" onclick="addTrainingRow()">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span data-en="Add Training Course" data-ar="إضافة دورة تدريبية">Add Training Course</span>
+          </button>
+        </div>
+
+        <!-- ── CV ── -->
+        <div class="modal-section">
+          <div class="modal-section__title">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span data-en="CV / Resume" data-ar="السيرة الذاتية">CV / Resume</span>
+          </div>
+          <div style="background:var(--sap-page-bg);border:1px solid var(--sap-table-border);border-radius:6px;padding:var(--sp-md);">
+            <div class="file-url-toggle" style="margin-bottom:var(--sp-sm);">
+              <button type="button" class="file-url-btn active" data-mode="file" onclick="switchCVMode('file')" data-en="📁 Upload File" data-ar="📁 رفع ملف">📁 Upload File</button>
+              <button type="button" class="file-url-btn" data-mode="url" onclick="switchCVMode('url')" data-en="🔗 Paste URL" data-ar="🔗 لصق رابط">🔗 Paste URL</button>
+            </div>
+            <div id="cvFileWrap">
+              <input type="file" id="cvFileInput" class="sap-input" accept=".pdf,.doc,.docx" data-existing=""/>
+              <div id="cvExistingNote" style="font-size:11px;color:var(--sap-text-secondary);margin-top:4px;display:none;"></div>
+            </div>
+            <div id="cvUrlWrap" style="display:none;">
+              <input type="text" id="cvUrlInput" class="sap-input" data-ph-en="https://linkedin.com/in/yourprofile or direct file URL" data-ph-ar="رابط لينكدإن أو رابط مباشر للملف" placeholder="https://..."/>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Training Certificates ── -->
+        <div class="modal-section">
+          <div class="modal-section__title">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+            <span data-en="Training Certificates" data-ar="شهادات التدريب">Training Certificates</span>
+          </div>
+          <div id="trainingCertsContainer"></div>
+          <button type="button" class="add-row-btn" onclick="addTrainingCertRow()">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span data-en="Add Training Certificate" data-ar="إضافة شهادة تدريب">Add Training Certificate</span>
+          </button>
+        </div>
+
+      </form>
+    </div>
+    <div class="sap-modal__footer">
+      <button class="btn btn-ghost" onclick="closeModal()" data-en="Cancel" data-ar="إلغاء">Cancel</button>
+      <button class="btn btn-primary" onclick="saveInspector()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        <span id="saveBtnLabel" data-en="Save Inspector" data-ar="حفظ المفتش">Save Inspector</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ DETAIL DRAWER ═══════════════════════ -->
+<div class="sap-drawer-overlay" id="drawerOverlay">
+  <div class="sap-drawer">
+    <div class="sap-drawer__header" id="drawerHeader">
+      <div class="sap-drawer__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M9 12l2 2 4-4"/></svg>
+        <span data-en="Inspector Profile" data-ar="ملف المفتش">Inspector Profile</span>
+      </div>
+      <button class="sap-drawer__close" onclick="closeDrawer()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="sap-drawer__body" id="drawerBody"></div>
+    <div class="sap-drawer__footer" id="drawerFooter">
+      <button class="btn btn-ghost" onclick="closeDrawer()" data-en="Close" data-ar="إغلاق">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ DELETE MODAL ═══════════════════════ -->
+<div class="sap-modal-overlay" id="deleteModal">
+  <div class="sap-modal sap-modal--sm">
+    <div class="sap-modal__header" style="background:var(--sap-error);">
+      <div class="sap-modal__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+        <span data-en="Delete Inspector" data-ar="حذف المفتش">Delete Inspector</span>
+      </div>
+      <button class="sap-modal__close" onclick="document.getElementById('deleteModal').classList.remove('open')">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="sap-modal__body">
+      <div class="sap-alert sap-alert--error mb-md">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div class="sap-alert__body" data-en="This inspector's profile and all linked data will be permanently removed." data-ar="سيتم حذف ملف المفتش وجميع البيانات المرتبطة به نهائياً.">This inspector's profile and all linked data will be permanently removed.</div>
+      </div>
+      <p style="font-size:14px;" id="deleteMsg">Are you sure?</p>
+    </div>
+    <div class="sap-modal__footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('deleteModal').classList.remove('open')" data-en="Cancel" data-ar="إلغاء">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmDelete()" data-en="Delete Inspector" data-ar="حذف المفتش">Delete Inspector</button>
+    </div>
+  </div>
+</div>
+
+<div class="sap-toast-container" id="toastContainer"></div>
+
+<!-- ═══════════════════════ SCRIPTS ═══════════════════════ -->
+<script>
+/* ═══════════════════════════════════════════════════════
+   SECURITY UTILITIES
+═══════════════════════════════════════════════════════ */
+function h(s){if(s===null||s===undefined)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;').replace(/\//g,'&#x2F;');}
+function safeUrl(url){if(!url||typeof url!=='string')return null;try{const u=new URL(url);if(u.protocol!=='http:'&&u.protocol!=='https:')return null;return url;}catch{return null;}}
+function safeOpen(url){const safe=safeUrl(url);if(!safe){showToast('error','Invalid URL','Only http and https links can be opened.');return;}window.open(safe,'_blank','noopener,noreferrer');}
+
+/* ── State ── */
+let session = null;
+let currentLang = localStorage.getItem('sap_lang') || 'en';
+let sortCol = 'inspectorId'; let sortDir = 1;
+let currentPage = 1; const PAGE_SIZE = 15;
+let activeStatusFilter = 'all';
+let filteredData = [];
+let deleteTargetId = null;
+
+const AVATAR_COLORS = ['#0070f2','#188918','#e76500','#bb0000','#7b1fa2','#0277bd','#2e7d32'];
+
+/* ── Auth ── */
+/* Session helpers — use SapSession from app.js when available,
+   otherwise fall back to inline implementation (defensive). */
+function getSession() {
+  if (typeof SapSession !== 'undefined') return SapSession.get();
+  try {
+    const s = sessionStorage.getItem('sap_session');
+    if (!s) { window.location.href = 'index.html'; return null; }
+    return JSON.parse(s);
+  } catch(e) { window.location.href = 'index.html'; return null; }
+}
+function logout() {
+  if (typeof SapSession !== 'undefined') { SapSession.logout(); return; }
+  const s = JSON.parse(sessionStorage.getItem('sap_session') || '{}');
+  fetch('/api/auth/logout', {
+    method: 'POST',
+    headers: s.token ? { 'Authorization': 'Bearer ' + s.token } : {},
+  }).catch(() => {});
+  sessionStorage.removeItem('sap_session');
+  window.location.href = 'index.html';
+}
+
+/* ── Language ── */
+function applyLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('sap_lang', lang);
+  const html = document.documentElement;
+  html.lang = lang; html.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  document.body.classList.toggle('lang-ar', lang === 'ar');
+  document.querySelectorAll('[data-en]').forEach(el => {
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return;
+    el.textContent = el.getAttribute('data-' + lang) || el.getAttribute('data-en');
+  });
+  document.querySelectorAll('[data-ph-en]').forEach(el => {
+    el.placeholder = el.getAttribute('data-ph-' + lang) || el.getAttribute('data-ph-en');
+  });
+  document.getElementById('langBtn').textContent = lang === 'en' ? 'AR' : 'EN';
+}
+function toggleLang() { applyLang(currentLang === 'en' ? 'ar' : 'en'); renderTable(); }
+function toggleUserMenu() { document.getElementById('userMenu').classList.toggle('open'); }
+document.addEventListener('click', e => {
+  if (!e.target.closest('#shellAvatar') && !e.target.closest('#userMenu'))
+    document.getElementById('userMenu').classList.remove('open');
+  if (!e.target.closest('#colSelectorWrap') && !e.target.closest('.col-selector-wrap'))
+    document.querySelectorAll('.col-dropdown').forEach(d => d.classList.remove('open'));
+});
+
+/* ═══════════════════════════════════════════════════════
+   DEMO DATA
+═══════════════════════════════════════════════════════ */
+/* INSPECTORS loaded from API — see loadInspectors() */
+let INSPECTORS = [];
+
+/* Inspector → Certificates mapping (inspector issued these certs) */
+const INSPECTOR_CERT_MAP = {
+  'INS-001': ['CERT-0004', 'CERT-0007', 'CERT-0015'],
+  'INS-002': ['CERT-0003', 'CERT-0011'],
+  'INS-003': ['CERT-0002', 'CERT-0005', 'CERT-0008'],
+  'INS-004': ['CERT-0001', 'CERT-0009', 'CERT-0017'],
+  'INS-005': [],
+};
+
+/* Brief cert reference data (matches certificates.html CERTS) */
+const CERTS_REF = {
+  'CERT-0001': { name:'ISO 9001 Quality Cert',       certType:'Quality',      client:'C001', approvalStatus:'approved' },
+  'CERT-0002': { name:'Fire Safety Certificate',      certType:'Safety',       client:'C002', approvalStatus:'approved' },
+  'CERT-0003': { name:'Electrical Inspection Cert',   certType:'Inspection',   client:'C001', approvalStatus:'approved' },
+  'CERT-0004': { name:'Pressure Vessel Compliance',   certType:'Compliance',   client:'C003', approvalStatus:'approved' },
+  'CERT-0005': { name:'OHSAS 18001 Cert',             certType:'Safety',       client:'C004', approvalStatus:'approved' },
+  'CERT-0007': { name:'Crane Inspection Cert',        certType:'Inspection',   client:'C003', approvalStatus:'pending'  },
+  'CERT-0008': { name:'Gas Safety Certificate',       certType:'Safety',       client:'C002', approvalStatus:'pending'  },
+  'CERT-0009': { name:'ISO 14001 Environmental',      certType:'Environmental',client:'C001', approvalStatus:'pending'  },
+  'CERT-0011': { name:'Electrical Safety Cert',       certType:'Safety',       client:'C001', approvalStatus:'pending'  },
+  'CERT-0015': { name:'Generator Load Test',          certType:'Technical',    client:'C003', approvalStatus:'approved' },
+  'CERT-0017': { name:'Network Security Audit',       certType:'Compliance',   client:'C001', approvalStatus:'approved' },
+};
+
+const CLIENTS_MAP = { C001:'Acme Corp', C002:'Gulf Holdings', C003:'Delta Industries', C004:'Nile Ventures' };
+
+/* ── Auto-generate next ID ── */
+function nextInspectorId() {
+  const nums = INSPECTORS.map(i => parseInt(i.inspectorId.replace('INS-',''))).filter(n => !isNaN(n));
+  return 'INS-' + String(Math.max(0, ...nums) + 1).padStart(3,'0');
+}
+
+/* ═══════════════════════════════════════════════════════
+   RENDER TABLE
+═══════════════════════════════════════════════════════ */
+function renderTable() {
+  const search = (document.getElementById('searchInput').value || '').toLowerCase();
+  let data = [...INSPECTORS];
+
+  if (activeStatusFilter !== 'all') data = data.filter(i => i.status === activeStatusFilter);
+  if (search) data = data.filter(i =>
+    i.name.toLowerCase().includes(search) ||
+    i.inspectorId.toLowerCase().includes(search) ||
+    i.title.toLowerCase().includes(search) ||
+    i.email.toLowerCase().includes(search) ||
+    (i.education||[]).some(e => e.degree.toLowerCase().includes(search) || e.institution.toLowerCase().includes(search))
+  );
+
+  data.sort((a, b) => {
+    let av = ''; let bv = '';
+    if (sortCol === 'education') {
+      av = (a.education?.[0]?.degree || '').toLowerCase();
+      bv = (b.education?.[0]?.degree || '').toLowerCase();
+    } else {
+      av = String(a[sortCol] ?? '').toLowerCase();
+      bv = String(b[sortCol] ?? '').toLowerCase();
+    }
+    return av < bv ? -sortDir : av > bv ? sortDir : 0;
+  });
+
+  filteredData = data;
+
+  /* KPIs */
+  document.getElementById('kpiTotal').textContent  = INSPECTORS.length;
+  document.getElementById('kpiActive').textContent = INSPECTORS.filter(i => i.status === 'active').length;
+  const avgExp = INSPECTORS.length ? Math.round(INSPECTORS.reduce((s,i) => s + (i.experienceYears||0), 0) / INSPECTORS.length) : 0;
+  document.getElementById('kpiAvgExp').textContent = avgExp;
+  const totalLinked = Object.values(INSPECTOR_CERT_MAP).reduce((s, arr) => s + arr.length, 0);
+  document.getElementById('kpiCerts').textContent = totalLinked;
+
+  const total = data.length;
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const end   = Math.min(start + PAGE_SIZE, total);
+  const page  = data.slice(start, end);
+
+  document.getElementById('tableCount').textContent = total;
+  const tbody = document.getElementById('inspectorTableBody');
+  const empty = document.getElementById('emptyState');
+
+  if (!page.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    document.getElementById('paginationInfo').textContent = currentLang === 'ar' ? 'لا توجد نتائج' : 'No results';
+    document.getElementById('paginationControls').innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+  document.getElementById('paginationInfo').textContent =
+    currentLang === 'ar' ? `عرض ${start+1}–${end} من ${total}` : `Showing ${start+1}–${end} of ${total}`;
+
+  const canEdit   = session.role === 'admin' || session.role === 'manager';
+  const canDelete = session.role === 'admin';
+
+  tbody.innerHTML = page.map(insp => {
+    const initials = insp.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const highestEdu = insp.education?.[insp.education.length - 1];
+    const linkedCount = (INSPECTOR_CERT_MAP[insp.inspectorId] || []).length;
+    const cvLabel = insp.cvFile || (insp.cvUrl ? 'CV Link' : '');
+
+    return `<tr onmouseenter="showRow(this)" onmouseleave="hideRow(this)">
+      <td class="cell-check"><input type="checkbox" class="sap-checkbox" data-id="${insp.inspectorId}" onchange="updateMassBar()"/></td>
+      <td data-col="inspectorId"><span class="inspector-id-chip">${insp.inspectorId}</span></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="inspector-avatar" style="background:${insp.color};">${initials}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+              <div>
+                <div style="font-weight:600;font-size:13px;cursor:pointer;color:var(--sap-brand);" onclick="openDrawer('${insp.inspectorId}')">${h(insp.name)}</div>
+                <div style="font-size:11px;color:var(--sap-text-secondary);">${h(insp.title)}</div>
+              </div>
+              <div class="row-actions" style="display:none;flex-shrink:0;gap:3px;align-items:center;">
+                <button class="btn btn-ghost btn-icon" onclick="openDrawer('${insp.inspectorId}')" style="width:26px;height:26px;" title="${currentLang==='ar'?'عرض':'View'}">
+                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                ${canEdit ? `<button class="btn btn-secondary btn-icon" onclick="openEditModal('${insp.inspectorId}')" style="width:26px;height:26px;" title="${currentLang==='ar'?'تعديل':'Edit'}">
+                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>` : ''}
+                ${canDelete ? `<button class="btn btn-danger btn-icon" onclick="openDeleteModal('${insp.inspectorId}')" style="width:26px;height:26px;" title="${currentLang==='ar'?'حذف':'Delete'}">
+                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+                </button>` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      </td>
+      <td data-col="education" style="font-size:12px;">
+        ${highestEdu
+          ? `<div style="font-weight:600;color:var(--sap-text-primary);">${highestEdu.degree}</div>
+             <div style="font-size:11px;color:var(--sap-text-secondary);">${highestEdu.institution}${highestEdu.year ? ' · '+highestEdu.year : ''}</div>`
+          : '<span style="color:var(--sap-text-disabled);">—</span>'}
+      </td>
+      <td data-col="experience">
+        <span class="sap-badge sap-badge--info">${insp.experienceYears} ${currentLang==='ar'?'سنة':'yrs'}</span>
+      </td>
+      <td data-col="cv">
+        ${cvLabel
+          ? `<button class="cv-chip" onclick="openCV('${insp.inspectorId}')">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              ${insp.cvFile ? insp.cvFile : 'CV Link'}
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:.5;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </button>`
+          : '<span style="color:var(--sap-text-disabled);font-size:11px;">—</span>'}
+      </td>
+      <td data-col="trainingCerts">
+        ${(insp.trainingCerts||[]).length
+          ? `<div class="tc-chip-list">
+              ${insp.trainingCerts.map(tc => {
+                if (tc.url) {
+                  return `<a href="${tc.url}" target="_blank" rel="noopener" class="tc-chip tc-chip--url" title="${h(tc.name)}">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    ${tc.name}
+                  </a>`;
+                }
+                return `<button class="tc-chip"
+                  data-tcfile="${h(tc.file||'')}"
+                  data-tcurl="${h(tc.url||'')}"
+                  data-tcname="${h(tc.name)}"
+                  onclick="openTCLinkFromEl(this)"
+                  title="${h(tc.name)}">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  ${h(tc.file || tc.name)}
+                </button>`;
+              }).join('')}
+            </div>`
+          : '<span style="color:var(--sap-text-disabled);font-size:11px;">—</span>'}
+      </td>
+      <td data-col="status">
+        <span class="inspector-status inspector-status--${insp.status}">
+          ${insp.status === 'active' ? (currentLang==='ar'?'نشط':'Active') : (currentLang==='ar'?'غير نشط':'Inactive')}
+        </span>
+      </td>
+    </tr>`;
+  }).join('');
+
+  renderPagination(total);
+  applyColVisibility();
+}
+
+function showRow(row) { const b = row.querySelector('.row-actions'); if(b) b.style.display='flex'; }
+function hideRow(row) { const b = row.querySelector('.row-actions'); if(b) b.style.display='none'; }
+
+function sortTable(col) {
+  if (sortCol === col) sortDir *= -1; else { sortCol = col; sortDir = 1; }
+  renderTable();
+}
+
+function filterStatus(val, el) {
+  activeStatusFilter = val;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  currentPage = 1; renderTable();
+}
+function applyFilters() { currentPage = 1; renderTable(); }
+
+function renderPagination(total) {
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const ctrl = document.getElementById('paginationControls');
+  let html = `<button class="sap-page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
+  for (let i=1;i<=totalPages;i++) {
+    if (totalPages>7 && Math.abs(i-currentPage)>2 && i!==1 && i!==totalPages) {
+      if (i===2 || i===totalPages-1) html+=`<span style="padding:0 4px;color:var(--sap-text-secondary);">…</span>`;
+      continue;
+    }
+    html+=`<button class="sap-page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
+  }
+  html+=`<button class="sap-page-btn" onclick="goPage(${currentPage+1})" ${currentPage>=totalPages||!totalPages?'disabled':''}>›</button>`;
+  ctrl.innerHTML = html;
+}
+function goPage(p) {
+  const max = Math.ceil(filteredData.length / PAGE_SIZE);
+  if (p<1||p>max) return;
+  currentPage=p; renderTable();
+}
+
+/* ═══════════════════════════════════════════════════════
+   SELECTION
+═══════════════════════════════════════════════════════ */
+function getSelectedIds() {
+  return [...document.querySelectorAll('#inspectorTableBody input[type="checkbox"]:checked')].map(cb => cb.getAttribute('data-id'));
+}
+function toggleSelectAll(cb) {
+  document.querySelectorAll('#inspectorTableBody input[type="checkbox"]').forEach(c => c.checked = cb.checked);
+  updateMassBar();
+}
+function updateMassBar() {
+  const ids = getSelectedIds();
+  const bar = document.getElementById('massActionBar');
+  if (!bar) return;
+  if (!ids.length) { bar.classList.remove('visible'); return; }
+  bar.classList.add('visible');
+  document.getElementById('massCount').textContent = currentLang==='ar'?`${ids.length} محدد`:`${ids.length} selected`;
+  document.getElementById('massDeleteBtn').style.display = session.role==='admin'?'inline-flex':'none';
+}
+function clearSelection() {
+  document.querySelectorAll('#inspectorTableBody input[type="checkbox"]').forEach(c=>c.checked=false);
+  document.querySelectorAll('.sap-table thead input[type="checkbox"]').forEach(c=>c.checked=false);
+  updateMassBar();
+}
+function massDelete() {
+  const ids = getSelectedIds();
+  if (!ids.length) return;
+  if (!confirm(currentLang==='ar'?`هل أنت متأكد من حذف ${ids.length} مفتش؟`:`Delete ${ids.length} inspector${ids.length>1?'s':''}? Cannot be undone.`)) return;
+  INSPECTORS = INSPECTORS.filter(i => !ids.includes(i.inspectorId));
+  showToast('success', currentLang==='ar'?'تم الحذف':'Deleted', currentLang==='ar'?`تم حذف ${ids.length} مفتش.`:`${ids.length} inspector${ids.length>1?'s':''} deleted.`);
+  clearSelection(); renderTable();
+}
+
+/* ═══════════════════════════════════════════════════════
+   COLUMN VISIBILITY
+═══════════════════════════════════════════════════════ */
+const COL_KEYS = ['inspectorId','education','experience','cv','trainingCerts','status'];
+function toggleColDropdown() { document.getElementById('colDropdown').classList.toggle('open'); }
+function applyColVisibility() {
+  let visible = 0;
+  COL_KEYS.forEach(key => {
+    const cb = document.getElementById('col_' + key);
+    const show = cb ? cb.checked : true;
+    if (show) visible++;
+    const th = document.querySelector(`th[data-col="${key}"]`);
+    if (th) th.style.display = show ? '' : 'none';
+    document.querySelectorAll(`td[data-col="${key}"]`).forEach(td => { td.style.display = show ? '' : 'none'; });
+  });
+  const badge = document.getElementById('colBadge');
+  if (badge) badge.textContent = visible + 2; // +2 for name+actions always visible
+  const state = {};
+  COL_KEYS.forEach(k => { const cb = document.getElementById('col_'+k); if(cb) state[k]=cb.checked; });
+  localStorage.setItem('inspector_col_state', JSON.stringify(state));
+}
+function resetColumns() {
+  COL_KEYS.forEach(k => { const cb=document.getElementById('col_'+k); if(cb) cb.checked=true; });
+  applyColVisibility();
+}
+function loadColState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('inspector_col_state')||'{}');
+    COL_KEYS.forEach(k => { const cb=document.getElementById('col_'+k); if(cb && saved[k]!==undefined) cb.checked=saved[k]; });
+  } catch(e) {}
+  applyColVisibility();
+}
+
+/* ═══════════════════════════════════════════════════════
+   MODAL – DYNAMIC ROW BUILDERS
+═══════════════════════════════════════════════════════ */
+function addEducationRow(degree, institution, year) {
+  const html = `<div class="dynamic-row">
+    <div class="dynamic-row__fields" style="grid-template-columns:2fr 2fr 1fr;">
+      <div class="sap-field">
+        <label class="sap-label" data-en="Degree / Qualification" data-ar="الدرجة العلمية / المؤهل">${currentLang==='ar'?'الدرجة العلمية / المؤهل':'Degree / Qualification'}</label>
+        <input type="text" class="sap-input edu-degree" value="${degree||''}" data-ph-en="e.g. B.Sc. Mechanical Engineering" data-ph-ar="مثال: بكالوريوس هندسة ميكانيكية" placeholder="e.g. B.Sc. Mechanical Engineering"/>
+      </div>
+      <div class="sap-field">
+        <label class="sap-label" data-en="Institution / University" data-ar="المؤسسة / الجامعة">${currentLang==='ar'?'المؤسسة / الجامعة':'Institution / University'}</label>
+        <input type="text" class="sap-input edu-institution" value="${institution||''}" data-ph-en="e.g. UAE University" data-ph-ar="مثال: جامعة الإمارات" placeholder="e.g. UAE University"/>
+      </div>
+      <div class="sap-field">
+        <label class="sap-label" data-en="Year" data-ar="السنة">${currentLang==='ar'?'السنة':'Year'}</label>
+        <input type="number" class="sap-input edu-year" value="${year||''}" min="1950" max="2030" placeholder="2020"/>
+      </div>
+    </div>
+    <button type="button" class="dynamic-row__remove" onclick="this.closest('.dynamic-row').remove()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>`;
+  document.getElementById('educationContainer').insertAdjacentHTML('beforeend', html);
+}
+
+function addTrainingRow(name, provider, year) {
+  const html = `<div class="dynamic-row">
+    <div class="dynamic-row__fields" style="grid-template-columns:2fr 1fr 1fr;">
+      <div class="sap-field">
+        <label class="sap-label" data-en="Training / Course Name" data-ar="اسم الدورة">${currentLang==='ar'?'اسم الدورة':'Training / Course Name'}</label>
+        <input type="text" class="sap-input tr-name" value="${name||''}" data-ph-en="e.g. API 510 Pressure Vessel Inspector" data-ph-ar="مثال: مفتش وعاء الضغط API 510" placeholder="e.g. API 510 Inspector"/>
+      </div>
+      <div class="sap-field">
+        <label class="sap-label" data-en="Provider / Issuer" data-ar="الجهة المقدِّمة">${currentLang==='ar'?'الجهة المقدِّمة':'Provider / Issuer'}</label>
+        <input type="text" class="sap-input tr-provider" value="${provider||''}" data-ph-en="e.g. API" data-ph-ar="مثال: API" placeholder="e.g. API"/>
+      </div>
+      <div class="sap-field">
+        <label class="sap-label" data-en="Year" data-ar="السنة">${currentLang==='ar'?'السنة':'Year'}</label>
+        <input type="number" class="sap-input tr-year" value="${year||''}" min="1950" max="2030" placeholder="2020"/>
+      </div>
+    </div>
+    <button type="button" class="dynamic-row__remove" onclick="this.closest('.dynamic-row').remove()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>`;
+  document.getElementById('trainingContainer').insertAdjacentHTML('beforeend', html);
+}
+
+function addTrainingCertRow(certName, existingFile, existingUrl) {
+  const mode = existingUrl && !existingFile ? 'url' : 'file';
+  const html = `<div class="dynamic-row" data-tc-mode="${mode}">
+    <div class="dynamic-row__fields">
+      <div class="sap-field">
+        <label class="sap-label" data-en="Certificate Name" data-ar="اسم الشهادة">${currentLang==='ar'?'اسم الشهادة':'Certificate Name'}</label>
+        <input type="text" class="sap-input tc-name" value="${certName||''}" data-ph-en="e.g. API 510 Certificate" data-ph-ar="مثال: شهادة API 510" placeholder="e.g. API 510 Certificate"/>
+      </div>
+      <div class="sap-field">
+        <label class="sap-label" data-en="File or URL" data-ar="ملف أو رابط">${currentLang==='ar'?'ملف أو رابط':'File or URL'}</label>
+        <div class="file-url-toggle">
+          <button type="button" class="file-url-btn ${mode==='file'?'active':''}" onclick="switchTCMode(this,'file')" data-en="📁 Upload" data-ar="📁 رفع">📁 Upload</button>
+          <button type="button" class="file-url-btn ${mode==='url'?'active':''}" onclick="switchTCMode(this,'url')" data-en="🔗 URL" data-ar="🔗 رابط">🔗 URL</button>
+        </div>
+        <div class="tc-file-wrap" style="display:${mode==='file'?'block':'none'};">
+          <input type="file" class="sap-input tc-file" accept=".pdf,.jpg,.jpeg,.png" data-existing="${existingFile||''}" style="font-size:12px;"/>
+          ${existingFile ? `<div style="font-size:11px;color:var(--sap-text-secondary);margin-top:3px;">📎 ${existingFile}</div>` : ''}
+        </div>
+        <div class="tc-url-wrap" style="display:${mode==='url'?'block':'none'};">
+          <input type="text" class="sap-input tc-url" value="${existingUrl||''}" placeholder="https://..." style="font-size:12px;"/>
+        </div>
+      </div>
+    </div>
+    <button type="button" class="dynamic-row__remove" onclick="this.closest('.dynamic-row').remove()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>`;
+  document.getElementById('trainingCertsContainer').insertAdjacentHTML('beforeend', html);
+}
+
+function switchTCMode(btn, mode) {
+  const row = btn.closest('.dynamic-row');
+  row.dataset.tcMode = mode;
+  row.querySelectorAll('.file-url-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  row.querySelector('.tc-file-wrap').style.display = mode === 'file' ? 'block' : 'none';
+  row.querySelector('.tc-url-wrap').style.display  = mode === 'url'  ? 'block' : 'none';
+}
+
+function switchCVMode(mode) {
+  document.querySelectorAll('.file-url-btn[data-mode]').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  document.getElementById('cvFileWrap').style.display = mode === 'file' ? 'block' : 'none';
+  document.getElementById('cvUrlWrap').style.display  = mode === 'url'  ? 'block' : 'none';
+}
+
+/* ═══════════════════════════════════════════════════════
+   ADD / EDIT MODAL
+═══════════════════════════════════════════════════════ */
+function openAddModal() {
+  document.getElementById('editInspectorId').value = '';
+  document.getElementById('inspectorForm').reset();
+  document.getElementById('educationContainer').innerHTML = '';
+  document.getElementById('trainingContainer').innerHTML = '';
+  document.getElementById('trainingCertsContainer').innerHTML = '';
+  document.getElementById('cvExistingNote').style.display = 'none';
+  switchCVMode('file');
+  document.getElementById('modalTitle').textContent = currentLang==='ar'?'إضافة مفتش جديد':'Add New Inspector';
+  document.getElementById('saveBtnLabel').textContent = currentLang==='ar'?'حفظ المفتش':'Save Inspector';
+  /* Add one empty row each */
+  addEducationRow(); addTrainingRow(); addTrainingCertRow();
+  document.getElementById('inspectorModal').classList.add('open');
+}
+
+function openEditModal(id) {
+  const insp = INSPECTORS.find(i => i.inspectorId === id);
+  if (!insp) return;
+
+  document.getElementById('editInspectorId').value = id;
+  document.getElementById('f_name').value     = insp.name;
+  document.getElementById('f_title').value    = insp.title;
+  document.getElementById('f_email').value    = insp.email;
+  document.getElementById('f_phone').value    = insp.phone || '';
+  document.getElementById('f_status').value   = insp.status;
+  document.getElementById('f_expYears').value = insp.experienceYears;
+  document.getElementById('f_expDesc').value  = insp.experienceDesc || '';
+
+  /* Education */
+  document.getElementById('educationContainer').innerHTML = '';
+  (insp.education||[]).forEach(e => addEducationRow(e.degree, e.institution, e.year));
+  if (!(insp.education||[]).length) addEducationRow();
+
+  /* Trainings */
+  document.getElementById('trainingContainer').innerHTML = '';
+  (insp.trainings||[]).forEach(t => addTrainingRow(t.name, t.provider, t.year));
+  if (!(insp.trainings||[]).length) addTrainingRow();
+
+  /* CV */
+  if (insp.cvFile) {
+    switchCVMode('file');
+    document.getElementById('cvFileInput').dataset.existing = insp.cvFile;
+    const note = document.getElementById('cvExistingNote');
+    note.style.display = 'block';
+    note.textContent = (currentLang==='ar'?'📎 الملف الحالي: ':'📎 Current file: ') + insp.cvFile;
+  } else if (insp.cvUrl) {
+    switchCVMode('url');
+    document.getElementById('cvUrlInput').value = insp.cvUrl;
+    document.getElementById('cvExistingNote').style.display = 'none';
+  } else {
+    switchCVMode('file');
+    document.getElementById('cvExistingNote').style.display = 'none';
+  }
+
+  /* Training certs */
+  document.getElementById('trainingCertsContainer').innerHTML = '';
+  (insp.trainingCerts||[]).forEach(tc => addTrainingCertRow(tc.name, tc.file, tc.url));
+  if (!(insp.trainingCerts||[]).length) addTrainingCertRow();
+
+  document.getElementById('modalTitle').textContent  = currentLang==='ar'?'تعديل المفتش':'Edit Inspector';
+  document.getElementById('saveBtnLabel').textContent= currentLang==='ar'?'حفظ التعديلات':'Save Changes';
+  document.getElementById('inspectorModal').classList.add('open');
+}
+
+function closeModal() { document.getElementById('inspectorModal').classList.remove('open'); }
+
+async async function saveInspector() {
+  const editId = document.getElementById('editInspectorId')?.value || '';
+  const name   = document.getElementById('f_name').value.trim();
+  if (!name) { showToast('error','Required','Name is required.'); return; }
+  const payload = {
+    name,
+    title:            document.getElementById('f_title')?.value||null,
+    email:            document.getElementById('f_email')?.value||null,
+    phone:            document.getElementById('f_phone')?.value||null,
+    status:           document.getElementById('f_status')?.value||'active',
+    experience_years: parseInt(document.getElementById('f_experienceYears')?.value)||null,
+    experience_desc:  document.getElementById('f_experienceDesc')?.value||null,
+    color:            document.getElementById('f_color')?.value||'#0070f2',
+  };
+  try {
+    const url    = editId ? `/api/inspectors/${editId}` : '/api/inspectors';
+    const method = editId ? 'PATCH' : 'POST';
+    const res    = await apiFetch(url, { method, body: JSON.stringify(payload) });
+    const data   = await res.json();
+    if (!data.success) { showToast('error','Save Failed', data.error||'Could not save.'); return; }
+    showToast('success', editId ? 'Updated' : 'Added', `"${name}" saved.`);
+    document.getElementById('inspectorModal')?.classList.remove('open');
+    await loadInspectors();
+  } catch(e) { showToast('error','Network Error','Could not save inspector.'); }
+}
+/* ═══════════════════════════════════════════════════════
+   DETAIL DRAWER
+═══════════════════════════════════════════════════════ */
+function openDrawer(id) {
+  const insp = INSPECTORS.find(i => i.inspectorId === id);
+  if (!insp) return;
+  const initials = insp.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  const role = session.role;
+
+  /* Header color */
+  document.getElementById('drawerHeader').style.background = insp.color;
+
+  /* Linked certs (admin/manager only) */
+  const linkedCertIds = INSPECTOR_CERT_MAP[id] || [];
+  const canSeeCerts = role === 'admin' || role === 'manager';
+
+  const linkedCertsHtml = canSeeCerts ? `
+    <div class="drawer-section">
+      <div class="drawer-section__title" style="justify-content:space-between;">
+        <span style="display:flex;align-items:center;gap:6px;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/></svg>
+          ${currentLang==='ar'?'الشهادات المُصدَرة بواسطة هذا المفتش':'Certificates Issued by This Inspector'}
+        </span>
+        <span class="sap-badge sap-badge--success">${linkedCertIds.length}</span>
+      </div>
+      ${linkedCertIds.length ? linkedCertIds.map(certId => {
+        const cert = CERTS_REF[certId];
+        if (!cert) return '';
+        const apBadge = cert.approvalStatus === 'approved'
+          ? `<span class="sap-badge sap-badge--success" style="font-size:10px;">${currentLang==='ar'?'معتمدة':'Approved'}</span>`
+          : `<span class="sap-badge sap-badge--pending" style="font-size:10px;">${currentLang==='ar'?'معلق':'Pending'}</span>`;
+        return `<div class="linked-cert-row" onclick="window.location.href='certificates.html'">
+          <div class="linked-cert-row__icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/></svg></div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12px;font-weight:600;color:var(--sap-text-primary);">${cert.name}</div>
+            <div style="font-size:11px;color:var(--sap-text-secondary);margin-top:2px;">
+              <span style="font-family:monospace;">${certId}</span>
+              · ${cert.certType}
+              · ${CLIENTS_MAP[cert.client]||cert.client}
+            </div>
+          </div>
+          ${apBadge}
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:14px;height:14px;color:var(--sap-text-disabled);flex-shrink:0;"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>`;
+      }).join('') : `<div style="padding:var(--sp-md);text-align:center;color:var(--sap-text-secondary);font-size:13px;">${currentLang==='ar'?'لا توجد شهادات مرتبطة بهذا المفتش.':'No certificates linked to this inspector yet.'}</div>`}
+    </div>` : '';
+
+  document.getElementById('drawerBody').innerHTML = `
+    <!-- Profile header -->
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:var(--sp-lg);padding-bottom:var(--sp-lg);border-bottom:1px solid var(--sap-table-border);">
+      <div class="inspector-avatar inspector-avatar--lg" style="background:${insp.color};width:56px;height:56px;font-size:20px;">${initials}</div>
+      <div style="flex:1;">
+        <div style="font-size:18px;font-weight:800;color:var(--sap-text-primary);">${h(insp.name)}</div>
+        <div style="font-size:13px;color:var(--sap-text-secondary);margin-top:3px;">${h(insp.title)}</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;">
+          <span class="inspector-id-chip" style="font-size:12px;">${insp.inspectorId}</span>
+          <span class="inspector-status inspector-status--${insp.status}">${insp.status==='active'?(currentLang==='ar'?'نشط':'Active'):(currentLang==='ar'?'غير نشط':'Inactive')}</span>
+          <span class="sap-badge sap-badge--info">${insp.experienceYears} ${currentLang==='ar'?'سنوات خبرة':'yrs experience'}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contact -->
+    <div class="drawer-section">
+      <div class="drawer-section__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        ${currentLang==='ar'?'معلومات الاتصال':'Contact Information'}
+      </div>
+      <div class="sap-detail-grid">
+        <div class="sap-detail-field">
+          <span class="sap-detail-field__label">${currentLang==='ar'?'البريد الإلكتروني':'Email'}</span>
+          <span class="sap-detail-field__value"><a href="mailto:${h(insp.email)}" style="color:var(--sap-brand);">${h(insp.email)}</a></span>
+        </div>
+        <div class="sap-detail-field">
+          <span class="sap-detail-field__label">${currentLang==='ar'?'الهاتف':'Phone'}</span>
+          <span class="sap-detail-field__value">${insp.phone||'—'}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Education -->
+    <div class="drawer-section">
+      <div class="drawer-section__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+        ${currentLang==='ar'?'المؤهلات الدراسية':'Education Background'}
+      </div>
+      ${(insp.education||[]).length ? insp.education.map((e,i) => `
+        <div class="edu-card">
+          <div class="edu-card__icon">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+          </div>
+          <div>
+            <div class="edu-card__degree">${e.degree}</div>
+            <div class="edu-card__meta">${e.institution}${e.year?' · '+e.year:''}</div>
+          </div>
+        </div>`).join('') : `<div style="color:var(--sap-text-secondary);font-size:13px;">—</div>`}
+    </div>
+
+    <!-- Experience -->
+    <div class="drawer-section">
+      <div class="drawer-section__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+        ${currentLang==='ar'?'الخبرة العملية':'Work Experience'}
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <span class="sap-badge sap-badge--info" style="font-size:13px;padding:5px 12px;">${insp.experienceYears} ${currentLang==='ar'?'سنة':'Years'}</span>
+      </div>
+      ${insp.experienceDesc ? `<p style="font-size:13px;color:var(--sap-text-secondary);line-height:1.6;background:var(--sap-page-bg);border-radius:6px;padding:10px 12px;">${h(insp.experienceDesc)}</p>` : ''}
+    </div>
+
+    <!-- Training List -->
+    <div class="drawer-section">
+      <div class="drawer-section__title" style="justify-content:space-between;">
+        <span style="display:flex;align-items:center;gap:6px;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          ${currentLang==='ar'?'قائمة الدورات التدريبية':'Training Courses'}
+        </span>
+        <span class="sap-badge sap-badge--info">${(insp.trainings||[]).length}</span>
+      </div>
+      ${(insp.trainings||[]).length ? insp.trainings.map(t => `
+        <div class="training-item">
+          <div class="training-item__bullet"></div>
+          <div>
+            <div class="training-item__name">${h(t.name)}</div>
+            <div class="training-item__meta">${t.provider?h(t.provider)+' · ':''}${t.year||''}</div>
+          </div>
+        </div>`).join('') : `<div style="color:var(--sap-text-secondary);font-size:13px;">—</div>`}
+    </div>
+
+    <!-- CV & Training Certs -->
+    <div class="drawer-section">
+      <div class="drawer-section__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        ${currentLang==='ar'?'السيرة الذاتية وشهادات التدريب':'CV & Training Certificates'}
+      </div>
+      <!-- CV row -->
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--sap-table-border);">
+        <div style="font-size:12px;font-weight:600;color:var(--sap-text-secondary);min-width:60px;">${currentLang==='ar'?'السيرة الذاتية':'CV / Resume'}</div>
+        ${(insp.cvFile || insp.cvUrl)
+          ? `<button class="cv-chip" onclick="openCV('${insp.inspectorId}')">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              ${insp.cvFile ? insp.cvFile : 'Open CV Link'}
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:.5;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </button>`
+          : `<span style="color:var(--sap-text-disabled);font-size:12px;">${currentLang==='ar'?'لم يُرفع بعد':'Not uploaded yet'}</span>`}
+      </div>
+      <!-- Training certificate rows — file chip (PDF) or URL chip (external link) -->
+      ${(insp.trainingCerts||[]).length
+        ? (insp.trainingCerts||[]).map(tc => `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--sap-table-border);">
+          <div style="font-size:12px;font-weight:600;color:var(--sap-text-primary);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h(tc.name)}</div>
+          ${tc.url
+            ? `<a href="${tc.url}" target="_blank" rel="noopener"
+                style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
+                       color:var(--sap-brand);background:var(--sap-brand-light);border:1px solid var(--sap-info-border);
+                       border-radius:4px;padding:3px 8px;text-decoration:none;white-space:nowrap;flex-shrink:0;"
+                title="Open: ${tc.url}">
+                <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                Open URL
+              </a>`
+            : tc.file
+              ? `<button
+                  data-tcfile="${h(tc.file)}"
+                  data-tcurl=""
+                  data-tcname="${h(tc.name)}"
+                  onclick="openTCLinkFromEl(this)"
+                  style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
+                         color:var(--sap-success);background:#f0faf0;border:1px solid var(--sap-success-border);
+                         border-radius:4px;padding:3px 8px;cursor:pointer;white-space:nowrap;flex-shrink:0;"
+                  title="Open file: ${h(tc.file)}">
+                  <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  ${h(tc.file)}
+                </button>`
+              : `<span style="color:var(--sap-text-disabled);font-size:11px;">No link</span>`}
+        </div>`).join('')
+        : `<div style="padding:8px 0;color:var(--sap-text-disabled);font-size:12px;">No training certificates uploaded.</div>`}
+    </div>
+
+    ${linkedCertsHtml}
+  `;
+
+  /* Footer buttons */
+  const canEdit   = role === 'admin' || role === 'manager';
+  const canDelete = role === 'admin';
+  document.getElementById('drawerFooter').innerHTML = `
+    <button class="btn btn-ghost" onclick="closeDrawer()">${currentLang==='ar'?'إغلاق':'Close'}</button>
+    ${canEdit   ? `<button class="btn btn-secondary" onclick="closeDrawer();openEditModal('${id}')">${currentLang==='ar'?'تعديل':'Edit'}</button>` : ''}
+    ${canDelete ? `<button class="btn btn-danger" onclick="closeDrawer();openDeleteModal('${id}')">${currentLang==='ar'?'حذف':'Delete'}</button>` : ''}
+  `;
+
+  document.getElementById('drawerOverlay').classList.add('open');
+}
+
+function closeDrawer() { document.getElementById('drawerOverlay').classList.remove('open'); }
+document.getElementById('drawerOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeDrawer();
+});
+
+/* ═══════════════════════════════════════════════════════
+   CV / FILE OPENERS
+═══════════════════════════════════════════════════════ */
+function openCV(id) {
+  const insp = INSPECTORS.find(i => i.inspectorId === id);
+  if (!insp) return;
+  if (insp.cvUrl) { safeOpen(insp.cvUrl); return; }  // FIX #4: scheme validation
+  if (insp.cvFile) {
+    showToast('info',
+      currentLang==='ar'?'فتح السيرة الذاتية':'Opening CV',
+      currentLang==='ar'?`سيتم فتح "${insp.cvFile}" — نظام مباشر يحتاج رابط حقيقي.`:`"${insp.cvFile}" — In production this opens the stored file.`);
+    return;
+  }
+  showToast('warning', currentLang==='ar'?'لا يوجد ملف':'No CV', currentLang==='ar'?'لم يُرفع ملف سيرة ذاتية لهذا المفتش.':'No CV has been uploaded for this inspector.');
+}
+
+/* FIX #3 + #4: Read from data attributes (no user data in JS strings) + validate URL scheme */
+function openTCLinkFromEl(el) {
+  const url  = el.dataset.tcurl  || '';
+  const file = el.dataset.tcfile || '';
+  const name = el.dataset.tcname || '';
+  if (url) {
+    safeOpen(url);   // FIX #4: safeOpen validates http/https only
+    return;
+  }
+  // file: in production, fetch from R2 via the API
+  showToast('info', 'Opening Certificate',
+    `"${name || file}" will open from the file server in production.`);
+}
+/* Keep old function name as alias for any other callers */
+function openTCLink(file, url, name) {
+  if (url) { safeOpen(url); return; }
+  showToast('info', 'Opening Certificate',
+    `"${name || file}" will open from the file server in production.`);
+}
+
+/* ═══════════════════════════════════════════════════════
+   DELETE
+═══════════════════════════════════════════════════════ */
+function openDeleteModal(id) {
+  deleteTargetId = id;
+  const insp = INSPECTORS.find(i => i.inspectorId === id);
+  document.getElementById('deleteMsg').textContent =
+    currentLang==='ar'
+      ? `هل أنت متأكد من حذف المفتش "${insp?.name||id}" (${id})؟`
+      : `Delete inspector "${insp?.name||id}" (${id})? This cannot be undone.`;
+  document.getElementById('deleteModal').classList.add('open');
+}
+async async function confirmDelete() {
+  const insp = INSPECTORS.find(x => x.id === deleteTargetId);
+  document.getElementById('deleteModal')?.classList.remove('open');
+  try {
+    const res  = await apiFetch(`/api/inspectors/${deleteTargetId}`, { method:'DELETE' });
+    const data = await res.json();
+    if (!data.success) { showToast('error','Failed', data.error||'Could not delete.'); return; }
+    showToast('success','Deleted', `"${insp?.name||deleteTargetId}" deleted.`);
+    await loadInspectors();
+  } catch(e) { showToast('error','Network Error','Could not delete.'); }
+}
+/* ═══════════════════════════════════════════════════════
+   EXPORT CSV
+═══════════════════════════════════════════════════════ */
+function exportCSV() {
+  const data = filteredData.length ? filteredData : INSPECTORS;
+  const headers = ['Inspector ID','Name','Title','Email','Phone','Status','Experience (yrs)','Education Count','Trainings Count','CV','Training Certs Count','Experience Description'];
+  const rows = data.map(i => [
+    i.inspectorId, i.name, i.title, i.email, i.phone||'', i.status,
+    i.experienceYears, (i.education||[]).length, (i.trainings||[]).length,
+    i.cvFile || i.cvUrl || '',
+    (i.trainingCerts||[]).length, i.experienceDesc||''
+  ].map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(','));
+  const csv  = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob(['\uFEFF'+csv], { type:'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a'); a.href=url;
+  a.download = `inspectors_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast('success', currentLang==='ar'?'تم التصدير':'Exported', currentLang==='ar'?`تم تصدير ${data.length} مفتش.`:`${data.length} inspector${data.length!==1?'s':''} exported.`);
+}
+
+/* ═══════════════════════════════════════════════════════
+   TOAST
+═══════════════════════════════════════════════════════ */
+function showToast(type, title, msg) {
+  const icons = {
+    success:'<path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    error:'<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+    warning:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>',
+    info:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+  };
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `sap-toast sap-toast--${type}`;
+  t.innerHTML = `
+    <div class="sap-toast__icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${icons[type]}</svg></div>
+    <div class="sap-toast__body"><div class="sap-toast__title">${title}</div><div class="sap-toast__msg">${msg}</div></div>
+    <button class="sap-toast__close" onclick="this.parentElement.remove()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
+  c.appendChild(t);
+  setTimeout(() => { if (t.parentElement) t.remove(); }, 4500);
+}
+
+/* ═══════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  session = getSession();
+  if (!session) return;
+
+  const role = session.role;
+  const lang = session.lang || localStorage.getItem('sap_lang') || 'en';
+  applyLang(lang);
+
+  /* Shell */
+  const initials = session.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  document.getElementById('shellAvatar').textContent = initials;
+  document.getElementById('menuUserName').textContent = lang==='ar'?session.nameAr:session.name;
+  const rl = {admin:'Administrator',manager:'Manager',technician:'Technician',user:'Regular User'};
+  document.getElementById('menuUserRole').textContent = rl[role]||role;
+
+  /* Access control — admin + manager only */
+  if (role !== 'admin' && role !== 'manager') {
+    document.getElementById('mainBody').style.display = 'none';
+    document.getElementById('accessDenied').style.display = 'block';
+    return;
+  }
+
+  /* Admin section nav */
+  if (role !== 'admin') {
+    document.getElementById('adminSection').style.display = 'none';
+    document.getElementById('adminClientsLink').style.display = 'none';
+    const fl = document.getElementById('funcLocsLink'); if (fl) fl.style.display = 'none';
+    /* Inspectors link stays visible for manager */
+  }
+
+  /* Notification badge */
+  if (role !== 'user') document.getElementById('notifBadge').style.display = 'block';
+
+  /* Header actions */
+  const ha = document.getElementById('headerActions');
+  ha.innerHTML = `<button class="btn btn-primary" onclick="openAddModal()">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    <span data-en="Add Inspector" data-ar="إضافة مفتش">${lang==='ar'?'إضافة مفتش':'Add Inspector'}</span>
+  </button>`;
+
+  renderTable();
+  loadColState();
+});
+</script>
+</body>
+</html>

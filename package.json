@@ -1,0 +1,14 @@
+{
+  "name": "rigways-acm",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev":    "wrangler pages dev . --proxy 8787",
+    "deploy": "wrangler pages deploy .",
+    "build":  "echo 'No build step required'"
+  },
+  "devDependencies": {
+    "wrangler": "^3.60.0"
+  }
+}

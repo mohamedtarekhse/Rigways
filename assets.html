@@ -1,0 +1,2295 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data: blob:;
+    connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787;
+    frame-ancestors 'self';
+    object-src 'none';
+    base-uri 'self';
+  "/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Assets – Rigways Group</title>
+  <script src="app.js"></script>
+  <link rel="stylesheet" href="styles.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    /* ── Assets page extras ── */
+    .asset-type-icon {
+      width: 32px; height: 32px;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .asset-type-icon svg { width: 16px; height: 16px; }
+
+    .asset-id-chip {
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      background: var(--sap-page-bg);
+      border: 1px solid var(--sap-table-border);
+      border-radius: 4px;
+      padding: 2px 6px;
+      color: var(--sap-brand);
+    }
+
+    /* Detail drawer */
+    .sap-drawer-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.35);
+      z-index: 900;
+      opacity: 0; pointer-events: none;
+      transition: opacity .25s;
+    }
+    .sap-drawer-overlay.open { opacity: 1; pointer-events: all; }
+
+    .sap-drawer {
+      position: fixed;
+      top: 48px; right: 0; bottom: 0;
+      width: 480px;
+      background: #fff;
+      box-shadow: -8px 0 32px rgba(0,0,0,.15);
+      z-index: 901;
+      display: flex; flex-direction: column;
+      transform: translateX(100%);
+      transition: transform .3s ease;
+    }
+    .sap-drawer-overlay.open .sap-drawer { transform: translateX(0); }
+
+    .sap-drawer__header {
+      padding: var(--sp-md) var(--sp-lg);
+      background: var(--sap-brand);
+      color: #fff;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .sap-drawer__title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: var(--sp-sm); }
+    .sap-drawer__title svg { width: 18px; height: 18px; }
+    .sap-drawer__close { background: rgba(255,255,255,.2); border: none; color: #fff; border-radius: 4px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background .2s; }
+    .sap-drawer__close:hover { background: rgba(255,255,255,.35); }
+    .sap-drawer__close svg { width: 16px; height: 16px; }
+
+    .sap-drawer__body { flex: 1; overflow-y: auto; padding: var(--sp-lg); }
+    .sap-drawer__footer { padding: var(--sp-md) var(--sp-lg); border-top: var(--sap-card-border); display: flex; gap: var(--sp-sm); justify-content: flex-end; background: #fafbfc; flex-shrink: 0; }
+
+    /* Section separator inside drawer */
+    .drawer-section { margin-bottom: var(--sp-lg); }
+    .drawer-section__title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .8px; color: var(--sap-text-secondary);
+      margin-bottom: var(--sp-sm);
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--sap-table-border);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .drawer-section__title svg { width: 13px; height: 13px; }
+
+    /* Asset status badge in table */
+    .status-dot {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 600;
+    }
+    .status-dot::before {
+      content: ''; width: 7px; height: 7px;
+      border-radius: 50%; flex-shrink: 0;
+    }
+    .status-dot--operation::before { background: var(--sap-success); box-shadow: 0 0 0 2px rgba(24,137,24,.2); }
+    .status-dot--stacked::before   { background: var(--sap-neutral); }
+    @keyframes pulse-dot { 0%,100%{box-shadow:0 0 0 2px rgba(231,101,0,.2)} 50%{box-shadow:0 0 0 4px rgba(231,101,0,.15)} }
+
+    /* Approval request badge */
+    .approval-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 10px; font-weight: 600;
+      background: #fff8e1; color: #f57f17;
+      border: 1px solid #ffe082; border-radius: 10px;
+      padding: 2px 6px; white-space: nowrap;
+    }
+
+    /* Filter chips */
+    .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .filter-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px;
+      border-radius: 16px;
+      font-size: 11px; font-weight: 600;
+      border: 1px solid var(--sap-input-border);
+      background: #fff;
+      cursor: pointer;
+      transition: all .15s;
+      color: var(--sap-text-secondary);
+    }
+    .filter-chip.active { background: var(--sap-brand); color: #fff; border-color: var(--sap-brand); }
+    .filter-chip:hover:not(.active) { border-color: var(--sap-brand); color: var(--sap-brand); }
+    .filter-chip__dot { width: 7px; height: 7px; border-radius: 50%; }
+
+    /* Import/Export bar */
+    .action-bar {
+      display: flex; align-items: center; gap: var(--sp-sm);
+      padding: var(--sp-sm) var(--sp-md);
+      background: var(--sap-page-bg);
+      border: var(--sap-card-border);
+      border-radius: var(--sap-card-radius);
+      margin-bottom: var(--sp-md);
+      flex-wrap: wrap;
+      justify-content: space-between;
+    }
+    .action-bar__left { display: flex; align-items: center; gap: var(--sp-sm); flex-wrap: wrap; }
+    .action-bar__right { display: flex; align-items: center; gap: var(--sp-sm); }
+
+    /* Approval modal special */
+    .approval-info-box {
+      background: #fff3e0;
+      border: 1px solid #ffe082;
+      border-left: 4px solid #f57f17;
+      border-radius: 6px;
+      padding: var(--sp-md);
+      margin-bottom: var(--sp-md);
+      font-size: 13px;
+      color: #5d4037;
+    }
+    /* Checkbox column */
+    .cell-check { width: 36px; text-align: center; }
+    .sap-checkbox {
+      width: 16px; height: 16px;
+      accent-color: var(--sap-brand);
+      cursor: pointer;
+    }
+
+    /* ── Mass action bar (Gmail-style second row) ── */
+    .mass-action-bar {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      background: #e8f3ff;
+      border-bottom: 1px solid #90caf9;
+      border-top: 1px solid #90caf9;
+      flex-wrap: wrap;
+      animation: slideDownBar .18s ease;
+    }
+    .mass-action-bar.visible { display: flex; }
+    @keyframes slideDownBar {
+      from { opacity:0; transform:translateY(-4px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    .mass-action-bar__count {
+      font-size: 12px; font-weight: 700; color: var(--sap-brand);
+      white-space: nowrap; padding-right: 6px;
+      border-right: 1px solid #90caf9;
+      margin-right: 2px;
+    }
+    .mass-action-bar__spacer { flex: 1; }
+    .mass-action-bar .btn { height: 26px; font-size: 11px; padding: 0 9px; }
+
+    /* ── Column selector dropdown ── */
+    .col-selector-wrap { position: relative; flex-shrink: 0; }
+    .col-selector-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      height: 28px; padding: 0 10px;
+      border: 1px solid var(--sap-input-border);
+      border-radius: 4px; background: #fff;
+      font-size: 12px; font-weight: 600; color: var(--sap-text-secondary);
+      cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .col-selector-btn:hover { border-color: var(--sap-brand); color: var(--sap-brand); }
+    .col-selector-btn svg { width: 13px; height: 13px; }
+    .col-selector-btn .badge {
+      background: var(--sap-brand); color: #fff;
+      font-size: 9px; font-weight: 700;
+      padding: 1px 5px; border-radius: 8px; min-width: 16px; text-align: center;
+    }
+    .col-dropdown {
+      position: absolute; top: calc(100% + 4px); right: 0;
+      background: #fff; border: 1px solid var(--sap-table-border);
+      border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.13);
+      z-index: 500; min-width: 200px; padding: 6px 0;
+      display: none;
+    }
+    .col-dropdown.open { display: block; }
+    .col-dropdown__header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 14px 8px;
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--sap-text-secondary);
+      border-bottom: 1px solid var(--sap-table-border);
+    }
+    .col-dropdown__reset {
+      font-size: 10px; font-weight: 600; color: var(--sap-brand);
+      cursor: pointer; background: none; border: none; padding: 0;
+    }
+    .col-dropdown__reset:hover { text-decoration: underline; }
+    .col-dropdown__item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 14px; cursor: pointer;
+      font-size: 12px; font-weight: 500; color: var(--sap-text-primary);
+      transition: background .12s;
+    }
+    .col-dropdown__item:hover { background: var(--sap-page-bg); }
+    .col-dropdown__item input[type="checkbox"] {
+      width: 14px; height: 14px; accent-color: var(--sap-brand); cursor: pointer; flex-shrink: 0;
+    }
+    .col-dropdown__item--locked { opacity: .45; cursor: not-allowed; }
+
+    /* ── PDF print styles ── */
+    @media print {
+      body * { visibility: hidden; }
+      #pdfPrintArea, #pdfPrintArea * { visibility: visible; }
+      #pdfPrintArea {
+        position: fixed; inset: 0;
+        background: #fff; padding: 24px;
+        font-family: 'Inter', Arial, sans-serif;
+      }
+    }
+
+    /* Responsive */
+    @media(max-width:900px) {
+      .sap-drawer { width: 100%; }
+      .hide-mobile { display: none; }
+    }
+  
+  /* ── Rigways Logo ── */
+  .rigways-shell-logo {
+    height: 22px;
+    width: auto;
+    flex-shrink: 0;
+    /* Make logo white on dark shell header */
+    filter: brightness(0) invert(1);
+  }
+  .rigways-login-logo-dark {
+    height: 36px;
+    width: auto;
+    /* White version for dark backgrounds */
+    filter: brightness(0) invert(1);
+  }
+  .rigways-login-logo {
+    height: 32px;
+    width: auto;
+    /* Original colors for light backgrounds */
+  }
+
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════ SHELL ═══════════════════════ -->
+<header class="sap-shell">
+  <a href="dashboard.html" class="sap-shell__logo">
+    <svg class="rigways-shell-logo" height="22" aria-label="Rigways Group" xmlns="http://www.w3.org/2000/svg"   viewBox="0 0 190.81 25.51"><defs><style>      .cls-1 {        fill: #231f20;      }      .cls-2 {        fill: #00aded;      }      .cls-3 {        fill: #2e3d54;      }    </style></defs><g  ><g><path class="cls-2" d="M74.28,0c0,.13-.08.18-.14.25-1.61,2.01-3.23,4.01-4.83,6.03-.14.17-.29.2-.48.2-18.2,0-36.39,0-54.59,0-1.71,0-3.08,1.43-2.97,3.11.09,1.42,1.26,2.6,2.67,2.71.28.02.56.03.84.03,7.99,0,15.99,0,23.98,0q.37,0,.37.38c0,4.16,0,8.31,0,12.47,0,.28-.08.33-.34.33-2.53-.01-5.06,0-7.59,0-.24,0-.32-.04-.31-.3.01-1.95,0-3.89.01-5.84,0-.24-.07-.29-.3-.29-3.64,0-7.28,0-10.92,0-.2,0-.35.06-.5.19-2.4,2.03-4.81,4.07-7.22,6.1-.11.09-.21.14-.35.14-3.83,0-7.65,0-11.48,0-.03,0-.05,0-.15-.02,3.1-2.56,6.17-5.09,9.23-7.62-2.24-.69-3.72-2.27-4.96-4.12-.69-1.03-1.15-2.15-1.37-3.37-.31-1.74-.1-3.43.65-5.03C4.85,2.55,7.07.88,10.06.2,10.72.05,11.4,0,12.08,0c20.65,0,41.3,0,61.95,0h.25Z"></path><path class="cls-3" d="M74.36,25.21c0,.25-.05.31-.3.31-5.81,0-11.62,0-17.43,0-3.24,0-6.25-.82-8.96-2.6-3.69-2.42-6-5.8-6.83-10.16-.15-.78-.2-1.56-.23-2.35,0-.17.02-.24.22-.24,2.77,0,5.55,0,8.32,0,.17,0,.22.05.23.22.04,1.02.2,2.02.6,2.97.87,2.07,2.29,3.63,4.3,4.66,1.38.71,2.84,1.01,4.38,1.01,2.43.01,4.87,0,7.31.01.26,0,.31-.08.3-.32-.02-.64-.02-1.28,0-1.92,0-.23-.06-.28-.28-.28-3.31,0-6.62,0-9.93,0-.17,0-.29-.04-.41-.18-1.71-2.02-3.42-4.03-5.13-6.04-.03-.03-.06-.07-.13-.16h.34c7.77,0,15.53,0,23.3,0,.26,0,.34.05.34.33-.01,4.92,0,9.84,0,14.75"></path><g><path class="cls-1" d="M91.12,10.1l-1.35-1.95h-1.49v1.95h-1.62V3.1h3.03c1.87,0,3.04.97,3.04,2.54,0,1.05-.53,1.82-1.44,2.21l1.57,2.25h-1.74ZM89.6,4.42h-1.32v2.44h1.32c.99,0,1.49-.46,1.49-1.22s-.5-1.22-1.49-1.22Z"></path><path class="cls-1" d="M94.21,3.1c0-.49.39-.87.97-.87s.97.36.97.84c0,.52-.39.9-.97.9s-.97-.38-.97-.87ZM94.4,4.72h1.56v5.38h-1.56v-5.38Z"></path><path class="cls-1" d="M103.46,4.72v4.48c0,2-1.08,2.92-3.02,2.92-1.02,0-2.01-.25-2.64-.74l.62-1.12c.46.37,1.21.61,1.9.61,1.1,0,1.58-.5,1.58-1.47v-.23c-.41.45-1,.67-1.7.67-1.49,0-2.69-1.03-2.69-2.6s1.2-2.6,2.69-2.6c.75,0,1.37.25,1.78.77v-.69h1.48ZM101.92,7.24c0-.79-.59-1.32-1.41-1.32s-1.42.53-1.42,1.32.6,1.32,1.42,1.32,1.41-.53,1.41-1.32Z"></path><path class="cls-1" d="M114.04,4.72l-1.95,5.38h-1.5l-1.21-3.34-1.25,3.34h-1.5l-1.94-5.38h1.47l1.27,3.64,1.32-3.64h1.32l1.28,3.64,1.31-3.64h1.38Z"></path><path class="cls-1" d="M120.04,7.03v3.07h-1.46v-.67c-.29.49-.85.75-1.64.75-1.26,0-2.01-.7-2.01-1.63s.67-1.61,2.31-1.61h1.24c0-.67-.4-1.06-1.24-1.06-.57,0-1.16.19-1.55.5l-.56-1.09c.59-.42,1.46-.65,2.32-.65,1.64,0,2.59.76,2.59,2.39ZM118.48,8.4v-.55h-1.07c-.73,0-.96.27-.96.63,0,.39.33.65.88.65.52,0,.97-.24,1.15-.73Z"></path><path class="cls-1" d="M127.29,4.72l-2.43,5.71c-.52,1.3-1.26,1.69-2.23,1.69-.55,0-1.15-.18-1.5-.49l.57-1.11c.24.21.57.34.88.34.43,0,.67-.19.88-.67l.02-.05-2.33-5.42h1.61l1.51,3.65,1.52-3.65h1.5Z"></path><path class="cls-1" d="M127.91,9.6l.52-1.12c.48.31,1.21.52,1.87.52.72,0,.99-.19.99-.49,0-.88-3.25.02-3.25-2.13,0-1.02.92-1.74,2.49-1.74.74,0,1.56.17,2.07.47l-.52,1.11c-.53-.3-1.06-.4-1.55-.4-.7,0-1,.22-1,.5,0,.92,3.25.03,3.25,2.15,0,1-.93,1.71-2.54,1.71-.91,0-1.83-.25-2.33-.58Z"></path><path class="cls-1" d="M142.41,6.49h1.48v2.84c-.77.58-1.83.89-2.83.89-2.2,0-3.82-1.51-3.82-3.62s1.62-3.62,3.85-3.62c1.23,0,2.25.42,2.93,1.21l-1.04.96c-.51-.54-1.1-.79-1.81-.79-1.36,0-2.29.91-2.29,2.24s.93,2.24,2.27,2.24c.44,0,.85-.08,1.26-.3v-2.05Z"></path><path class="cls-1" d="M149.12,4.64v1.44c-.13,0-.23-.02-.35-.02-.86,0-1.43.47-1.43,1.5v2.54h-1.56v-5.38h1.49v.71c.38-.52,1.02-.79,1.85-.79Z"></path><path class="cls-1" d="M150.19,7.41c0-1.62,1.25-2.77,2.96-2.77s2.95,1.15,2.95,2.77-1.24,2.77-2.95,2.77-2.96-1.15-2.96-2.77ZM154.52,7.41c0-.93-.59-1.49-1.37-1.49s-1.38.56-1.38,1.49.6,1.49,1.38,1.49,1.37-.56,1.37-1.49Z"></path><path class="cls-1" d="M163.06,4.72v5.38h-1.48v-.64c-.41.47-1.01.72-1.67.72-1.35,0-2.3-.76-2.3-2.42v-3.04h1.56v2.81c0,.9.4,1.3,1.09,1.3s1.24-.46,1.24-1.45v-2.66h1.56Z"></path><path class="cls-1" d="M170.86,7.41c0,1.69-1.17,2.77-2.68,2.77-.67,0-1.22-.21-1.62-.65v2.51h-1.56v-7.32h1.49v.62c.39-.47.97-.7,1.69-.7,1.51,0,2.68,1.08,2.68,2.77ZM169.29,7.41c0-.93-.59-1.49-1.37-1.49s-1.37.56-1.37,1.49.59,1.49,1.37,1.49,1.37-.56,1.37-1.49Z"></path></g><g><path class="cls-1" d="M86.31,18.6c0-2.05,1.58-3.58,3.73-3.58s3.71,1.52,3.71,3.58-1.58,3.58-3.71,3.58-3.73-1.53-3.73-3.58ZM92.75,18.6c0-1.55-1.16-2.69-2.71-2.69s-2.73,1.14-2.73,2.69,1.16,2.69,2.73,2.69,2.71-1.14,2.71-2.69Z"></path><path class="cls-1" d="M95.47,15.16c0-.35.28-.63.65-.63s.65.27.65.61c0,.36-.27.64-.65.64s-.65-.27-.65-.62ZM95.64,16.8h.96v5.3h-.96v-5.3Z"></path><path class="cls-1" d="M98.93,14.68h.96v7.42h-.96v-7.42Z"></path><path class="cls-1" d="M110.67,22.21l-.93-.93c-.61.59-1.41.9-2.34.9-1.42,0-2.45-.75-2.45-1.82,0-.86.49-1.46,1.7-2.15-.63-.63-.84-1.08-.84-1.6,0-.94.74-1.57,1.89-1.57,1.06,0,1.74.55,1.74,1.46,0,.71-.42,1.22-1.49,1.83l1.73,1.72c.19-.36.34-.78.43-1.27l.77.25c-.12.62-.33,1.16-.61,1.6l.94.94-.54.64ZM109.17,20.72l-1.99-1.98c-.98.55-1.29.96-1.29,1.52,0,.67.63,1.12,1.57,1.12.67,0,1.26-.22,1.71-.66ZM106.7,16.59c0,.36.14.62.71,1.2.92-.52,1.22-.84,1.22-1.28s-.33-.77-.93-.77c-.63,0-1,.35-1,.85Z"></path><path class="cls-1" d="M120.95,18.56h.96v2.73c-.7.59-1.67.89-2.65.89-2.15,0-3.73-1.51-3.73-3.58s1.58-3.58,3.75-3.58c1.11,0,2.05.37,2.69,1.08l-.62.62c-.58-.56-1.24-.81-2.03-.81-1.62,0-2.79,1.13-2.79,2.69s1.17,2.69,2.78,2.69c.59,0,1.14-.13,1.64-.45v-2.28Z"></path><path class="cls-1" d="M128.38,18.9v3.2h-.91v-.7c-.32.48-.91.76-1.74.76-1.2,0-1.96-.64-1.96-1.56,0-.85.55-1.55,2.13-1.55h1.52v-.19c0-.81-.47-1.28-1.42-1.28-.63,0-1.27.22-1.68.57l-.4-.72c.55-.44,1.34-.68,2.19-.68,1.45,0,2.27.7,2.27,2.15ZM127.42,20.48v-.74h-1.48c-.95,0-1.22.37-1.22.82,0,.53.44.86,1.17.86s1.29-.33,1.53-.94Z"></path><path class="cls-1" d="M129.99,21.54l.4-.76c.45.32,1.17.55,1.86.55.89,0,1.26-.27,1.26-.72,0-1.19-3.35-.16-3.35-2.27,0-.95.85-1.59,2.21-1.59.69,0,1.47.18,1.93.48l-.41.76c-.48-.31-1.01-.42-1.53-.42-.84,0-1.25.31-1.25.73,0,1.25,3.36.23,3.36,2.29,0,.96-.88,1.57-2.29,1.57-.88,0-1.75-.27-2.19-.62Z"></path><path class="cls-1" d="M138.93,18.6c0-2.07,1.58-3.58,3.71-3.58,1.08,0,2.02.37,2.66,1.09l-.65.63c-.54-.57-1.2-.83-1.97-.83-1.58,0-2.75,1.14-2.75,2.69s1.17,2.69,2.75,2.69c.77,0,1.43-.27,1.97-.84l.65.63c-.64.72-1.58,1.1-2.67,1.1-2.12,0-3.7-1.51-3.7-3.58Z"></path><path class="cls-1" d="M146.6,19.45c0-1.58,1.17-2.7,2.76-2.7s2.75,1.12,2.75,2.7-1.16,2.71-2.75,2.71-2.76-1.13-2.76-2.71ZM151.14,19.45c0-1.13-.76-1.86-1.78-1.86s-1.79.73-1.79,1.86.77,1.87,1.79,1.87,1.78-.74,1.78-1.87Z"></path><path class="cls-1" d="M162.73,19.05v3.05h-.96v-2.94c0-1.04-.5-1.55-1.37-1.55-.96,0-1.59.61-1.59,1.76v2.73h-.96v-2.94c0-1.04-.5-1.55-1.37-1.55-.96,0-1.59.61-1.59,1.76v2.73h-.96v-5.3h.92v.79c.38-.54,1.03-.84,1.83-.84s1.49.32,1.84.98c.4-.6,1.14-.98,2.04-.98,1.29,0,2.17.74,2.17,2.3Z"></path><path class="cls-1" d="M170.49,19.45c0,1.63-1.13,2.71-2.68,2.71-.75,0-1.41-.29-1.85-.86v2.74h-.96v-7.24h.92v.84c.43-.59,1.11-.89,1.89-.89,1.55,0,2.68,1.08,2.68,2.7ZM169.53,19.45c0-1.12-.77-1.86-1.79-1.86s-1.78.74-1.78,1.86.77,1.87,1.78,1.87,1.79-.74,1.79-1.87Z"></path><path class="cls-1" d="M176.53,18.9v3.2h-.91v-.7c-.32.48-.91.76-1.74.76-1.2,0-1.96-.64-1.96-1.56,0-.85.55-1.55,2.13-1.55h1.52v-.19c0-.81-.47-1.28-1.42-1.28-.63,0-1.27.22-1.68.57l-.4-.72c.55-.44,1.34-.68,2.19-.68,1.45,0,2.27.7,2.27,2.15ZM175.57,20.48v-.74h-1.48c-.95,0-1.22.37-1.22.82,0,.53.44.86,1.17.86s1.29-.33,1.53-.94Z"></path><path class="cls-1" d="M183.83,19.05v3.05h-.96v-2.94c0-1.04-.52-1.55-1.43-1.55-1.02,0-1.68.61-1.68,1.76v2.73h-.96v-5.3h.92v.8c.39-.54,1.07-.85,1.91-.85,1.29,0,2.2.74,2.2,2.3Z"></path><path class="cls-1" d="M190.81,16.8l-2.57,5.83c-.47,1.12-1.08,1.47-1.89,1.47-.51,0-1.03-.17-1.36-.49l.41-.72c.26.25.59.39.95.39.46,0,.75-.21,1.01-.82l.17-.37-2.34-5.29h1l1.85,4.24,1.83-4.24h.94Z"></path></g></g></g></svg>
+    <span class="sap-shell__logo-badge">ACM</span>
+  </a>
+  <div class="sap-shell__divider"></div>
+  <span class="sap-shell__app-title">Asset Management</span>
+  <div class="sap-shell__spacer"></div>
+  <div class="sap-shell__actions">
+    <button class="sap-shell__btn" onclick="window.location.href='notifications.html'">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span class="sap-shell__badge" id="notifBadge" style="display:none;"></span>
+    </button>
+    <div class="sap-shell__avatar" id="shellAvatar" onclick="toggleUserMenu()">AD</div>
+  </div>
+  <div class="sap-user-menu" id="userMenu">
+    <div class="sap-user-menu__header">
+      <div class="sap-user-menu__name" id="menuUserName">Admin</div>
+      <div class="sap-user-menu__role" id="menuUserRole">Administrator</div>
+    </div>
+    <div class="sap-user-menu__item" onclick="window.location.href='dashboard.html'">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span>Dashboard</span>
+    </div>
+    <div class="sap-user-menu__sep"></div>
+    <div class="sap-user-menu__item sap-user-menu__item--danger" onclick="logout()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      <span>Sign Out</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════ NAVBAR ═══════════════════════ -->
+<nav class="sap-navbar" id="navbar">
+  <div class="sap-navbar__inner">
+    <a href="dashboard.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span>Dashboard</span>
+    </a>
+    <a href="assets.html" class="sap-nav-item active">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      <span>Assets</span>
+    </a>
+    <a href="certificates.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+      <span>Certificates</span>
+    </a>
+    <a href="notifications.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span>Notifications</span>
+    </a>
+    <div class="sap-navbar__divider" id="adminSection"></div>
+    <a href="clients.html" class="sap-nav-item sap-nav-item--admin" id="adminClientsLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+      <span>Clients</span>
+    </a>
+    <a href="inspectors.html" class="sap-nav-item sap-nav-item--admin" id="inspectorsLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M9 12l2 2 4-4"/></svg>
+      <span>Inspectors</span>
+    </a>
+    <a href="functional-locations.html" class="sap-nav-item sap-nav-item--admin" id="funcLocsLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      <span>Func. Locations</span>
+    </a>
+  </div>
+</nav>
+
+<!-- ═══════════════════════ MAIN ═══════════════════════ -->
+<main class="sap-main" id="mainContent">
+
+  <!-- Slim page header -->
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:var(--sp-sm); flex-wrap:wrap; gap:var(--sp-sm);">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span style="font-size:15px; font-weight:700; color:var(--sap-text-primary);">Assets</span>
+      <span style="font-size:12px; color:var(--sap-text-secondary);" id="pageSubtitle">All assets across clients</span>
+    </div>
+    <div id="headerActions"></div>
+  </div>
+
+  <!-- Table card -->
+  <div class="sap-card">
+    <!-- Single compact toolbar: checkbox · status pills · filters · search · actions -->
+    <div class="sap-toolbar" style="gap:6px; flex-wrap:wrap; padding:6px 12px; border-bottom:1px solid var(--sap-table-border);">
+
+      <!-- Select-all checkbox -->
+      <input type="checkbox" class="sap-checkbox" id="selectAll" onchange="toggleSelectAll(this)" style="margin-right:4px;"/>
+
+      <!-- Status filter pills -->
+      <div class="filter-chips" id="statusChips" style="flex-shrink:0;">
+        <div class="filter-chip active" onclick="filterStatus('all',this)">All</div>
+        <div class="filter-chip" onclick="filterStatus('operation',this)"><span class="filter-chip__dot" style="background:#188918"></span><span>Operation</span></div>
+        <div class="filter-chip" onclick="filterStatus('stacked',this)"><span class="filter-chip__dot" style="background:#9ea3a8"></span><span>Stacked</span></div>
+      </div>
+
+      <!-- Divider -->
+      <div style="width:1px;height:20px;background:var(--sap-table-border);flex-shrink:0;"></div>
+
+      <!-- Client filter (admin/manager) -->
+      <select class="sap-select" id="clientFilter" style="height:28px;font-size:12px;max-width:150px;display:none;" onchange="applyFilters()">
+        <option value="all">All Clients</option>
+        <option value="C001">Acme Corp (C001)</option>
+        <option value="C002">Gulf Holdings (C002)</option>
+        <option value="C003">Delta Industries (C003)</option>
+        <option value="C004">Nile Ventures (C004)</option>
+      </select>
+
+      <!-- Type filter -->
+      <select class="sap-select" id="typeFilter" style="height:28px;font-size:12px;max-width:180px;" onchange="applyFilters()">
+        <option value="all">All Types</option>
+        <option value="Hoisting Equipment">Hoisting Equipment</option>
+        <option value="Drilling Equipment">Drilling Equipment</option>
+        <option value="Mud System Low Pressure">Mud System Low Pressure</option>
+        <option value="Mud System High Pressure">Mud System High Pressure</option>
+        <option value="Wirelines">Wirelines</option>
+        <option value="Structure">Structure</option>
+        <option value="Well Control">Well Control</option>
+        <option value="Tubular">Tubular</option>
+      </select>
+
+      <!-- Search — grows to fill space -->
+      <div class="sap-search-box" style="flex:1; min-width:140px; height:28px;">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="searchInput" placeholder="Search assets…" oninput="applyFilters()"/>
+      </div>
+
+      <!-- Count badge -->
+      <span class="sap-toolbar__count" id="tableCount" style="flex-shrink:0;">174</span>
+
+      <!-- Divider -->
+      <div style="width:1px;height:20px;background:var(--sap-table-border);flex-shrink:0;"></div>
+
+      <!-- Columns selector -->
+      <div class="col-selector-wrap" id="colSelectorWrap">
+        <button class="col-selector-btn" onclick="toggleColDropdown()" id="colSelectorBtn">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          <span>Columns</span>
+          <span class="badge" id="colBadge">7</span>
+        </button>
+        <div class="col-dropdown" id="colDropdown">
+          <div class="col-dropdown__header">
+            <span>VISIBLE COLUMNS</span>
+            <button class="col-dropdown__reset" onclick="resetColumns()">Reset</button>
+          </div>
+          <label class="col-dropdown__item col-dropdown__item--locked">
+            <input type="checkbox" checked disabled/><span>Asset Name</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" id="col_assetId" checked onchange="applyColVisibility()"/>
+            <span>Asset ID</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" id="col_type" checked onchange="applyColVisibility()"/>
+            <span>Type / Category</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" id="col_serial" checked onchange="applyColVisibility()"/>
+            <span>Serial No.</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" id="col_location" checked onchange="applyColVisibility()"/>
+            <span>Location</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" id="col_status" checked onchange="applyColVisibility()"/>
+            <span>Status</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" id="col_client" checked onchange="applyColVisibility()"/>
+            <span>Client</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div style="width:1px;height:20px;background:var(--sap-table-border);flex-shrink:0;"></div>
+
+      <!-- Export CSV -->
+      <button class="btn btn-ghost btn-sm" onclick="exportCSV()" style="height:28px;">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        <span>CSV</span>
+      </button>
+
+      <!-- Export PDF -->
+      <button class="btn btn-ghost btn-sm" onclick="exportPDF()" style="height:28px; color:#bb0000; border-color:#f5a0a0;">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>PDF</span>
+      </button>
+
+      <!-- Import -->
+      <button class="btn btn-ghost btn-sm" id="importBtn" onclick="document.getElementById('importInput').click()" style="height:28px;">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        <span>Import</span>
+      </button>
+      <input type="file" id="importInput" accept=".csv" style="display:none;" onchange="importCSV(this)"/>
+    </div>
+
+    <!-- Mass action bar — shown only when rows are selected -->
+    <div class="mass-action-bar" id="massActionBar">
+      <span class="mass-action-bar__count" id="massCount">0 selected</span>
+
+      <!-- Change Status (admin/manager) -->
+      <div class="col-selector-wrap" id="massStatusWrap" style="display:none;">
+        <button class="btn btn-secondary" id="massStatusBtn" onclick="toggleMassStatusDrop()">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="12" height="12"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Change Status</span>
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="10" height="10"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="col-dropdown" id="massStatusDrop" style="min-width:160px;">
+          <div class="col-dropdown__header"><span>SET STATUS TO</span></div>
+          <div class="col-dropdown__item" onclick="massChangeStatus('operation')">
+            <span style="width:8px;height:8px;border-radius:50%;background:#188918;display:inline-block;flex-shrink:0;"></span>
+            <span>Operation</span>
+          </div>
+          <div class="col-dropdown__item" onclick="massChangeStatus('stacked')">
+            <span style="width:8px;height:8px;border-radius:50%;background:#9ea3a8;display:inline-block;flex-shrink:0;"></span>
+            <span>Stacked</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mass-action-bar__spacer"></div>
+
+      <!-- Delete selected (admin only) -->
+      <button class="btn btn-danger" id="massDeleteBtn" style="display:none;" onclick="massDelete()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+        <span>Delete Selected</span>
+      </button>
+
+      <!-- Deselect all -->
+      <button class="btn btn-ghost" onclick="clearSelection()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="12" height="12"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        <span>Deselect All</span>
+      </button>
+    </div>
+
+    <!-- Table -->
+    <div class="sap-table-wrapper">
+      <table class="sap-table" id="assetTable">
+        <thead>
+          <tr>
+            <th class="cell-check"><input type="checkbox" class="sap-checkbox" id="selectAll" onchange="toggleSelectAll(this)"/></th>
+            <th data-col="assetId" onclick="sortTable('assetId')">Asset ID <span class="sort-icon">↕</span></th>
+            <th data-col="name"    onclick="sortTable('name')">Asset Name <span class="sort-icon">↕</span></th>
+            <th data-col="type"    onclick="sortTable('type')">Type / Category <span class="sort-icon">↕</span></th>
+            <th data-col="serial"  onclick="sortTable('serial')">Serial No. <span class="sort-icon">↕</span></th>
+            <th data-col="location" onclick="sortTable('location')">Location <span class="sort-icon">↕</span></th>
+            <th data-col="status"  onclick="sortTable('status')">Status <span class="sort-icon">↕</span></th>
+            <th data-col="client" id="clientCol">Client</th>
+          </tr>
+        </thead>
+        <tbody id="assetTableBody">
+          <!-- Rendered by JS -->
+        </tbody>
+      </table>
+      <div class="sap-table__empty" id="emptyState" style="display:none;">
+        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        <p>No assets found matching your filters.</p>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="sap-pagination" id="pagination">
+      <div class="sap-pagination__info" id="paginationInfo">Showing 1–15 of 174</div>
+      <div class="sap-pagination__controls" id="paginationControls"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ═══════════════════════ ADD/EDIT MODAL ═══════════════════════ -->
+<div class="sap-modal-overlay" id="assetModal">
+  <div class="sap-modal sap-modal--lg">
+    <div class="sap-modal__header">
+      <div class="sap-modal__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        <span id="modalTitle">Add New Asset</span>
+      </div>
+      <button class="sap-modal__close" onclick="closeModal()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="sap-modal__body">
+      <form id="assetForm" onsubmit="saveAsset(event)" novalidate>
+        <input type="hidden" id="editAssetId"/>
+        <div class="sap-form-grid sap-form-grid--2col">
+
+          <!-- Asset Name -->
+          <div class="sap-field">
+            <label class="sap-label">Asset Name <span class="required">*</span></label>
+            <input type="text" id="f_name" class="sap-input" required/>
+          </div>
+
+          <!-- Asset Type -->
+          <div class="sap-field">
+            <label class="sap-label">Asset Type / Category <span class="required">*</span></label>
+            <select id="f_type" class="sap-select" required onchange="onTypeChange()">
+              <option value="">Select type…</option>
+              <option value="Hoisting Equipment">Hoisting Equipment</option>
+              <option value="Drilling Equipment">Drilling Equipment</option>
+              <option value="Mud System Low Pressure">Mud System Low Pressure</option>
+              <option value="Mud System High Pressure">Mud System High Pressure</option>
+              <option value="Wirelines">Wirelines</option>
+              <option value="Structure">Structure</option>
+              <option value="Well Control">Well Control</option>
+              <option value="Tubular">Tubular</option>
+            </select>
+          </div>
+
+          <!-- Applied Standard — shown when a type is selected -->
+          <div class="sap-field span-full" id="appliedStandardWrap" style="display:none;">
+            <label class="sap-label">Applied Standard</label>
+            <input type="text" id="f_appliedStandard" class="sap-input"
+              placeholder="e.g. API 8C, ISO 13535, API 16A…"/>
+            <div style="font-size:11px;color:var(--sap-text-secondary);margin-top:3px;">
+              Enter the applicable industry standard or specification for this equipment type.
+            </div>
+          </div>
+
+          <!-- Serial Number -->
+          <div class="sap-field">
+            <label class="sap-label">Serial Number <span class="required">*</span></label>
+            <input type="text" id="f_serial" class="sap-input" placeholder="Must be unique across all assets"/>
+          </div>
+
+          <!-- Status -->
+          <div class="sap-field">
+            <label class="sap-label">Status <span class="required">*</span></label>
+            <select id="f_status" class="sap-select" required>
+              <option value="operation">Operation</option>
+              <option value="stacked">Stacked</option>
+            </select>
+            <!-- Technician: show approval notice -->
+            <div class="approval-info-box" id="statusApprovalNote" style="display:none;margin-top:8px;">
+              <strong>⚠ <span>Approval Required</span></strong><br/>
+              <span>Status changes are sent to Admin for approval.</span>
+            </div>
+          </div>
+
+          <!-- Zone of Equipment -->
+          <div class="sap-field">
+            <label class="sap-label">Zone of Equipment <span class="required">*</span></label>
+            <input type="text" id="f_zone_equipment" class="sap-input"
+              placeholder="e.g. Drill Floor, Pump Room, BOP Deck, Pipe Rack…"/>
+          </div>
+
+          <!-- Functional Location -->
+          <div class="sap-field span-full">
+            <label class="sap-label">Functional Location <span class="required">*</span></label>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <select id="f_location" class="sap-select" required style="flex:1;">
+                <option value="">Select functional location…</option>
+              </select>
+              <button type="button" class="btn btn-secondary" id="addFuncLocBtn"
+                onclick="openInlineAddFuncLoc()"
+                title="Add new functional location"
+                style="height:36px;white-space:nowrap;flex-shrink:0;">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add New
+              </button>
+            </div>
+            <!-- Inline add form — hidden by default -->
+            <div id="inlineFuncLocForm" style="display:none;margin-top:8px;background:var(--sap-brand-light);border:1px solid var(--sap-info-border);border-radius:6px;padding:10px 12px;">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--sap-brand);margin-bottom:8px;">New Functional Location</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                <div class="sap-field">
+                  <label class="sap-label">Location Name <span class="required">*</span></label>
+                  <input type="text" id="inline_loc_name" class="sap-input" placeholder="e.g. Rig 15 or Workshop C"/>
+                </div>
+                <div class="sap-field">
+                  <label class="sap-label">Type <span class="required">*</span></label>
+                  <select id="inline_loc_type" class="sap-select">
+                    <option value="Rig">Rig</option>
+                    <option value="Workshop">Workshop</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div class="sap-field" style="margin-bottom:8px;">
+                <label class="sap-label">Description (optional)</label>
+                <input type="text" id="inline_loc_desc" class="sap-input" placeholder="e.g. Offshore platform, North Sea Block 12"/>
+              </div>
+              <div style="display:flex;gap:6px;justify-content:flex-end;">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="closeInlineAddFuncLoc()">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="saveInlineFuncLoc()">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="12" height="12"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
+                  Save & Select
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Client (admin/manager only) -->
+          <div class="sap-field" id="f_client_wrap">
+            <label class="sap-label">Assigned Client <span class="required">*</span></label>
+            <select id="f_client" class="sap-select" required>
+              <option value="">Select client…</option>
+              <option value="C001">Acme Corp (C001)</option>
+              <option value="C002">Gulf Holdings (C002)</option>
+              <option value="C003">Delta Industries (C003)</option>
+              <option value="C004">Nile Ventures (C004)</option>
+            </select>
+          </div>
+
+          <!-- Notes -->
+          <div class="sap-field span-full">
+            <label class="sap-label">Notes / Description</label>
+            <textarea id="f_notes" class="sap-textarea" rows="3"></textarea>
+          </div>
+
+        </div>
+      </form>
+    </div>
+    <div class="sap-modal__footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveAsset(event)" id="saveBtn">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        <span>Save Asset</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ STATUS UPDATE MODAL (Technician) ═══════════════════════ -->
+<div class="sap-modal-overlay" id="statusModal">
+  <div class="sap-modal sap-modal--sm">
+    <div class="sap-modal__header">
+      <div class="sap-modal__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Request Status Change</span>
+      </div>
+      <button class="sap-modal__close" onclick="closeStatusModal()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="sap-modal__body">
+      <div class="approval-info-box">
+        <strong>⚠ Approval Required</strong><br/>
+        <span>Your request will be sent to the Admin for review and approval before taking effect.</span>
+      </div>
+      <div id="statusModalAssetInfo" style="background:var(--sap-page-bg);border-radius:6px;padding:12px;margin-bottom:16px;font-size:13px;"></div>
+      <div class="sap-field">
+        <label class="sap-label">Requested New Status <span class="required">*</span></label>
+        <select id="statusNewVal" class="sap-select">
+          <option value="operation">Operation</option>
+          <option value="stacked">Stacked</option>
+        </select>
+      </div>
+      <div class="sap-field mt-md">
+        <label class="sap-label">Reason for Change <span class="required">*</span></label>
+        <textarea id="statusReason" class="sap-textarea" rows="3"></textarea>
+      </div>
+    </div>
+    <div class="sap-modal__footer">
+      <button class="btn btn-ghost" onclick="closeStatusModal()">Cancel</button>
+      <button class="btn btn-warning" onclick="submitStatusRequest()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        <span>Submit Request</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ DETAIL DRAWER ═══════════════════════ -->
+<div class="sap-drawer-overlay" id="drawerOverlay">
+  <div class="sap-drawer" id="detailDrawer">
+    <div class="sap-drawer__header">
+      <div class="sap-drawer__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        <span>Asset Details</span>
+      </div>
+      <button class="sap-drawer__close" onclick="closeDrawer()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="sap-drawer__body" id="drawerBody">
+      <!-- Rendered dynamically -->
+    </div>
+    <div class="sap-drawer__footer" id="drawerFooter">
+      <button class="btn btn-ghost" onclick="closeDrawer()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ TRANSFER LOG MODAL ═══════════════════════ -->
+<div class="sap-modal-overlay" id="transferModal">
+  <div class="sap-modal sap-modal--lg">
+    <div class="sap-modal__header" style="background:#188918;">
+      <div class="sap-modal__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/>
+          <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/>
+        </svg>
+        <span id="transferModalTitle">Asset Transfer Log</span>
+      </div>
+      <button class="sap-modal__close" onclick="closeTransferModal()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="sap-modal__body" style="padding:0;">
+
+      <!-- Asset info banner -->
+      <div id="transferAssetInfo" style="padding:12px 20px;background:var(--sap-page-bg);border-bottom:1px solid var(--sap-table-border);font-size:13px;"></div>
+
+      <!-- New Transfer Form (admin/manager only) -->
+      <div id="newTransferForm" style="padding:var(--sp-md) var(--sp-lg);border-bottom:2px solid var(--sap-table-border);background:#f0faf0;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#188918;margin-bottom:var(--sp-sm);">
+          New Transfer
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--sp-sm);margin-bottom:var(--sp-sm);">
+          <div class="sap-field">
+            <label class="sap-label">From Location</label>
+            <input type="text" id="t_from" class="sap-input" readonly
+              style="background:#f5f6f7;color:var(--sap-text-secondary);cursor:not-allowed;"/>
+          </div>
+          <div class="sap-field">
+            <label class="sap-label">To Location <span class="required">*</span></label>
+            <select id="t_to" class="sap-select">
+              <option value="">Select destination…</option>
+            </select>
+          </div>
+          <div class="sap-field">
+            <label class="sap-label">Transfer Date <span class="required">*</span></label>
+            <input type="date" id="t_date" class="sap-input"/>
+          </div>
+        </div>
+        <div class="sap-field" style="margin-bottom:var(--sp-sm);">
+          <label class="sap-label">Reason / Notes</label>
+          <input type="text" id="t_notes" class="sap-input" placeholder="e.g. Scheduled maintenance rotation, rig assignment change…"/>
+        </div>
+        <div style="display:flex;justify-content:flex-end;">
+          <button class="btn btn-primary" onclick="saveTransfer()">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14">
+              <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/>
+            </svg>
+            Log Transfer & Move Asset
+          </button>
+        </div>
+      </div>
+
+      <!-- Transfer history table -->
+      <div style="padding:var(--sp-md) var(--sp-lg) var(--sp-sm);">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--sap-text-secondary);margin-bottom:8px;">
+          Transfer History
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="sap-table" id="transferLogTable">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>From Location</th>
+              <th>To Location</th>
+              <th>Transferred By</th>
+              <th>Reason / Notes</th>
+            </tr>
+          </thead>
+          <tbody id="transferLogBody"></tbody>
+        </table>
+        <div id="transferLogEmpty" style="text-align:center;padding:32px;color:var(--sap-text-secondary);font-size:13px;display:none;">
+          <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:36px;height:36px;margin:0 auto 8px;opacity:.3;">
+            <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/>
+          </svg>
+          <p>No transfers logged for this asset yet.</p>
+        </div>
+      </div>
+
+    </div>
+    <div class="sap-modal__footer">
+      <button class="btn btn-ghost" onclick="closeTransferModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete confirm modal -->
+<div class="sap-modal-overlay" id="deleteModal">
+  <div class="sap-modal sap-modal--sm">
+    <div class="sap-modal__header" style="background:var(--sap-error);">
+      <div class="sap-modal__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        <span>Delete Asset</span>
+      </div>
+      <button class="sap-modal__close" onclick="closeDeleteModal()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="sap-modal__body">
+      <p style="font-size:14px;color:var(--sap-text-primary);" id="deleteConfirmMsg">Are you sure you want to delete this asset? This action cannot be undone.</p>
+    </div>
+    <div class="sap-modal__footer">
+      <button class="btn btn-ghost" onclick="closeDeleteModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="sap-toast-container" id="toastContainer"></div>
+
+<!-- ═══════════════════════ SCRIPTS ═══════════════════════ -->
+<script>
+/* ═══════════════════════════════════════════════════════
+   SECURITY UTILITIES
+═══════════════════════════════════════════════════════ */
+function h(s){if(s===null||s===undefined)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;').replace(/\//g,'&#x2F;');}
+function safeUrl(url){if(!url||typeof url!=='string')return null;try{const u=new URL(url);if(u.protocol!=='http:'&&u.protocol!=='https:')return null;return url;}catch{return null;}}
+function safeOpen(url){const safe=safeUrl(url);if(!safe){showToast('error','Invalid URL','Only http and https links can be opened.');return;}window.open(safe,'_blank','noopener,noreferrer');}
+
+/* ═══════════════════════════════════════════════════════
+   TRANSFER LOG
+═══════════════════════════════════════════════════════ */
+const TRANSFER_KEY  = 'sap_asset_transfers';
+const ASSETS_SYNC_KEY = 'sap_assets_data';   /* read by functional-locations.html */
+
+function syncAssetsToStorage() {
+  /* Write a minimal snapshot (assetId + location) so functional-locations.html
+     can count how many assets are assigned to each location. */
+  try {
+    const snapshot = ASSETS.map(a => ({ assetId: a.assetId, location: a.location }));
+    localStorage.setItem(ASSETS_SYNC_KEY, JSON.stringify(snapshot));
+  } catch(e) {}
+}
+const CERTS_STORAGE_KEY = 'sap_certs_data';
+
+/* ── fmtCertId: mirrors the same helper in certificates.html ── */
+function fmtCertId(cert) {
+  if (!cert || !cert.certId) return '—';
+  const rawCert = cert.certId;
+  const certNum = rawCert.replace(/^CERT-0*/i, '') || rawCert;
+  const padded  = certNum.padStart(3, '0');
+  if (!cert.jobNumber) return rawCert;
+  const jobPart = cert.jobNumber.replace(/^JOB-/i, '');
+  return `${jobPart}/${padded}`;
+}
+
+/* ── Cert log: load from localStorage (written by certificates.html) ── */
+/* Falls back to embedded mirror of demo data if storage is empty.      */
+function loadCertsForAsset(assetId) {
+  let certs = [];
+  try {
+    const raw = localStorage.getItem(CERTS_STORAGE_KEY);
+    if (raw) certs = JSON.parse(raw);
+  } catch(e) {}
+  // If storage is empty use the embedded fallback mirror
+  if (!certs.length) certs = CERTS_FALLBACK;
+  return certs.filter(cert => cert.assetId === assetId);
+}
+
+/* ── Fallback mirror of demo cert data (matches certificates.html CERTS array) ── */
+/* Only used when the user hasn't visited certificates.html yet this session.    */
+function daysFromNowF(d) { const dt=new Date(); dt.setDate(dt.getDate()+d); return dt.toISOString().split('T')[0]; }
+function daysAgoF(d) { return daysFromNowF(-d); }
+
+const CERTS_FALLBACK = [
+  { certId:'CERT-0001', jobNumber:'JOB-2024-001', name:'Hoisting Equipment CAT III',  certType:'CAT III',      liftingSubtype:'', issuedBy:'Ahmed Al-Rashidi',  issueDate:daysAgoF(300),  expiryDate:daysFromNowF(3),   assetId:'AST-0001', client:'C001', approvalStatus:'approved', fileName:'cat3_hoisting.pdf' },
+  { certId:'CERT-0002', jobNumber:'JOB-2024-001', name:'Lifting Gear Inspection',     certType:'LIFTING',      liftingSubtype:'LIFTING GEAR', issuedBy:'Ahmed Al-Rashidi', issueDate:daysAgoF(300), expiryDate:daysFromNowF(7), assetId:'AST-0001', client:'C001', approvalStatus:'approved', fileName:'lifting_gear.pdf' },
+  { certId:'CERT-0003', jobNumber:'JOB-2024-001', name:'Original COC — Server Rack',  certType:'ORIGINAL COC', liftingSubtype:'', issuedBy:'Ahmed Al-Rashidi',  issueDate:daysAgoF(300),  expiryDate:daysFromNowF(12),  assetId:'AST-0001', client:'C001', approvalStatus:'approved', fileName:'coc_serverrack.pdf' },
+  { certId:'CERT-0004', jobNumber:'JOB-2024-002', name:'Forklift Load Test',          certType:'LOAD TEST',    liftingSubtype:'', issuedBy:'Mohamed Hassan',    issueDate:daysAgoF(200),  expiryDate:daysFromNowF(18),  assetId:'AST-0004', client:'C002', approvalStatus:'approved', fileName:'loadtest_forklift.pdf' },
+  { certId:'CERT-0005', jobNumber:'JOB-2024-002', name:'Lifting Personnel Cert',      certType:'LIFTING',      liftingSubtype:'LIFTING PERSONNEL', issuedBy:'Mohamed Hassan', issueDate:daysAgoF(200), expiryDate:daysFromNowF(22), assetId:'AST-0004', client:'C002', approvalStatus:'approved', fileName:'lifting_personnel.pdf' },
+  { certId:'CERT-0006', jobNumber:'JOB-2024-002', name:'CAT IV Inspection Report',    certType:'CAT IV',       liftingSubtype:'', issuedBy:'Mohamed Hassan',    issueDate:daysAgoF(200),  expiryDate:daysFromNowF(27),  assetId:'AST-0004', client:'C002', approvalStatus:'approved', fileName:'cat4_forklift.pdf' },
+  { certId:'CERT-0007', jobNumber:'JOB-2024-003', name:'Crane NDT Inspection',        certType:'NDT',          liftingSubtype:'', issuedBy:'Sara Al-Khalil',    issueDate:daysAgoF(5),    expiryDate:daysFromNowF(355), assetId:'AST-0008', client:'C003', approvalStatus:'pending',  fileName:'ndt_crane.pdf' },
+  { certId:'CERT-0008', jobNumber:'JOB-2024-003', name:'Crane Lifting Equipment Cert',certType:'LIFTING',      liftingSubtype:'LIFTING EQUIPMENT', issuedBy:'Sara Al-Khalil', issueDate:daysAgoF(3), expiryDate:daysFromNowF(362), assetId:'AST-0008', client:'C003', approvalStatus:'pending', fileName:'lifting_equip_crane.pdf' },
+  { certId:'CERT-0009', jobNumber:'JOB-2024-004', name:'HVAC CAT III Inspection',     certType:'CAT III',      liftingSubtype:'', issuedBy:'Layla Bin Rashid',  issueDate:daysAgoF(2),    expiryDate:daysFromNowF(363), assetId:'AST-0002', client:'C001', approvalStatus:'pending',  fileName:'cat3_hvac.pdf' },
+  { certId:'CERT-0010', jobNumber:'JOB-2024-005', name:'UPS Load Test Certificate',   certType:'LOAD TEST',    liftingSubtype:'', issuedBy:'Ahmed Al-Rashidi',  issueDate:daysAgoF(1),    expiryDate:daysFromNowF(364), assetId:'AST-0007', client:'C004', approvalStatus:'pending',  fileName:'loadtest_ups.pdf' },
+  { certId:'CERT-0011', jobNumber:'JOB-2024-005', name:'UPS Original COC',            certType:'ORIGINAL COC', liftingSubtype:'', issuedBy:'Ahmed Al-Rashidi',  issueDate:daysAgoF(1),    expiryDate:daysFromNowF(364), assetId:'AST-0007', client:'C004', approvalStatus:'pending',  fileName:'coc_ups.pdf' },
+  { certId:'CERT-0012', jobNumber:'JOB-2024-006', name:'Tubular Inspection Report',   certType:'TUBULAR',      liftingSubtype:'', issuedBy:'Khalid Al-Mansouri',issueDate:daysAgoF(400),  expiryDate:daysFromNowF(-10), assetId:'AST-0006', client:'C002', approvalStatus:'approved', fileName:'tubular_insp.pdf' },
+  { certId:'CERT-0013', jobNumber:'JOB-2024-006', name:'Pump Station NDT',            certType:'NDT',          liftingSubtype:'', issuedBy:'Khalid Al-Mansouri',issueDate:daysAgoF(500),  expiryDate:daysFromNowF(-30), assetId:'AST-0006', client:'C002', approvalStatus:'approved', fileName:'ndt_pump.pdf' },
+  { certId:'CERT-0014', jobNumber:'JOB-2024-007', name:'Generator CAT IV Report',     certType:'CAT IV',       liftingSubtype:'', issuedBy:'Mohamed Hassan',    issueDate:daysAgoF(400),  expiryDate:daysFromNowF(-5),  assetId:'AST-0003', client:'C001', approvalStatus:'rejected', fileName:'cat4_generator.pdf' },
+  { certId:'CERT-0015', jobNumber:'JOB-2024-008', name:'Generator Load Test',         certType:'LOAD TEST',    liftingSubtype:'', issuedBy:'Sara Al-Khalil',    issueDate:daysAgoF(200),  expiryDate:daysFromNowF(180), assetId:'AST-0003', client:'C003', approvalStatus:'approved', fileName:'loadtest_gen.pdf' },
+  { certId:'CERT-0016', jobNumber:'JOB-2024-008', name:'Fire Panel Lifting Equipment',certType:'LIFTING',      liftingSubtype:'LIFTING EQUIPMENT', issuedBy:'Sara Al-Khalil', issueDate:daysAgoF(100), expiryDate:daysFromNowF(265), assetId:'AST-0005', client:'C003', approvalStatus:'approved', fileName:'lifting_firepanel.pdf' },
+  { certId:'CERT-0017', jobNumber:'JOB-2024-009', name:'Server Rack Tubular Report',  certType:'TUBULAR',      liftingSubtype:'', issuedBy:'Layla Bin Rashid',  issueDate:daysAgoF(50),   expiryDate:daysFromNowF(315), assetId:'AST-0001', client:'C001', approvalStatus:'approved', fileName:'tubular_rack.pdf' },
+  { certId:'CERT-0018', jobNumber:'JOB-2024-009', name:'UPS CAT III Certification',   certType:'CAT III',      liftingSubtype:'', issuedBy:'Layla Bin Rashid',  issueDate:daysAgoF(60),   expiryDate:daysFromNowF(305), assetId:'AST-0007', client:'C001', approvalStatus:'approved', fileName:'cat3_ups.pdf' },
+];
+
+function loadTransfers() {
+  try { const s = localStorage.getItem(TRANSFER_KEY); return s ? JSON.parse(s) : []; }
+  catch(e) { return []; }
+}
+function saveTransfers(t) { localStorage.setItem(TRANSFER_KEY, JSON.stringify(t)); }
+
+function logTransfer(assetId, from, to, by, notes, date) {
+  if (!from || !to || from === to) return;
+  const transfers = loadTransfers();
+  transfers.push({ assetId, from, to, by, notes: notes||'', date: date||new Date().toISOString().split('T')[0] });
+  saveTransfers(transfers);
+}
+
+let transferTargetId = null;
+
+function openTransferModal(id) {
+  const a = ASSETS.find(x => x.assetId === id);
+  if (!a) return;
+  transferTargetId = id;
+
+  const canTransfer = session.role === 'admin' || session.role === 'manager';
+
+  document.getElementById('transferModalTitle').textContent = `Transfer Log — ${a.name}`;
+  document.getElementById('transferAssetInfo').innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span class="asset-id-chip">${a.assetId}</span>
+      <strong>${a.name}</strong>
+      <span style="color:var(--sap-text-secondary);">${a.type}</span>
+      <span style="color:var(--sap-text-secondary);">·</span>
+      <span>Current location: <strong style="color:var(--sap-brand);">${a.location||'—'}</strong></span>
+    </div>`;
+
+  // Show/hide transfer form
+  document.getElementById('newTransferForm').style.display = canTransfer ? 'block' : 'none';
+
+  if (canTransfer) {
+    // Populate From (current location — read-only)
+    document.getElementById('t_from').value = a.location || '';
+    // Populate To dropdown from functional locations, exclude current
+    const locs = loadFuncLocs();
+    const clientFilter = a.client || null;
+    // Show locations belonging to this asset's client, or unassigned locations
+    // If no locations match the client, show all (fallback so dropdown is never empty)
+    let filtered = locs.filter(l => l.name !== a.location);
+    const clientFiltered = filtered.filter(l => !l.client || l.client === clientFilter);
+    filtered = clientFiltered.length ? clientFiltered : filtered;
+    document.getElementById('t_to').innerHTML =
+      '<option value="">Select destination…</option>' +
+      filtered.map(l => `<option value="${l.name}">${l.name} (${l.type})</option>`).join('');
+    if (!filtered.length) {
+      document.getElementById('t_to').innerHTML = '<option value="">No other locations available — add one first</option>';
+    }
+    // Default date = today
+    document.getElementById('t_date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('t_notes').value = '';
+  }
+
+  renderTransferLog(id);
+  document.getElementById('transferModal').classList.add('open');
+}
+
+function renderTransferLog(assetId) {
+  const all = loadTransfers().filter(t => t.assetId === assetId);
+  // Sort newest first
+  all.sort((a, b) => (b.date||'').localeCompare(a.date||''));
+  const tbody = document.getElementById('transferLogBody');
+  const empty = document.getElementById('transferLogEmpty');
+
+  if (!all.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = all.map(t => `
+    <tr>
+      <td style="font-size:12px;white-space:nowrap;">${t.date||'—'}</td>
+      <td>
+        <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:12px;height:12px;opacity:.5;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          ${t.from||'—'}
+        </span>
+      </td>
+      <td>
+        <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--sap-success);font-weight:600;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:12px;height:12px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          ${t.to||'—'}
+        </span>
+      </td>
+      <td style="font-size:12px;">${t.by||'—'}</td>
+      <td style="font-size:12px;color:var(--sap-text-secondary);">${h(t.notes)||'—'}</td>
+    </tr>`).join('');
+}
+
+function saveTransfer() {
+  const to    = document.getElementById('t_to').value;
+  const date  = document.getElementById('t_date').value;
+  const notes = document.getElementById('t_notes').value.trim();
+  const from  = document.getElementById('t_from').value;
+
+  if (!to)   { showToast('error','Required','Please select a destination location.'); return; }
+  if (!date) { showToast('error','Required','Please enter a transfer date.'); return; }
+  if (to === from) { showToast('error','Same Location','Destination must differ from current location.'); return; }
+
+  // Move the asset
+  const idx = ASSETS.findIndex(a => a.assetId === transferTargetId);
+  if (idx > -1) {
+    ASSETS[idx].location = to;
+    logTransfer(transferTargetId, from, to, session.name, notes, date);
+    // Update the From field to the new location
+    document.getElementById('t_from').value = to;
+    // Remove the selected destination from the dropdown
+    const locs = loadFuncLocs();
+    const a = ASSETS[idx];
+    let filteredR = locs.filter(l => l.name !== to);
+    const clientFilteredR = filteredR.filter(l => !l.client || l.client === a.client);
+    filteredR = clientFilteredR.length ? clientFilteredR : filteredR;
+    document.getElementById('t_to').innerHTML =
+      '<option value="">Select destination…</option>' +
+      filteredR.map(l => `<option value="${l.name}">${l.name} (${l.type})</option>`).join('');
+    document.getElementById('t_notes').value = '';
+
+    renderTransferLog(transferTargetId);
+    renderTable();
+    showToast('success', 'Transfer Logged', `"${a.name}" moved to ${to}.`);
+  }
+}
+
+function closeTransferModal() {
+  document.getElementById('transferModal').classList.remove('open');
+  transferTargetId = null;
+}
+
+/* ── Applied Standard visibility ── */
+function onTypeChange() {
+  const val = document.getElementById('f_type').value;
+  const wrap = document.getElementById('appliedStandardWrap');
+  if (wrap) wrap.style.display = val ? 'block' : 'none';
+}
+
+/* ── Language (EN only) ── */
+function applyLang(lang) {
+  // Arabic support removed — English only
+  document.documentElement.lang = 'en';
+}
+function toggleLang() {}
+/* ── Session ── */
+let session = null;
+let deleteTargetId = null;
+let statusTargetId = null;
+let sortCol = 'assetId'; let sortDir = 1;
+let currentPage = 1; const PAGE_SIZE = 15;
+let activeStatusFilter = 'all';
+let filteredData = [];
+
+/* Session helpers — use SapSession from app.js when available,
+   otherwise fall back to inline implementation (defensive). */
+function getSession() {
+  if (typeof SapSession !== 'undefined') return SapSession.get();
+  try {
+    const s = sessionStorage.getItem('sap_session');
+    if (!s) { window.location.href = 'index.html'; return null; }
+    return JSON.parse(s);
+  } catch(e) { window.location.href = 'index.html'; return null; }
+}
+function logout() {
+  if (typeof SapSession !== 'undefined') { SapSession.logout(); return; }
+  const s = JSON.parse(sessionStorage.getItem('sap_session') || '{}');
+  fetch('/api/auth/logout', {
+    method: 'POST',
+    headers: s.token ? { 'Authorization': 'Bearer ' + s.token } : {},
+  }).catch(() => {});
+  sessionStorage.removeItem('sap_session');
+  window.location.href = 'index.html';
+}
+
+/* ── Language ── */
+/* ── User menu ── */
+function toggleUserMenu() { document.getElementById('userMenu').classList.toggle('open'); }
+document.addEventListener('click', e => {
+  if (!e.target.closest('#shellAvatar') && !e.target.closest('#userMenu'))
+    document.getElementById('userMenu').classList.remove('open');
+});
+
+/* ═══════════════════════════════════════════════════════
+   FUNCTIONAL LOCATIONS — shared via localStorage
+═══════════════════════════════════════════════════════ */
+const FL_KEY = 'sap_functional_locations';
+const DEFAULT_FUNC_LOCS = [
+  { id:'FL-001', name:'Rig 7',      type:'Rig',      desc:'Jackup rig, Arabian Gulf' },
+  { id:'FL-002', name:'Rig 12',     type:'Rig',      desc:'Semi-submersible, Block 4' },
+  { id:'FL-003', name:'Workshop A', type:'Workshop', desc:'Main maintenance workshop' },
+  { id:'FL-004', name:'Workshop B', type:'Workshop', desc:'Heavy equipment workshop' },
+];
+/* Functional locs loaded async from API — see populateFuncLocDropdown() */
+let _flCache = null;
+async function loadFuncLocs() {
+  if (_flCache) return _flCache;
+  try {
+    const r = await apiFetch('/api/functional-locations?status=active');
+    const d = await r.json();
+    _flCache = d.success ? d.data.functional_locations : DEFAULT_FUNC_LOCS;
+  } catch(e) { _flCache = DEFAULT_FUNC_LOCS; }
+  return _flCache;
+}
+function saveFuncLocs() {}
+function nextFuncLocId() {
+  const nums=loadFuncLocs().map(l=>parseInt(l.id.replace('FL-',''))).filter(n=>!isNaN(n));
+  return 'FL-'+String(Math.max(0,...nums)+1).padStart(3,'0');
+}
+function populateFuncLocDropdown(selectedValue, filterClient) {
+  const sel=document.getElementById('f_location'); if(!sel) return;
+  let locs=loadFuncLocs();
+  // Filter by client if known (admin/manager see all, others see their client's)
+  if(filterClient) locs=locs.filter(l=>!l.client||l.client===filterClient);
+  sel.innerHTML='<option value="">Select functional location…</option>'+
+    locs.map(l=>`<option value="${l.name}" ${l.name===selectedValue?'selected':''}>${l.name} (${l.type})</option>`).join('');
+}
+function openInlineAddFuncLoc() {
+  document.getElementById('inlineFuncLocForm').style.display='block';
+  document.getElementById('addFuncLocBtn').style.display='none';
+  document.getElementById('inline_loc_name').value='';
+  document.getElementById('inline_loc_desc').value='';
+  document.getElementById('inline_loc_type').value='Rig';
+  setTimeout(()=>document.getElementById('inline_loc_name').focus(),50);
+}
+function closeInlineAddFuncLoc() {
+  document.getElementById('inlineFuncLocForm').style.display='none';
+  document.getElementById('addFuncLocBtn').style.display='inline-flex';
+}
+function saveInlineFuncLoc() {
+  const name=document.getElementById('inline_loc_name').value.trim();
+  const type=document.getElementById('inline_loc_type').value;
+  const desc=document.getElementById('inline_loc_desc').value.trim();
+  if(!name){showToast('error','Required','Please enter a location name.');return;}
+  const locs=loadFuncLocs();
+  if(locs.find(l=>l.name.toLowerCase()===name.toLowerCase())){
+    showToast('error','Duplicate',`"${name}" already exists.`);return;
+  }
+  const clientVal=document.getElementById('f_client')?.value||session?.customerId||'';
+  const newLoc={id:nextFuncLocId(),name,type,client:clientVal,desc};
+  locs.push(newLoc); saveFuncLocs(locs);
+  const filterC=clientVal||null;
+  populateFuncLocDropdown(name,filterC);
+  closeInlineAddFuncLoc();
+  showToast('success','Location Added',`"${name}" added and selected.`);
+}
+/* ═══════════════════════════════════════════════════════
+   DEMO DATA
+═══════════════════════════════════════════════════════ */
+const CLIENTS_MAP = { C001:'Acme Corp', C002:'Gulf Holdings', C003:'Delta Industries', C004:'Nile Ventures' };
+const TYPE_COLORS = {
+  'Hoisting Equipment':       {'bg':'#e8f3ff','color':'#0070f2'},
+  'Drilling Equipment':       {'bg':'#fff3e0','color':'#e76500'},
+  'Mud System Low Pressure':  {'bg':'#f0faf0','color':'#188918'},
+  'Mud System High Pressure': {'bg':'#fce4e4','color':'#bb0000'},
+  'Wirelines':                {'bg':'#fff8e1','color':'#f9a825'},
+  'Structure':                {'bg':'#f3e5f5','color':'#7b1fa2'},
+  'Well Control':             {'bg':'#e0f2f1','color':'#00838f'},
+  'Tubular':                  {'bg':'#fbe9e7','color':'#bf360c'},
+};
+
+/* ASSETS loaded from API — see loadAssets() */
+let ASSETS = [];
+
+/* ═══════════════════════════════════════════════════════
+   RENDER TABLE
+═══════════════════════════════════════════════════════ */
+const statusLabels = {
+  operation: { en:'Operation', cls:'success' },
+  stacked:   { en:'Stacked',   cls:'neutral' },
+};
+
+function getStatusBadge(status) {
+  const s = statusLabels[status] || statusLabels.inactive;
+  const lbl = s.en;
+  return `<span class="sap-badge sap-badge--${s.cls}">${lbl}</span>`;
+}
+
+function getTypeIcon(type) {
+  const icons = {
+    'Hoisting Equipment':       '<path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/>',
+    'Drilling Equipment':       '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>',
+    'Mud System Low Pressure':  '<path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/>',
+    'Mud System High Pressure': '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
+    'Wirelines':                '<path d="M5 12h14M12 5l7 7-7 7"/>',
+    'Structure':                '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
+    'Well Control':             '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    'Tubular':                  '<path d="M22 12H2M2 12c0-2.21 4.03-4 9-4s9 1.79 9 4M2 12c0 2.21 4.03 4 9 4s9-1.79 9-4"/>',
+  };
+  const c = TYPE_COLORS[type] || TYPE_COLORS['Other'];
+  return `<div class="asset-type-icon" style="background:${c.bg};color:${c.color};">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${icons[type]||icons['IT Hardware']}</svg>
+  </div>`;
+}
+
+function renderTable() {
+  const role = session.role;
+  const search = (document.getElementById('searchInput').value || '').toLowerCase();
+  const clientF = document.getElementById('clientFilter').value || 'all';
+  const typeF   = document.getElementById('typeFilter').value || 'all';
+
+  let data = [...ASSETS];
+
+  /* Client scope */
+  if (session.customerId && role !== 'admin' && role !== 'manager') {
+    data = data.filter(a => a.client === session.customerId);
+  } else if (clientF !== 'all') {
+    data = data.filter(a => a.client === clientF);
+  }
+
+  /* Status filter */
+  if (activeStatusFilter !== 'all') data = data.filter(a => a.status === activeStatusFilter);
+
+  /* Type filter */
+  if (typeF !== 'all') data = data.filter(a => a.type === typeF);
+
+  /* Search */
+  if (search) data = data.filter(a =>
+    a.name.toLowerCase().includes(search) ||
+    a.assetId.toLowerCase().includes(search) ||
+    a.serial.toLowerCase().includes(search) ||
+    a.location.toLowerCase().includes(search) ||
+    a.type.toLowerCase().includes(search)
+  );
+
+  /* Sort */
+  data.sort((a, b) => {
+    const av = (a[sortCol]||'').toString().toLowerCase();
+    const bv = (b[sortCol]||'').toString().toLowerCase();
+    return av < bv ? -sortDir : av > bv ? sortDir : 0;
+  });
+
+  filteredData = data;
+  const total = data.length;
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const end   = Math.min(start + PAGE_SIZE, total);
+  const page  = data.slice(start, end);
+
+  /* Update count badge */
+  document.getElementById('tableCount').textContent = total;
+
+  const tbody = document.getElementById('assetTableBody');
+  const empty = document.getElementById('emptyState');
+
+  if (!page.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    document.getElementById('paginationInfo').textContent = 'No results';
+    document.getElementById('paginationControls').innerHTML = '';
+    document.getElementById('tableCount').textContent = '0';
+    return;
+  }
+
+  empty.style.display = 'none';
+  document.getElementById('tableCount').textContent = total;
+  document.getElementById('paginationInfo').textContent =
+    `Showing ${start+1}–${end} of ${total}`;
+
+  const canEdit   = role === 'admin' || role === 'manager';
+  const canDelete = role === 'admin';
+  const isTech    = role === 'technician';
+  const showClient= role === 'admin' || role === 'manager';
+
+  tbody.innerHTML = page.map(a => `
+    <tr class="asset-row" onmouseenter="showRowActions(this)" onmouseleave="hideRowActions(this)">
+      <td class="cell-check"><input type="checkbox" class="sap-checkbox" data-id="${a.assetId}" onchange="updateMassBar()"/></td>
+      <td data-col="assetId">
+        <span class="asset-id-chip">${a.assetId}</span>
+      </td>
+      <td data-col="name">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+          <div>
+            <div style="font-weight:600;font-size:13px;cursor:pointer;color:var(--sap-brand);" onclick="openDrawer('${a.assetId}')">${h(a.name)}</div>
+            <div style="font-size:11px;color:var(--sap-text-secondary);">${h(a.zone||'')||''}</div>
+          </div>
+          <div class="row-actions" style="display:none;gap:3px;flex-shrink:0;">
+            <button class="btn btn-ghost btn-icon" onclick="openDrawer('${a.assetId}')" title="View" style="width:26px;height:26px;">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+            ${canEdit ? `<button class="btn btn-secondary btn-icon" onclick="openEditModal('${a.assetId}')" title="Edit" style="width:26px;height:26px;">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button class="btn btn-icon" onclick="openTransferModal('${a.assetId}')" title="Transfer Location"
+              style="width:26px;height:26px;background:#f0faf0;color:#188918;border:1px solid #a8e6a8;">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/>
+                <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/>
+              </svg>
+            </button>` : ''}
+            ${isTech ? `<button class="btn btn-warning btn-icon" onclick="openStatusModal('${a.assetId}')" title="Request" style="width:26px;height:26px;">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </button>` : ''}
+            ${canDelete ? `<button class="btn btn-danger btn-icon" onclick="openDeleteModal('${a.assetId}')" title="Delete" style="width:26px;height:26px;">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+            </button>` : ''}
+          </div>
+        </div>
+      </td>
+      <td data-col="type">
+        <span style="font-size:12px;font-weight:600;color:${(TYPE_COLORS[a.type]||TYPE_COLORS['Other']).color};">${a.type}</span>
+      </td>
+      <td data-col="serial" style="font-family:monospace;font-size:12px;color:var(--sap-text-secondary);">${h(a.serial)||'—'}</td>
+      <td data-col="location" style="font-size:12px;">${h(a.location)}</td>
+      <td data-col="status">
+        ${getStatusBadge(a.status)}
+        ${isTech && a._pendingStatus ? `<div class="approval-badge" style="margin-top:3px;">⏳ Approval Pending</div>` : ''}
+      </td>
+      <td data-col="client" id="clientCol_${a.assetId}">${showClient ? `<span style="font-size:12px;font-weight:600;">${CLIENTS_MAP[a.client]||a.client}</span><br/><span class="asset-id-chip">${a.client}</span>` : `<span class="asset-id-chip">${a.client}</span>`}</td>
+    </tr>`
+  ).join('');
+
+  renderPagination(total);
+  applyColVisibility();
+  applyClientColVisibility();
+  syncAssetsToStorage();
+}
+/* ── Hide client column for 'user' role ── */
+function applyClientColVisibility() {
+  const hide = (session?.role === 'user');
+  const th = document.querySelector('th[data-col="client"]');
+  if (th) th.style.display = hide ? 'none' : '';
+  document.querySelectorAll('td[data-col="client"]').forEach(td => { td.style.display = hide ? 'none' : ''; });
+  const cbWrap = document.getElementById('col_client')?.closest('label');
+  if (cbWrap) cbWrap.style.display = hide ? 'none' : '';
+}
+
+function renderPagination(total) {
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const controls = document.getElementById('paginationControls');
+  let html = `<button class="sap-page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
+  for (let i = 1; i <= totalPages; i++) {
+    if (totalPages > 7 && Math.abs(i - currentPage) > 2 && i !== 1 && i !== totalPages) {
+      if (i === 2 || i === totalPages - 1) html += `<span style="padding:0 4px;color:var(--sap-text-secondary);">…</span>`;
+      continue;
+    }
+    html += `<button class="sap-page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
+  }
+  html += `<button class="sap-page-btn" onclick="goPage(${currentPage+1})" ${currentPage===totalPages?'disabled':''}>›</button>`;
+  controls.innerHTML = html;
+}
+
+function goPage(p) {
+  const total = filteredData.length;
+  const max = Math.ceil(total / PAGE_SIZE);
+  if (p < 1 || p > max) return;
+  currentPage = p; renderTable();
+}
+
+/* ═══════════════════════════════════════════════════════
+   FILTERS
+═══════════════════════════════════════════════════════ */
+function filterStatus(val, el) {
+  activeStatusFilter = val;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  currentPage = 1; renderTable();
+}
+
+function applyFilters() { currentPage = 1; renderTable(); }
+
+function sortTable(col) {
+  if (sortCol === col) sortDir *= -1; else { sortCol = col; sortDir = 1; }
+  renderTable();
+}
+
+function toggleSelectAll(cb) {
+  document.querySelectorAll('#assetTableBody input[type="checkbox"]').forEach(c => c.checked = cb.checked);
+  updateMassBar();
+}
+
+/* ── Row hover actions ── */
+function showRowActions(row) {
+  const btns = row.querySelector('.row-actions');
+  if (btns) btns.style.display = 'flex';
+}
+function hideRowActions(row) {
+  const btns = row.querySelector('.row-actions');
+  if (btns) btns.style.display = 'none';
+}
+
+/* ── Mass action bar ── */
+function getSelectedIds() {
+  return [...document.querySelectorAll('#assetTableBody input[type="checkbox"]:checked')]
+    .map(cb => cb.getAttribute('data-id'));
+}
+
+function updateMassBar() {
+  const ids = getSelectedIds();
+  const bar = document.getElementById('massActionBar');
+  const countEl = document.getElementById('massCount');
+  const role = session?.role;
+
+  if (!bar) return;
+
+  if (ids.length === 0) {
+    bar.classList.remove('visible');
+    /* Reset select-all checkbox */
+    const sa = document.getElementById('selectAll');
+    if (sa) sa.checked = false;
+    return;
+  }
+
+  bar.classList.add('visible');
+  countEl.textContent = `${ids.length} selected`;
+
+  /* Show/hide role-specific buttons */
+  const delBtn    = document.getElementById('massDeleteBtn');
+  const statusWrap = document.getElementById('massStatusWrap');
+  if (delBtn)     delBtn.style.display     = (role === 'admin') ? 'inline-flex' : 'none';
+  if (statusWrap) statusWrap.style.display = (role === 'admin' || role === 'manager') ? 'block' : 'none';
+}
+
+function clearSelection() {
+  document.querySelectorAll('#assetTableBody input[type="checkbox"]').forEach(c => c.checked = false);
+  const sa = document.getElementById('selectAll');
+  if (sa) sa.checked = false;
+  updateMassBar();
+}
+
+/* Mass status change dropdown */
+function toggleMassStatusDrop() {
+  document.getElementById('massStatusDrop').classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('#massStatusWrap'))
+    document.getElementById('massStatusDrop')?.classList.remove('open');
+});
+
+function massChangeStatus(newStatus) {
+  const ids = getSelectedIds();
+  if (!ids.length) return;
+  const role = session?.role;
+  ids.forEach(id => {
+    const idx = ASSETS.findIndex(a => a.assetId === id);
+    if (idx === -1) return;
+    if (role === 'technician') {
+      ASSETS[idx]._pendingStatus = newStatus;
+    } else {
+      ASSETS[idx].status = newStatus;
+    }
+  });
+  document.getElementById('massStatusDrop').classList.remove('open');
+  showToast('success',
+    'Status Updated',
+    `${ids.length} asset${ids.length > 1 ? 's' : ''} updated.`
+  );
+  clearSelection();
+  renderTable();
+}
+
+function massDelete() {
+  const ids = getSelectedIds();
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} selected asset${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+  ASSETS = ASSETS.filter(a => !ids.includes(a.assetId));
+  showToast('success',
+    'Deleted',
+    `${ids.length} asset${ids.length > 1 ? 's' : ''} deleted.`
+  );
+  clearSelection();
+  renderTable();
+}
+
+/* ═══════════════════════════════════════════════════════
+   ADD / EDIT MODAL
+═══════════════════════════════════════════════════════ */
+function openAddModal() {
+  document.getElementById('editAssetId').value = '';
+  document.getElementById('assetForm').reset();
+  onTypeChange(); // hides Applied Standard until type selected
+  const fc=document.getElementById('f_client')?.value||session?.customerId||null;
+  populateFuncLocDropdown('',fc);
+  closeInlineAddFuncLoc();
+  document.getElementById('modalTitle').setAttribute('data-en','Add New Asset');
+  document.getElementById('modalTitle').textContent = 'Add New Asset';
+
+  /* Technician approval note */
+  document.getElementById('statusApprovalNote').style.display =
+    session.role === 'technician' ? 'block' : 'none';
+
+  /* Pre-fill client for non-admin */
+  if (session.customerId) {
+    document.getElementById('f_client').value = session.customerId;
+    document.getElementById('f_client_wrap').style.display = 'none';
+  } else {
+    document.getElementById('f_client_wrap').style.display = 'flex';
+    document.getElementById('f_client_wrap').style.flexDirection = 'column';
+  }
+
+  populateFuncLocDropdown();
+  document.getElementById('assetModal').classList.add('open');
+}
+
+function openEditModal(id) {
+  const a = ASSETS.find(x => x.assetId === id);
+  if (!a) return;
+  document.getElementById('editAssetId').value = id;
+  document.getElementById('f_name').value    = a.name;
+  document.getElementById('f_type').value    = a.type;
+  document.getElementById('f_serial').value  = a.serial;
+  document.getElementById('f_appliedStandard').value = a.appliedStandard || '';
+  onTypeChange(); // show Applied Standard field since type is set
+  document.getElementById('f_status').value  = a.status;
+  document.getElementById('f_zone_equipment').value = a.zoneEquipment || a.zone || '';
+  populateFuncLocDropdown(a.location, a.client||session?.customerId||null);
+  closeInlineAddFuncLoc();
+
+  document.getElementById('f_client').value  = a.client;
+  document.getElementById('f_notes').value   = a.notes;
+
+  document.getElementById('modalTitle').textContent = 'Edit Asset';
+  document.getElementById('statusApprovalNote').style.display = 'none';
+
+  if (session.customerId) document.getElementById('f_client_wrap').style.display = 'none';
+  document.getElementById('assetModal').classList.add('open');
+}
+
+function closeModal() { document.getElementById('assetModal').classList.remove('open'); }
+
+async function saveAsset(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const name     = document.getElementById('f_name').value.trim();
+  const type     = document.getElementById('f_type').value;
+  const status   = document.getElementById('f_status').value;
+  const location = document.getElementById('f_location').value;
+  const appliedStandard = document.getElementById('f_appliedStandard').value.trim();
+  const client   = document.getElementById('f_client').value || session.customerId;
+  const serial   = document.getElementById('f_serial').value.trim();
+  const zoneEquipment = document.getElementById('f_zone_equipment').value.trim();
+  const notes    = document.getElementById('f_notes').value;
+
+  if (!name || !type || !status || !location || !client) {
+    showToast('error', 'Required Fields', 'Please fill all required fields.'); return;
+  }
+  if (!serial) {
+    showToast('error', 'Required', 'Serial Number is required.');
+    document.getElementById('f_serial').focus(); return;
+  }
+
+  const editId = document.getElementById('editAssetId').value;
+  const payload = {
+    name, asset_type: type, status, functional_location: location,
+    serial_number: serial, client_id: client, description: appliedStandard,
+    notes, model: zoneEquipment,
+  };
+
+  try {
+    let res, data;
+    if (editId) {
+      res  = await apiFetch(`/api/assets/${editId}`, { method:'PATCH', body: JSON.stringify(payload) });
+      data = await res.json();
+      if (!data.success) { showToast('error','Save Failed', data.error||'Could not update asset.'); return; }
+      const idx = ASSETS.findIndex(a => (a.id||a.assetId) === editId);
+      if (idx > -1) ASSETS[idx] = { ...ASSETS[idx], ...data.data };
+      showToast('success','Updated', `${name} updated successfully.`);
+    } else {
+      payload.asset_number = 'AST-' + Date.now(); // temp; server can override
+      res  = await apiFetch('/api/assets', { method:'POST', body: JSON.stringify(payload) });
+      data = await res.json();
+      if (!data.success) { showToast('error','Save Failed', data.error||'Could not create asset.'); return; }
+      ASSETS.push(data.data);
+      showToast('success','Added', `${name} added successfully.`);
+    }
+    closeModal();
+    renderTable();
+  } catch(err) {
+    showToast('error','Network Error', 'Could not save asset. Please try again.');
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   STATUS MODAL (Technician)
+═══════════════════════════════════════════════════════ */
+function openStatusModal(id) {
+  const a = ASSETS.find(x => x.assetId === id);
+  if (!a) return;
+  statusTargetId = id;
+  document.getElementById('statusModalAssetInfo').innerHTML =
+    `<strong>${a.name}</strong> (${a.assetId})<br/>
+     <span style="color:var(--sap-text-secondary);font-size:12px;">Current status </span>
+     ${getStatusBadge(a.status)}`;
+  document.getElementById('statusNewVal').value = a.status;
+  document.getElementById('statusReason').value = '';
+  document.getElementById('statusModal').classList.add('open');
+}
+function closeStatusModal() { document.getElementById('statusModal').classList.remove('open'); }
+
+function submitStatusRequest() {
+  const reason = document.getElementById('statusReason').value.trim();
+  if (!reason) {
+    showToast('error',
+      'Reason Required',
+      'Please enter a reason for the status change.');
+    return;
+  }
+  const idx = ASSETS.findIndex(a => a.assetId === statusTargetId);
+  if (idx > -1) ASSETS[idx]._pendingStatus = document.getElementById('statusNewVal').value;
+  closeStatusModal();
+  showToast('success',
+    'Request Submitted',
+    'Status change request submitted to Admin.');
+  renderTable();
+}
+
+/* ═══════════════════════════════════════════════════════
+   CERT LOG — for asset drawer
+═══════════════════════════════════════════════════════ */
+function buildCertLog(assetId) {
+  const certs = loadCertsForAsset(assetId);
+
+  /* Sort newest issueDate first */
+  certs.sort((a, b) => (b.issueDate||'').localeCompare(a.issueDate||''));
+
+  const total = certs.length;
+  const expired  = certs.filter(cert => {
+    if (cert.approvalStatus === 'pending' || cert.approvalStatus === 'rejected') return false;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const exp   = new Date(cert.expiryDate); exp.setHours(0,0,0,0);
+    return exp < today;
+  }).length;
+  const expiring = certs.filter(cert => {
+    if (cert.approvalStatus !== 'approved') return false;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const exp   = new Date(cert.expiryDate); exp.setHours(0,0,0,0);
+    const days  = Math.ceil((exp - today) / 86400000);
+    return days >= 0 && days <= 30;
+  }).length;
+
+  /* Approval badge helper */
+  function apBadge(status) {
+    const map = {
+      approved: 'sap-badge--success',
+      pending:  'sap-badge--pending',
+      rejected: 'sap-badge--error',
+    };
+    return `<span class="sap-badge ${map[status]||'sap-badge--neutral'}" style="font-size:10px;padding:2px 6px;">${status}</span>`;
+  }
+
+  /* Expiry badge helper */
+  function expBadge(cert) {
+    if (cert.approvalStatus === 'pending')  return `<span style="font-size:11px;color:var(--sap-text-disabled);">—</span>`;
+    if (cert.approvalStatus === 'rejected') return `<span style="font-size:11px;color:var(--sap-error);">N/A</span>`;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const exp   = new Date(cert.expiryDate); exp.setHours(0,0,0,0);
+    const days  = Math.ceil((exp - today) / 86400000);
+    if (days < 0)   return `<span style="font-size:11px;font-weight:700;color:var(--sap-error);">${cert.expiryDate}<br/><span style="font-size:10px;">${Math.abs(days)}d ago</span></span>`;
+    if (days <= 30) return `<span style="font-size:11px;font-weight:700;color:var(--sap-warning);">${cert.expiryDate}<br/><span style="font-size:10px;">${days}d left</span></span>`;
+    return `<span style="font-size:11px;color:var(--sap-text-secondary);">${cert.expiryDate}</span>`;
+  }
+
+  /* Type chip helper */
+  const TC = {
+    'CAT III':{'bg':'#e8f3ff','color':'#0070f2'},'CAT IV':{'bg':'#dce8ff','color':'#0057c2'},
+    'ORIGINAL COC':{'bg':'#f0faf0','color':'#188918'},'LOAD TEST':{'bg':'#fff3e0','color':'#e76500'},
+    'LIFTING':{'bg':'#fff8e1','color':'#f9a825'},'NDT':{'bg':'#fce4e4','color':'#bb0000'},
+    'TUBULAR':{'bg':'#f3e5f5','color':'#7b1fa2'},'Other':{'bg':'#f5f6f7','color':'#6a6d70'},
+  };
+  function typeChip(cert) {
+    const t = TC[cert.certType] || TC['Other'];
+    const sub = cert.liftingSubtype ? `<div style="font-size:9px;font-weight:600;color:var(--sap-warning);margin-top:2px;">↳ ${cert.liftingSubtype}</div>` : '';
+    return `<span style="background:${t.bg};color:${t.color};font-size:10px;font-weight:700;padding:2px 5px;border-radius:3px;text-transform:uppercase;white-space:nowrap;">${cert.certType}</span>${sub}`;
+  }
+
+  /* Group rows by jobNumber */
+  const jobs = {};
+  certs.forEach(cert => {
+    const jn = cert.jobNumber || '—';
+    if (!jobs[jn]) jobs[jn] = [];
+    jobs[jn].push(cert);
+  });
+
+  if (!total) {
+    return `
+    <div class="drawer-section">
+      <div class="drawer-section__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+        Certificate Log
+      </div>
+      <div style="text-align:center;padding:24px 12px;color:var(--sap-text-disabled);font-size:12px;">
+        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:32px;height:32px;margin:0 auto 8px;opacity:.3;"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+        No certificates linked to this asset.
+        <br/><a href="certificates.html" style="color:var(--sap-brand);font-weight:600;">Upload one →</a>
+      </div>
+    </div>`;
+  }
+
+  /* Summary bar */
+  const summaryBar = `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 0 10px;">
+      <span style="font-size:12px;font-weight:700;color:var(--sap-text-primary);">${total} certificate${total!==1?'s':''}</span>
+      <span style="font-size:11px;color:var(--sap-text-secondary);">across ${Object.keys(jobs).length} job${Object.keys(jobs).length!==1?'s':''}</span>
+      ${expiring ? `<span style="background:var(--sap-warning-bg);color:var(--sap-warning);border:1px solid var(--sap-warning-border);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;">⚠ ${expiring} expiring soon</span>` : ''}
+      ${expired  ? `<span style="background:var(--sap-error-bg);color:var(--sap-error);border:1px solid var(--sap-error-border);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;">✕ ${expired} expired</span>` : ''}
+    </div>`;
+
+  /* Build rows grouped by job */
+  let rows = '';
+  Object.entries(jobs).forEach(([jobNum, jobCerts]) => {
+    /* Job header row */
+    rows += `
+      <tr>
+        <td colspan="6" style="padding:6px 10px;background:var(--sap-page-bg);border-top:2px solid var(--sap-table-border);border-bottom:1px solid var(--sap-table-border);">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-family:monospace;font-size:11px;font-weight:800;color:var(--sap-brand);background:var(--sap-brand-light);border:1px solid var(--sap-info-border);border-radius:4px;padding:2px 7px;">${jobNum}</span>
+            <span style="font-size:10px;color:var(--sap-text-secondary);">${jobCerts.length} cert${jobCerts.length!==1?'s':''} · Inspection date: <strong>${jobCerts[0]?.issueDate||'—'}</strong></span>
+            <span style="font-size:10px;color:var(--sap-text-secondary);margin-left:auto;">Inspector: <strong>${jobCerts[0]?.issuedBy||'—'}</strong></span>
+          </div>
+        </td>
+      </tr>`;
+    /* Cert rows within this job */
+    jobCerts.forEach(cert => {
+      rows += `
+      <tr style="background:#fff;" onmouseenter="this.style.background='var(--sap-brand-light)'" onmouseleave="this.style.background='#fff'">
+        <td style="padding:6px 8px 6px 20px;font-family:monospace;font-size:11px;font-weight:700;color:var(--sap-success);white-space:nowrap;">${fmtCertId(cert)}</td>
+        <td style="padding:6px 8px;font-size:12px;font-weight:600;color:var(--sap-text-primary);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${cert.name}">${cert.name}</td>
+        <td style="padding:6px 8px;">${typeChip(cert)}</td>
+        <td style="padding:6px 8px;">${expBadge(cert)}</td>
+        <td style="padding:6px 8px;">${apBadge(cert.approvalStatus)}</td>
+        <td style="padding:6px 8px;">
+          ${cert.fileName ? `<a href="certificates.html" title="${cert.fileName}" style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;color:var(--sap-brand);text-decoration:none;"><svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>${cert.fileName}</a>` : '<span style="color:var(--sap-text-disabled);font-size:11px;">—</span>'}
+        </td>
+      </tr>`;
+    });
+  });
+
+  return `
+    <div class="drawer-section">
+      <div class="drawer-section__title" style="justify-content:space-between;">
+        <span style="display:flex;align-items:center;gap:6px;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:13px;height:13px;"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+          Certificate Log
+        </span>
+        <a href="certificates.html" style="font-size:11px;font-weight:600;color:var(--sap-brand);">Manage →</a>
+      </div>
+      ${summaryBar}
+      <div style="overflow-x:auto;border:1px solid var(--sap-table-border);border-radius:6px;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead>
+            <tr style="background:var(--sap-table-header-bg);">
+              <th style="padding:6px 8px 6px 20px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--sap-text-secondary);text-align:left;white-space:nowrap;">Cert ID</th>
+              <th style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--sap-text-secondary);text-align:left;">Name</th>
+              <th style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--sap-text-secondary);text-align:left;white-space:nowrap;">Type</th>
+              <th style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--sap-text-secondary);text-align:left;white-space:nowrap;">Expires</th>
+              <th style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--sap-text-secondary);text-align:left;">Status</th>
+              <th style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--sap-text-secondary);text-align:left;">File</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   DETAIL DRAWER
+═══════════════════════════════════════════════════════ */
+function openDrawer(id) {
+  const a = ASSETS.find(x => x.assetId === id);
+  if (!a) return;
+  const c = TYPE_COLORS[a.type] || TYPE_COLORS['Other'];
+  const role = session.role;
+
+  document.getElementById('drawerBody').innerHTML = `
+    <div class="drawer-section">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        <div class="asset-type-icon" style="background:${c.bg};color:${c.color};width:48px;height:48px;border-radius:10px;">${getTypeIcon(a.type).replace('width: 16px; height: 16px;','').replace('width:16px;height:16px;','')}</div>
+        <div>
+          <div style="font-size:16px;font-weight:800;color:var(--sap-text-primary);">${h(a.name)}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+            <span class="asset-id-chip">${a.assetId}</span>
+            ${getStatusBadge(a.status)}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Basic Information
+      </div>
+      <div class="sap-detail-grid">
+        <div class="sap-detail-field">
+          <span class="sap-detail-field__label">Asset ID</span>
+          <span class="sap-detail-field__value" style="font-family:monospace;color:var(--sap-brand);">${a.assetId}</span>
+        </div>
+        <div class="sap-detail-field">
+          <span class="sap-detail-field__label">Type / Category</span>
+          <span class="sap-detail-field__value" style="color:${c.color};">${a.type}</span>
+        </div>
+        <div class="sap-detail-field">
+          <span class="sap-detail-field__label">Serial Number</span>
+          <span class="sap-detail-field__value" style="font-family:monospace;">${h(a.serial)||'—'}</span>
+        </div>
+        ${a.appliedStandard ? `<div class="sap-detail-field">
+          <span class="sap-detail-field__label">Applied Standard</span>
+          <span class="sap-detail-field__value" style="font-weight:600;color:var(--sap-brand);">${a.appliedStandard}</span>
+        </div>` : ''}
+        <div class="sap-detail-field">
+          <span class="sap-detail-field__label">Status</span>
+          <span class="sap-detail-field__value">${getStatusBadge(a.status)}</span>
+        </div>
+        <div class="sap-detail-field">
+          <span class="sap-detail-field__label">Location / Site</span>
+          <span class="sap-detail-field__value">${h(a.location)}</span>
+        </div>
+        <div class="sap-detail-field">
+          <span class="sap-detail-field__label">Room / Zone</span>
+          <span class="sap-detail-field__value">${h(a.zone)||'—'}</span>
+        </div>
+        <div class="sap-detail-field">
+          <span class="sap-detail-field__label">Customer ID</span>
+          <span class="sap-detail-field__value"><span class="asset-id-chip">${a.client}</span> ${(role==='admin'||role==='manager')?`<span style="font-size:12px;color:var(--sap-text-secondary);">${CLIENTS_MAP[a.client]||''}</span>`:''}</span>
+        </div>
+        ${a._pendingStatus ? `<div class="sap-detail-field span-full">
+          <span class="sap-detail-field__label">Pending Status Change</span>
+          <span class="sap-detail-field__value"><span class="approval-badge">⏳  Request for: ${a._pendingStatus}</span></span>
+        </div>` : ''}
+      </div>
+    </div>
+
+    ${a.notes ? `<div class="drawer-section">
+      <div class="drawer-section__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Notes
+      </div>
+      <p style="font-size:13px;color:var(--sap-text-secondary);line-height:1.6;">${h(a.notes)}</p>
+    </div>` : ''}
+
+    ${buildCertLog(a.assetId)}
+  `;
+
+  /* Drawer footer actions */
+  const df = document.getElementById('drawerFooter');
+  const canEdit   = role === 'admin' || role === 'manager';
+  const canDelete = role === 'admin';
+  const isTech    = role === 'technician';
+  df.innerHTML = `
+    <button class="btn btn-ghost" onclick="closeDrawer()">Close</button>
+    ${isTech ? `<button class="btn btn-warning" onclick="closeDrawer();openStatusModal('${a.assetId}')">Request Status Change</button>` : ''}
+    ${canEdit ? `<button class="btn btn-secondary" onclick="closeDrawer();openEditModal('${a.assetId}')">Edit</button>` : ''}
+    ${canDelete ? `<button class="btn btn-danger" onclick="closeDrawer();openDeleteModal('${a.assetId}')">Delete</button>` : ''}
+  `;
+
+  document.getElementById('drawerOverlay').classList.add('open');
+}
+
+function closeDrawer() { document.getElementById('drawerOverlay').classList.remove('open'); }
+document.getElementById('drawerOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeDrawer();
+});
+document.getElementById('transferModal').addEventListener('click', function(e) {
+  if (e.target === this) closeTransferModal();
+});
+
+/* ═══════════════════════════════════════════════════════
+   DELETE
+═══════════════════════════════════════════════════════ */
+function openDeleteModal(id) {
+  deleteTargetId = id;
+  const a = ASSETS.find(x => x.assetId === id);
+  document.getElementById('deleteConfirmMsg').textContent =
+    `Are you sure you want to delete "${a?.name||id}"? This action cannot be undone.`;
+  document.getElementById('deleteModal').classList.add('open');
+}
+function closeDeleteModal() { document.getElementById('deleteModal').classList.remove('open'); }
+async function confirmDelete() {
+  const a = ASSETS.find(x => (x.id||x.assetId) === deleteTargetId);
+  closeDeleteModal();
+  try {
+    const res  = await apiFetch(`/api/assets/${deleteTargetId}`, { method:'DELETE' });
+    const data = await res.json();
+    if (!data.success) { showToast('error','Delete Failed', data.error||'Could not delete asset.'); return; }
+    ASSETS = ASSETS.filter(x => (x.id||x.assetId) !== deleteTargetId);
+    showToast('success','Deleted', `"${a?.name||deleteTargetId}" deleted successfully.`);
+    renderTable();
+  } catch(err) {
+    showToast('error','Network Error','Could not delete asset. Please try again.');
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   COLUMN VISIBILITY
+═══════════════════════════════════════════════════════ */
+const COL_KEYS = ['assetId','type','serial','location','status','client'];
+
+function toggleColDropdown() {
+  document.getElementById('colDropdown').classList.toggle('open');
+}
+
+/* Close dropdown when clicking outside */
+document.addEventListener('click', e => {
+  if (!e.target.closest('#colSelectorWrap'))
+    document.getElementById('colDropdown')?.classList.remove('open');
+});
+
+function applyColVisibility() {
+  let visible = 0;
+  COL_KEYS.forEach(key => {
+    const cb   = document.getElementById('col_' + key);
+    const show = cb ? cb.checked : true;
+    if (show) visible++;
+    /* header th */
+    const th = document.querySelector(`th[data-col="${key}"]`);
+    if (th) th.style.display = show ? '' : 'none';
+    /* body tds */
+    document.querySelectorAll(`td[data-col="${key}"]`).forEach(td => {
+      td.style.display = show ? '' : 'none';
+    });
+  });
+  /* +2 for name (always) + actions (always) */
+  const badge = document.getElementById('colBadge');
+  if (badge) badge.textContent = visible + 2;
+  /* Save to localStorage */
+  const state = {};
+  COL_KEYS.forEach(k => { const cb = document.getElementById('col_'+k); if(cb) state[k]=cb.checked; });
+  localStorage.setItem('asset_col_state', JSON.stringify(state));
+}
+
+function resetColumns() {
+  COL_KEYS.forEach(k => {
+    const cb = document.getElementById('col_'+k);
+    if (cb) cb.checked = true;
+  });
+  applyColVisibility();
+}
+
+function loadColState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('asset_col_state') || '{}');
+    COL_KEYS.forEach(k => {
+      const cb = document.getElementById('col_'+k);
+      if (cb && saved[k] !== undefined) cb.checked = saved[k];
+    });
+  } catch(e) {}
+  applyColVisibility();
+}
+
+/* ═══════════════════════════════════════════════════════
+   EXPORT / IMPORT
+═══════════════════════════════════════════════════════ */
+function exportCSV() {
+  const data = filteredData.length ? filteredData : ASSETS;
+  const headers = ['Asset ID','Asset Name','Type','Serial No.','Location','Zone','Status','Customer ID','Client Name','Notes'];
+  const rows = data.map(a => [
+    a.assetId, a.name, a.type, a.serial||'', a.location, a.zone||'',
+    a.status, a.client, CLIENTS_MAP[a.client]||'', a.notes||''
+  ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob(['\uFEFF'+csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url;
+  a.download = `assets_export_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast('success',
+    'Exported',
+    `${data.length} assets exported.`);
+}
+
+function exportPDF() {
+  /* Collect only visible columns from current filtered+paginated view */
+  const data = filteredData.length ? filteredData : ASSETS;
+  const total = data.length;
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const end   = Math.min(start + PAGE_SIZE, total);
+  const pageData = data.slice(start, end);
+
+  /* Determine which columns are visible */
+  const visibleCols = [
+    { key:'assetId',  label: 'Asset ID',        fn: a => a.assetId },
+    { key:'name',     label: 'Asset Name',       fn: a => h(a.name) + (a.zone ? ` (${h(a.zone)})` : '') },
+    { key:'type',     label: 'Type',                 fn: a => h(a.type) },
+    { key:'serial',   label: 'Serial No.',  fn: a => h(a.serial)||'—' },
+    { key:'location', label: 'Location',            fn: a => h(a.location) },
+    { key:'status',   label: 'Status',              fn: a => a.status },
+    { key:'client',   label: 'Client',              fn: a => h(CLIENTS_MAP[a.client]||a.client) + ' (' + h(a.client) + ')' },
+  ].filter(col => {
+    if (col.key === 'name') return true; /* always visible */
+    const cb = document.getElementById('col_' + col.key);
+    return cb ? cb.checked : true;
+  });
+
+  const now    = new Date();
+  const dateStr = now.toLocaleDateString('en-GB', {year:'numeric',month:'long',day:'numeric'});
+  const timeStr = now.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'});
+  const dir     = 'ltr';
+
+  const statusColors = { active:'#188918', maintenance:'#e76500', inactive:'#6a6d70' };
+
+  const theadCells = visibleCols.map(c =>
+    `<th style="background:#1d2d3e;color:#fff;padding:8px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;text-align:${dir==='rtl'?'right':'left'};">${c.label}</th>`
+  ).join('');
+
+  const tbodyRows = pageData.map((a, i) => {
+    const cells = visibleCols.map(c => {
+      let val = c.fn(a);
+      if (c.key === 'status') {
+        const color = statusColors[a.status] || '#6a6d70';
+        val = `<span style="display:inline-flex;align-items:center;gap:4px;font-weight:600;color:${color};">
+          <span style="width:7px;height:7px;border-radius:50%;background:${color};display:inline-block;"></span>${val}
+        </span>`;
+      }
+      return `<td style="padding:7px 10px;font-size:12px;border-bottom:1px solid #e8eaed;text-align:${dir==='rtl'?'right':'left'};">${val}</td>`;
+    }).join('');
+    const bg = i % 2 === 0 ? '#fff' : '#f9fafb';
+    return `<tr style="background:${bg};">${cells}</tr>`;
+  }).join('');
+
+  const filterNote = activeStatusFilter !== 'all'
+    ? `<span style="background:#e8f3ff;color:#0070f2;border-radius:10px;padding:2px 9px;font-size:11px;font-weight:600;margin-left:8px;">Filter: ${activeStatusFilter}</span>` : '';
+
+  const html = `<!DOCTYPE html><html dir="ltr" lang="en">
+<head><meta charset="UTF-8"/>
+<title>Assets – Rigways Group</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family: ${dir==='rtl'?"'Arial'":`'Inter', 'Arial'`}, sans-serif; background:#fff; color:#32363a; padding:32px; }
+  @media print {
+    body { padding: 20px; }
+    button { display: none !important; }
+    @page { margin: 15mm; size: A4 landscape; }
+  }
+</style>
+</head><body>
+  <!-- Header -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:3px solid #0070f2;">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:36px;height:36px;background:#0070f2;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none"><path d="M16 7L23 11V19L16 23L9 19V11L16 7Z" fill="white"/></svg>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:#0070f2;text-transform:uppercase;letter-spacing:1px;">Rigways Group ACM</div>
+          <div style="font-size:18px;font-weight:800;color:#1d2d3e;">Asset Register Report</div>
+        </div>
+      </div>
+    </div>
+    <div style="text-align:${dir==='rtl'?'left':'right'};font-size:11px;color:#6a6d70;">
+      <div style="font-weight:600;color:#32363a;">${dateStr}</div>
+      <div>${timeStr}</div>
+      <div style="margin-top:4px;">Total records <strong style="color:#0070f2;">${total}</strong> ${filterNote}</div>
+      <div>Current page ${start+1}–${end}</div>
+    </div>
+  </div>
+  <!-- Table -->
+  <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr>${theadCells}</tr></thead>
+      <tbody>${tbodyRows}</tbody>
+    </table>
+  </div>
+  <!-- Footer -->
+  <div style="margin-top:20px;padding-top:12px;border-top:1px solid #e8eaed;display:flex;justify-content:space-between;font-size:10px;color:#a9b0b8;">
+    <span>Exported by Rigways Group ACM</span>
+    <span>${`${visibleCols.length} columns shown`}</span>
+  </div>
+  <div style="margin-top:16px;text-align:center;">
+    <button onclick="window.print()" style="padding:10px 28px;background:#0070f2;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">
+      🖨 Print / Save as PDF
+    </button>
+  </div>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=1000,height=700');
+  win.document.write(html);
+  win.document.close();
+  showToast('success',
+    'PDF Ready',
+    'Print window opened. Click "Print / Save as PDF".');
+}
+
+function importCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  showToast('info',
+    'Importing',
+    `Processing ${file.name}…`);
+  input.value = '';
+}
+
+/* ═══════════════════════════════════════════════════════
+   TOAST
+═══════════════════════════════════════════════════════ */
+function showToast(type, title, msg) {
+  const icons = {
+    success:'<path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    error:'<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+    warning:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>',
+    info:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+  };
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `sap-toast sap-toast--${type}`;
+  t.innerHTML = `
+    <div class="sap-toast__icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${icons[type]}</svg></div>
+    <div class="sap-toast__body"><div class="sap-toast__title">${title}</div><div class="sap-toast__msg">${msg}</div></div>
+    <button class="sap-toast__close" onclick="this.parentElement.remove()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
+  c.appendChild(t);
+  setTimeout(() => { if (t.parentElement) t.remove(); }, 4500);
+}
+
+/* ═══════════════════════════════════════════════════════
+   FUNCTIONAL LOCATIONS (shared with functional-locations.html via localStorage)
+═══════════════════════════════════════════════════════ */
+
+/* Load from localStorage so changes on functional-locations.html reflect here */
+function loadFuncLocs() {
+  // replaced by API version above
+  if (_flCache) return _flCache;
+  try {
+  /* Default seed data */
+  return [
+    { id:'FL-001', name:'Rig 7',      type:'Rig',       status:'active', notes:'Offshore drilling rig' },
+    { id:'FL-002', name:'Rig 12',     type:'Rig',       status:'active', notes:'Land rig' },
+    { id:'FL-003', name:'Workshop A', type:'Workshop',  status:'active', notes:'Main maintenance workshop' },
+    { id:'FL-004', name:'Workshop B', type:'Workshop',  status:'active', notes:'Heavy equipment workshop' },
+    { id:'FL-005', name:'Yard 1',     type:'Yard',      status:'active', notes:'Equipment storage yard' },
+    { id:'FL-006', name:'Warehouse C',type:'Warehouse', status:'active', notes:'Spare parts warehouse' },
+  ];
+}
+
+function saveFuncLocs(locs) {
+  localStorage.setItem('sap_func_locations', JSON.stringify(locs));
+}
+
+function populateFuncLocDropdown(selectedValue) {
+  const sel = document.getElementById('f_location');
+  if (!sel) return;
+  const locs = loadFuncLocs().filter(l => l.status === 'active');
+  sel.innerHTML = '<option value="">Select functional location…</option>' +
+    locs.map(l => `<option value="${l.name}" ${l.name === selectedValue ? 'selected' : ''}>${l.name} (${l.type})</option>`).join('');
+}
+
+function openInlineAddLocation() {
+  document.getElementById('inlineAddLocationWrap').style.display = 'block';
+  document.getElementById('inlineLocName').value = '';
+  document.getElementById('inlineLocType').value = '';
+  document.getElementById('inlineLocName').focus();
+}
+
+function cancelInlineAddLocation() {
+  document.getElementById('inlineAddLocationWrap').style.display = 'none';
+}
+
+function confirmInlineAddLocation() {
+  const name = document.getElementById('inlineLocName').value.trim();
+  const type = document.getElementById('inlineLocType').value;
+  if (!name || !type) {
+    showToast('error', 'Required', 'Please enter a location name and type.');
+    return;
+  }
+  const locs = loadFuncLocs();
+  /* Check duplicate */
+  if (locs.find(l => l.name.toLowerCase() === name.toLowerCase())) {
+    showToast('warning', 'Duplicate', `"${name}" already exists.`);
+    return;
+  }
+  const newId = 'FL-' + String(locs.length + 1).padStart(3,'0');
+  locs.push({ id: newId, name, type, status:'active', notes:'' });
+  saveFuncLocs(locs);
+  cancelInlineAddLocation();
+  populateFuncLocDropdown(name);
+  showToast('success', 'Location Added', `"${name}" added and selected.`);
+}
+
+/* ═══════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  session = getSession();
+  if (!session) return;
+
+  const role = session.role;
+  const lang = 'en';
+  applyLang(lang);
+
+  /* Shell */
+  const initials = session.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  document.getElementById('shellAvatar').textContent = initials;
+  document.getElementById('menuUserName').textContent = session.name;
+  const roleLabels = {admin:'Administrator',manager:'Manager',technician:'Technician',user:'Regular User'};
+  document.getElementById('menuUserRole').textContent = roleLabels[role]||role;
+
+  /* Admin section */
+  if (role !== 'admin') {
+    document.getElementById('adminSection').style.display = 'none';
+    document.getElementById('adminClientsLink').style.display = 'none';
+  }
+  if (role !== 'admin' && role !== 'manager') {
+    const il = document.getElementById('inspectorsLink'); if (il) il.style.display = 'none';
+    const fl = document.getElementById('funcLocsLink'); if (fl) fl.style.display = 'none';
+  } else if (role === 'manager') {
+    const as = document.getElementById('adminSection'); if (as) as.style.display = '';
+    const fl2 = document.getElementById('funcLocsLink'); if (fl2) fl2.style.display = 'none';
+  }
+
+  /* Client filter visibility */
+  if (role === 'admin' || role === 'manager') {
+    document.getElementById('clientFilter').style.display = 'inline-block';
+  }
+
+  /* Page subtitle */
+  if (session.customerId) {
+    document.getElementById('pageSubtitle').textContent =
+      `Your assigned assets — Client ${session.customerId}`;
+  }
+
+  /* Header actions by role */
+  const ha = document.getElementById('headerActions');
+  if (role === 'admin' || role === 'manager') {
+    ha.innerHTML = `<button class="btn btn-primary" onclick="openAddModal()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>Add Asset</span>
+    </button>`;
+  }
+  if (role === 'technician') {
+    ha.innerHTML = `<span class="sap-badge sap-badge--info" style="font-size:12px;padding:6px 12px;">
+      Technician – Status updates require approval
+    </span>`;
+  }
+  if (role === 'user') {
+    ha.innerHTML = `<span class="sap-badge sap-badge--neutral" style="font-size:12px;padding:6px 12px;">
+      Read-Only View
+    </span>`;
+  }
+
+  /* Notification badge */
+  if (role !== 'user') document.getElementById('notifBadge').style.display = 'block';
+
+  loadColState();
+  loadAssets();
+});
+
+async function loadAssets() {
+  try {
+    const params = new URLSearchParams({ limit: 200 });
+    if (session.customerId && !['admin','manager'].includes(session.role))
+      params.set('client_id', session.customerId);
+    const res  = await apiFetch('/api/assets?' + params);
+    const data = await res.json();
+    if (data.success) ASSETS = data.data.assets || [];
+    else ASSETS = [];
+  } catch(e) { ASSETS = []; }
+  renderTable();
+}
+</script>
+</body>
+</html>
