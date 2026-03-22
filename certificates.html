@@ -1537,7 +1537,7 @@ async function saveCert() {
     selectedFile = null;
     showToast('success', editId ? 'Updated' : 'Uploaded',
       '"' + name + '" ' + (editId ? 'updated.' : 'uploaded & sent for approval.'));
-    document.getElementById('uploadModal').classList.remove('open');
+    document.getElementById('certModal').classList.remove('open');
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
     await loadCerts();
   } catch(e) {

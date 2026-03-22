@@ -1169,22 +1169,44 @@ function closeInlineAddFuncLoc() {
   document.getElementById('inlineFuncLocForm').style.display='none';
   document.getElementById('addFuncLocBtn').style.display='inline-flex';
 }
-function saveInlineFuncLoc() {
+async function saveInlineFuncLoc() {
   const name=document.getElementById('inline_loc_name').value.trim();
   const type=document.getElementById('inline_loc_type').value;
   const desc=document.getElementById('inline_loc_desc').value.trim();
   if(!name){showToast('error','Required','Please enter a location name.');return;}
-  const locs=loadFuncLocs();
-  if(locs.find(l=>l.name.toLowerCase()===name.toLowerCase())){
-    showToast('error','Duplicate',`"${name}" already exists.`);return;
-  }
   const clientVal=document.getElementById('f_client')?.value||session?.customerId||'';
-  const newLoc={id:nextFuncLocId(),name,type,client:clientVal,desc};
-  locs.push(newLoc); saveFuncLocs(locs);
-  const filterC=clientVal||null;
-  populateFuncLocDropdown(name,filterC);
-  closeInlineAddFuncLoc();
-  showToast('success','Location Added',`"${name}" added and selected.`);
+
+  // Check duplicate in cache
+  const existing = (_flCache||[]).find(l=>l.name.toLowerCase()===name.toLowerCase());
+  if(existing){ showToast('error','Duplicate',`"${name}" already exists.`); return; }
+
+  try {
+    const res = await apiFetch('/api/functional-locations', {
+      method: 'POST',
+      body: JSON.stringify({
+        fl_id:     ('FL-' + Date.now().toString().slice(-5)),
+        name,
+        type,
+        status:    'active',
+        client_id: clientVal || null,
+        notes:     desc || null,
+      }),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('error','Save Failed',(data.data||data).error||'Could not save location.');
+      return;
+    }
+    // Bust cache so next dropdown load picks up the new location
+    _flCache = null;
+    const locs = await loadFuncLocs();
+    const filterC = clientVal || null;
+    populateFuncLocDropdown(name, filterC);
+    closeInlineAddFuncLoc();
+    showToast('success','Location Added',`"${name}" added and selected.`);
+  } catch(e) {
+    showToast('error','Network Error','Could not save location. Please try again.');
+  }
 }
 /* ═══════════════════════════════════════════════════════
    DEMO DATA
@@ -2196,66 +2218,6 @@ function showToast(type, title, msg) {
 ═══════════════════════════════════════════════════════ */
 
 /* Load from localStorage so changes on functional-locations.html reflect here */
-function loadFuncLocs() {
-  try {
-    const saved = localStorage.getItem('sap_func_locations');
-    if (saved) return JSON.parse(saved);
-  } catch(e) {}
-  /* Default seed data */
-  return [
-    { id:'FL-001', name:'Rig 7',      type:'Rig',       status:'active', notes:'Offshore drilling rig' },
-    { id:'FL-002', name:'Rig 12',     type:'Rig',       status:'active', notes:'Land rig' },
-    { id:'FL-003', name:'Workshop A', type:'Workshop',  status:'active', notes:'Main maintenance workshop' },
-    { id:'FL-004', name:'Workshop B', type:'Workshop',  status:'active', notes:'Heavy equipment workshop' },
-    { id:'FL-005', name:'Yard 1',     type:'Yard',      status:'active', notes:'Equipment storage yard' },
-    { id:'FL-006', name:'Warehouse C',type:'Warehouse', status:'active', notes:'Spare parts warehouse' },
-  ];
-}
-
-function saveFuncLocs(locs) {
-  localStorage.setItem('sap_func_locations', JSON.stringify(locs));
-}
-
-function populateFuncLocDropdown(selectedValue) {
-  const sel = document.getElementById('f_location');
-  if (!sel) return;
-  const locs = loadFuncLocs().filter(l => l.status === 'active');
-  sel.innerHTML = '<option value="">Select functional location…</option>' +
-    locs.map(l => `<option value="${l.name}" ${l.name === selectedValue ? 'selected' : ''}>${l.name} (${l.type})</option>`).join('');
-}
-
-function openInlineAddLocation() {
-  document.getElementById('inlineAddLocationWrap').style.display = 'block';
-  document.getElementById('inlineLocName').value = '';
-  document.getElementById('inlineLocType').value = '';
-  document.getElementById('inlineLocName').focus();
-}
-
-function cancelInlineAddLocation() {
-  document.getElementById('inlineAddLocationWrap').style.display = 'none';
-}
-
-function confirmInlineAddLocation() {
-  const name = document.getElementById('inlineLocName').value.trim();
-  const type = document.getElementById('inlineLocType').value;
-  if (!name || !type) {
-    showToast('error', 'Required', 'Please enter a location name and type.');
-    return;
-  }
-  const locs = loadFuncLocs();
-  /* Check duplicate */
-  if (locs.find(l => l.name.toLowerCase() === name.toLowerCase())) {
-    showToast('warning', 'Duplicate', `"${name}" already exists.`);
-    return;
-  }
-  const newId = 'FL-' + String(locs.length + 1).padStart(3,'0');
-  locs.push({ id: newId, name, type, status:'active', notes:'' });
-  saveFuncLocs(locs);
-  cancelInlineAddLocation();
-  populateFuncLocDropdown(name);
-  showToast('success', 'Location Added', `"${name}" added and selected.`);
-}
-
 /* ═══════════════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════════════ */
