@@ -173,8 +173,7 @@ async function verifyPassword(password, stored) {
 // ── jwt.js ──
 // worker/src/middleware/jwt.js — HS256, Web Crypto only
 
-const b64   = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-const unb64 = str => { str=str.replace(/-/g,'+').replace(/_/g,'/'); while(str.length%4)str+='='; return Uint8Array.from(atob(str),c=>c.charCodeAt(0)); };
+// b64/unb64 reuse the ones defined in password.js above
 const enc   = new TextEncoder();
 
 async function key(secret) {
@@ -430,8 +429,8 @@ async function handleUsers(request, env, path) {
 
 
 
-const TYPES    = ['Equipment','Vehicle','Facility','Tool','IT','Other'];
-const STATUSES = ['active','inactive','maintenance','decommissioned'];
+const ASSET_TYPES    = ['Equipment','Vehicle','Facility','Tool','IT','Other'];
+const ASSET_STATUSES = ['active','inactive','maintenance','decommissioned'];
 
 async function handleAssets(request, env, path) {
   const session = await getSession(request, env);
@@ -492,8 +491,8 @@ async function handleAssets(request, env, path) {
     const { valid, errors } = validate(body, {
       asset_number: { required: true,  type: 'string', minLength: 1, maxLength: 50 },
       name:         { required: true,  type: 'string', minLength: 2, maxLength: 200 },
-      asset_type:   { required: true,  type: 'string', enum: TYPES },
-      status:       { required: false, type: 'string', enum: STATUSES },
+      asset_type:   { required: true,  type: 'string', enum: ASSET_TYPES },
+      status:       { required: false, type: 'string', enum: ASSET_STATUSES },
       client_id:    { required: false, type: 'string' },
     });
     if (!valid) return badReq(errors.join('; '),'VALIDATION',env);
@@ -534,8 +533,8 @@ async function handleAssets(request, env, path) {
     }
     const { valid, errors } = validate(body, {
       name:         { type:'string', minLength:2, maxLength:200 },
-      asset_type:   { type:'string', enum: TYPES },
-      status:       { type:'string', enum: STATUSES },
+      asset_type:   { type:'string', enum: ASSET_TYPES },
+      status:       { type:'string', enum: ASSET_STATUSES },
       client_id:    { type:'string' },
       notes:        { type:'string', maxLength:2000 },
     });
@@ -581,8 +580,8 @@ async function audit(db, session, table, id, action, before, after) {
 
 
 
-const TYPES    = ['Quality','Safety','Inspection','Compliance','Technical','Environmental','Other'];
-const STATUSES = ['pending','approved','rejected'];
+const CERT_TYPES    = ['Quality','Safety','Inspection','Compliance','Technical','Environmental','Other'];
+const CERT_STATUSES = ['pending','approved','rejected'];
 
 async function handleCertificates(request, env, path) {
   const session = await getSession(request, env);
@@ -659,7 +658,7 @@ async function handleCertificates(request, env, path) {
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON','BAD_JSON',env); }
     const { valid, errors } = validate(body, {
       name:        { required: true, type:'string', minLength:2, maxLength:200 },
-      cert_type:   { required: true, type:'string', enum: TYPES },
+      cert_type:   { required: true, type:'string', enum: CERT_TYPES },
       asset_id:    { required: true, type:'string' },
       issued_by:   { required: true, type:'string', minLength:2, maxLength:200 },
       issue_date:  { required: true, type:'string', pattern:/^\d{4}-\d{2}-\d{2}$/ },
@@ -774,7 +773,7 @@ async function _notifyUser(db, userId, type, title, body, refType, refId) {
 
 
 const INDUSTRIES = ['Oil & Gas','Construction','Manufacturing','Real Estate','Healthcare','Finance','Transport','Other'];
-const STATUSES   = ['active','inactive','suspended'];
+const CLIENT_STATUSES   = ['active','inactive','suspended'];
 
 async function handleClients(request, env, path) {
   const session = await getSession(request, env);
@@ -810,7 +809,7 @@ async function handleClients(request, env, path) {
       client_id: { required: true,  type:'string', minLength:2, maxLength:20, pattern:/^[A-Z0-9-]+$/ },
       name:      { required: true,  type:'string', minLength:2, maxLength:150 },
       industry:  { required: false, type:'string', enum: INDUSTRIES },
-      status:    { required: false, type:'string', enum: STATUSES },
+      status:    { required: false, type:'string', enum: CLIENT_STATUSES },
       email:     { required: false, type:'string', email: true },
     });
     if (!valid) return badReq(errors.join('; '),'VALIDATION',env);
@@ -952,7 +951,7 @@ async function handleInspectors(request, env, path) {
 
 
 
-const TYPES = ['Rig','Workshop','Yard','Warehouse','Other'];
+const FL_TYPES = ['Rig','Workshop','Yard','Warehouse','Other'];
 
 async function handleFunctionalLocations(request, env, path) {
   const session = await getSession(request, env);
@@ -991,7 +990,7 @@ async function handleFunctionalLocations(request, env, path) {
     const { valid, errors } = validate(body, {
       fl_id: { required: true, type:'string', minLength:1, maxLength:20 },
       name:  { required: true, type:'string', minLength:1, maxLength:100 },
-      type:  { required: true, type:'string', enum: TYPES },
+      type:  { required: true, type:'string', enum: FL_TYPES },
     });
     if (!valid) return badReq(errors.join('; '),'VALIDATION',env);
     const { data: dup } = await db.from('functional_locations', { filters: { 'fl_id.ilike': body.fl_id }, select:'id', limit:1 });
