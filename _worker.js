@@ -246,7 +246,11 @@ async function handleAuth(request, env, path) {
       select:  'id,username,name,name_ar,role,customer_id,password_hash,is_active',
       limit:   1,
     });
-    if (error) { console.error(error); return serverErr(env); }
+    if (error) {
+      console.error('Supabase error:', JSON.stringify(error));
+      // Return detail in error message to help diagnose
+      return json({ success: false, error: 'Database error: ' + (error.message || error.hint || JSON.stringify(error)), code: 'DB_ERROR' }, 500, env);
+    }
 
     const user = Array.isArray(rows) ? rows[0] : rows;
     if (!user)           return unauth(env);
