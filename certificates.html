@@ -9,7 +9,6 @@
     font-src 'self' https://fonts.gstatic.com;
     img-src 'self' data: blob:;
     connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787;
-    frame-ancestors 'self';
     object-src 'none';
     base-uri 'self';
   "/>
@@ -849,8 +848,7 @@ let deleteTargetId = null;
 let rejectTargetId = null;
 
 /* ── Helpers ── */
-/* Session helpers — use SapSession from app.js when available,
-   otherwise fall back to inline implementation (defensive). */
+/* Session helpers — use SapSession from app.js when available */
 function getSession() {
   if (typeof SapSession !== 'undefined') return SapSession.get();
   try {
@@ -909,8 +907,43 @@ const INSPECTOR_NAMES = [
   'Khalid Al-Mansouri',
 ];
 
-/* CERTS loaded from API — see loadCerts() */
-let CERTS = [];
+let CERTS = [
+  /* JOB-2024-001 — C001 Acme Corp — 3 certs same job */
+  { certId:'CERT-0001', jobNumber:'JOB-2024-001', name:'Hoisting Equipment CAT III',  certType:'CAT III',      liftingSubtype:'', issuedBy:'Ahmed Al-Rashidi', issueDate:daysAgo(300), expiryDate:daysFromNow(3),   assetId:'AST-0001', client:'C001', uploadedBy:'Ali T.',  uploadTime:daysAgo(5),  approvalStatus:'approved', fileName:'cat3_hoisting.pdf',   rejectionReason:'' },
+  { certId:'CERT-0002', jobNumber:'JOB-2024-001', name:'Lifting Gear Inspection',     certType:'LIFTING',      liftingSubtype:'LIFTING GEAR',      issuedBy:'Ahmed Al-Rashidi', issueDate:daysAgo(300), expiryDate:daysFromNow(7),   assetId:'AST-0001', client:'C001', uploadedBy:'Ali T.',  uploadTime:daysAgo(5),  approvalStatus:'approved', fileName:'lifting_gear.pdf',    rejectionReason:'' },
+  { certId:'CERT-0003', jobNumber:'JOB-2024-001', name:'Original COC — Server Rack',  certType:'ORIGINAL COC', liftingSubtype:'', issuedBy:'Ahmed Al-Rashidi', issueDate:daysAgo(300), expiryDate:daysFromNow(12),  assetId:'AST-0001', client:'C001', uploadedBy:'Ali T.',  uploadTime:daysAgo(5),  approvalStatus:'approved', fileName:'coc_serverrack.pdf',  rejectionReason:'' },
+
+  /* JOB-2024-002 — C002 Gulf Holdings — 3 certs same job */
+  { certId:'CERT-0004', jobNumber:'JOB-2024-002', name:'Forklift Load Test',          certType:'LOAD TEST',    liftingSubtype:'', issuedBy:'Mohamed Hassan',   issueDate:daysAgo(200), expiryDate:daysFromNow(18),  assetId:'AST-0004', client:'C002', uploadedBy:'Ali T.',  uploadTime:daysAgo(10), approvalStatus:'approved', fileName:'loadtest_forklift.pdf',rejectionReason:'' },
+  { certId:'CERT-0005', jobNumber:'JOB-2024-002', name:'Lifting Personnel Cert',      certType:'LIFTING',      liftingSubtype:'LIFTING PERSONNEL',  issuedBy:'Mohamed Hassan',   issueDate:daysAgo(200), expiryDate:daysFromNow(22),  assetId:'AST-0004', client:'C002', uploadedBy:'Ali T.',  uploadTime:daysAgo(10), approvalStatus:'approved', fileName:'lifting_personnel.pdf',rejectionReason:'' },
+  { certId:'CERT-0006', jobNumber:'JOB-2024-002', name:'CAT IV Inspection Report',    certType:'CAT IV',       liftingSubtype:'', issuedBy:'Mohamed Hassan',   issueDate:daysAgo(200), expiryDate:daysFromNow(27),  assetId:'AST-0004', client:'C002', uploadedBy:'Ali T.',  uploadTime:daysAgo(10), approvalStatus:'approved', fileName:'cat4_forklift.pdf',   rejectionReason:'' },
+
+  /* JOB-2024-003 — C003 Delta Industries — 2 certs same job */
+  { certId:'CERT-0007', jobNumber:'JOB-2024-003', name:'Crane NDT Inspection',        certType:'NDT',          liftingSubtype:'', issuedBy:'Sara Al-Khalil',   issueDate:daysAgo(5),   expiryDate:daysFromNow(355), assetId:'AST-0008', client:'C003', uploadedBy:'Ali T.',  uploadTime:daysAgo(0),  approvalStatus:'pending',  fileName:'ndt_crane.pdf',       rejectionReason:'' },
+  { certId:'CERT-0008', jobNumber:'JOB-2024-003', name:'Crane Lifting Equipment Cert',certType:'LIFTING',      liftingSubtype:'LIFTING EQUIPMENT',  issuedBy:'Sara Al-Khalil',   issueDate:daysAgo(3),   expiryDate:daysFromNow(362), assetId:'AST-0008', client:'C003', uploadedBy:'Ali T.',  uploadTime:daysAgo(0),  approvalStatus:'pending',  fileName:'lifting_equip_crane.pdf',rejectionReason:'' },
+
+  /* JOB-2024-004 — C001 Acme Corp — standalone */
+  { certId:'CERT-0009', jobNumber:'JOB-2024-004', name:'HVAC CAT III Inspection',     certType:'CAT III',      liftingSubtype:'', issuedBy:'Layla Bin Rashid', issueDate:daysAgo(2),   expiryDate:daysFromNow(363), assetId:'AST-0002', client:'C001', uploadedBy:'Ali T.',  uploadTime:daysAgo(0),  approvalStatus:'pending',  fileName:'cat3_hvac.pdf',       rejectionReason:'' },
+
+  /* JOB-2024-005 — C004 Nile Ventures — 2 certs same job */
+  { certId:'CERT-0010', jobNumber:'JOB-2024-005', name:'UPS Load Test Certificate',   certType:'LOAD TEST',    liftingSubtype:'', issuedBy:'Ahmed Al-Rashidi', issueDate:daysAgo(1),   expiryDate:daysFromNow(364), assetId:'AST-0007', client:'C004', uploadedBy:'Ali T.',  uploadTime:daysAgo(1),  approvalStatus:'pending',  fileName:'loadtest_ups.pdf',    rejectionReason:''},
+  { certId:'CERT-0011', jobNumber:'JOB-2024-005', name:'UPS Original COC',            certType:'ORIGINAL COC', liftingSubtype:'', issuedBy:'Ahmed Al-Rashidi', issueDate:daysAgo(1),   expiryDate:daysFromNow(364), assetId:'AST-0007', client:'C004', uploadedBy:'Ali T.',  uploadTime:daysAgo(1),  approvalStatus:'pending',  fileName:'coc_ups.pdf',         rejectionReason:'' },
+
+  /* JOB-2024-006 — C002 Gulf Holdings — expired */
+  { certId:'CERT-0012', jobNumber:'JOB-2024-006', name:'Tubular Inspection Report',   certType:'TUBULAR',      liftingSubtype:'', issuedBy:'Khalid Al-Mansouri',issueDate:daysAgo(400),expiryDate:daysFromNow(-10), assetId:'AST-0006', client:'C002', uploadedBy:'Ali T.',  uploadTime:daysAgo(400),approvalStatus:'approved',  fileName:'tubular_insp.pdf',    rejectionReason:'' },
+  { certId:'CERT-0013', jobNumber:'JOB-2024-006', name:'Pump Station NDT',            certType:'NDT',          liftingSubtype:'', issuedBy:'Khalid Al-Mansouri',issueDate:daysAgo(500),expiryDate:daysFromNow(-30), assetId:'AST-0006', client:'C002', uploadedBy:'Ali T.',  uploadTime:daysAgo(500),approvalStatus:'approved',  fileName:'ndt_pump.pdf',        rejectionReason:'' },
+
+  /* JOB-2024-007 — C001 Acme Corp — rejected */
+  { certId:'CERT-0014', jobNumber:'JOB-2024-007', name:'Generator CAT IV Report',     certType:'CAT IV',       liftingSubtype:'', issuedBy:'Mohamed Hassan',   issueDate:daysAgo(400), expiryDate:daysFromNow(-5),  assetId:'AST-0003', client:'C001', uploadedBy:'Ali T.',  uploadTime:daysAgo(400),approvalStatus:'rejected',  fileName:'cat4_generator.pdf',  rejectionReason:'Missing inspector signature on page 3.' },
+
+  /* JOB-2024-008 — C003 Delta — valid long-term */
+  { certId:'CERT-0015', jobNumber:'JOB-2024-008', name:'Generator Load Test',         certType:'LOAD TEST',    liftingSubtype:'', issuedBy:'Sara Al-Khalil',   issueDate:daysAgo(200), expiryDate:daysFromNow(180), assetId:'AST-0003', client:'C003', uploadedBy:'Ali T.',  uploadTime:daysAgo(200),approvalStatus:'approved',  fileName:'loadtest_gen.pdf',    rejectionReason:'' },
+  { certId:'CERT-0016', jobNumber:'JOB-2024-008', name:'Fire Panel Lifting Equipment',certType:'LIFTING',      liftingSubtype:'LIFTING EQUIPMENT',  issuedBy:'Sara Al-Khalil',   issueDate:daysAgo(100), expiryDate:daysFromNow(265), assetId:'AST-0005', client:'C003', uploadedBy:'Ali T.',  uploadTime:daysAgo(100),approvalStatus:'approved',  fileName:'lifting_firepanel.pdf',rejectionReason:'' },
+
+  /* JOB-2024-009 — C001 Acme Corp */
+  { certId:'CERT-0017', jobNumber:'JOB-2024-009', name:'Server Rack Tubular Report',  certType:'TUBULAR',      liftingSubtype:'', issuedBy:'Layla Bin Rashid', issueDate:daysAgo(50),  expiryDate:daysFromNow(315), assetId:'AST-0001', client:'C001', uploadedBy:'Ali T.',  uploadTime:daysAgo(50), approvalStatus:'approved',  fileName:'tubular_rack.pdf',    rejectionReason:'' },
+  { certId:'CERT-0018', jobNumber:'JOB-2024-009', name:'UPS CAT III Certification',   certType:'CAT III',      liftingSubtype:'', issuedBy:'Layla Bin Rashid', issueDate:daysAgo(60),  expiryDate:daysFromNow(305), assetId:'AST-0007', client:'C001', uploadedBy:'Ali T.',  uploadTime:daysAgo(60), approvalStatus:'approved',  fileName:'cat3_ups.pdf',        rejectionReason:'' },
+];
 
 /* ═══════════════════════════════════════════════════════
    STATUS HELPERS
@@ -981,8 +1014,13 @@ function getEditWindowBadge(cert) {
 /* ═══════════════════════════════════════════════════════
    RENDER TABLE
 ═══════════════════════════════════════════════════════ */
-/* syncCerts() removed — data lives in Supabase */
-function syncCerts() {}
+/* ── Sync CERTS to localStorage so assets.html can read them ── */
+const CERTS_STORAGE_KEY = 'sap_certs_data';
+
+function syncCerts() {
+  try { localStorage.setItem(CERTS_STORAGE_KEY, JSON.stringify(CERTS)); }
+  catch(e) {}
+}
 
 function renderTable() {
   const role     = session.role;
@@ -1432,19 +1470,90 @@ zone.addEventListener('drop', e => {
 });
 
 /* ── Save ── */
-async f/* ═══════════════════════════════════════════════════════
+function saveCert() {
+  const jobNumber     = document.getElementById('f_jobNumber').value.trim();
+  const name          = document.getElementById('f_name').value.trim();
+  const certType      = document.getElementById('f_certType').value;
+  const liftingSubtype= certType === 'LIFTING' ? document.getElementById('f_liftingSubtype').value : '';
+  const issuedBy      = document.getElementById('f_issuedBy').value;
+  const issueDate     = document.getElementById('f_issueDate').value;
+  const expiryDate    = document.getElementById('f_expiryDate').value;
+  const client        = document.getElementById('f_client').value || session.customerId;
+  const assetId       = document.getElementById('f_assetId').value;
+  const editId        = document.getElementById('editCertId').value;
+
+  if (!jobNumber || !name || !certType || !issuedBy || !issueDate || !expiryDate || !client) {
+    showToast('error',
+      'Required Fields',
+      'Please fill all required fields including Job Number.');
+    return;
+  }
+  if (certType === 'LIFTING' && !liftingSubtype) {
+    showToast('error',
+      'Lifting Sub-type Required',
+      'Please select a lifting sub-type (Equipment / Gear / Personnel).');
+    document.getElementById('f_liftingSubtype').focus();
+    return;
+  }
+  if (!editId && !selectedFile) {
+    showToast('error',
+      'File Required',
+      'Please upload the certificate file.');
+    return;
+  }
+  if (new Date(expiryDate) <= new Date(issueDate)) {
+    showToast('error',
+      'Invalid Date',
+      'Expiry date must be after issue date.');
+    return;
+  }
+
+  if (editId) {
+    const idx = CERTS.findIndex(c => c.certId === editId);
+    if (idx > -1) {
+      CERTS[idx] = { ...CERTS[idx], jobNumber, name, certType, liftingSubtype, issuedBy, issueDate, expiryDate, client, assetId,
+        fileName: selectedFile ? selectedFile.name : CERTS[idx].fileName,
+        approvalStatus: session.role === 'admin' ? CERTS[idx].approvalStatus : 'pending',
+      };
+      showToast('success',
+        'Updated',
+        `"${name}" updated successfully.`);
+    }
+  } else {
+    const newId = 'CERT-' + String(CERTS.length + 1).padStart(4,'0');
+    CERTS.push({
+      certId: newId, jobNumber, name, certType, liftingSubtype, issuedBy, issueDate, expiryDate, client, assetId,
+      uploadedBy: session.name,
+      uploadTime: new Date().toISOString().split('T')[0],
+      approvalStatus: session.role === 'admin' ? 'approved' : 'pending',
+      fileName: selectedFile ? selectedFile.name : '',
+      rejectionReason: '',
+    });
+    showToast('success',
+      'Uploaded',
+      session.role === 'admin'
+        ? (`"${name}" uploaded & approved — ID: ${fmtCertId({certId:newId,jobNumber})}.`)
+        : (`"${name}" uploaded & sent for approval — ID: ${fmtCertId({certId:newId,jobNumber})}.`)
+    );
+  }
+  closeModal();
+  renderTable();
+}
+
+/* ═══════════════════════════════════════════════════════
    APPROVAL
 ═══════════════════════════════════════════════════════ */
-async function approveCert(id) {
-  try {
-    const res=await apiFetch('/api/certificates/'+id,{method:'PATCH',body:JSON.stringify({approval_status:'approved'})});
-    const d=await res.json();
-    if(!d.success){showToast('error','Failed',d.error||'Could not approve.');return;}
-    const idx2=CERTS.findIndex(c=>(c.id||c.certId)===id);
-    if(idx2>-1){CERTS[idx2].approvalStatus='approved';CERTS[idx2].approval_status='approved';}
-    showToast('success','Approved','Certificate approved.');renderTable();
-  }catch(e){showToast('error','Network Error','Could not approve.');}
-
+function approveCert(id) {
+  const idx = CERTS.findIndex(c => c.certId === id);
+  if (idx > -1) {
+    CERTS[idx].approvalStatus = 'approved';
+    CERTS[idx].rejectionReason = '';
+    showToast('success',
+      'Approved',
+      `"${CERTS[idx].name}" approved.`);
+    renderTable();
+  }
+}
 
 function openRejectModal(id) {
   rejectTargetId = id;
@@ -1455,7 +1564,27 @@ function openRejectModal(id) {
   document.getElementById('rejectModal').classList.add('open');
 }
 function closeRejectModal() { document.getElementById('rejectModal').classList.remove('open'); }
-async f/* ═══════════════════════════════════════════════════════
+function confirmReject() {
+  const reason = document.getElementById('rejectReason').value.trim();
+  if (!reason) {
+    showToast('error',
+      'Reason Required',
+      'Please enter a rejection reason.');
+    return;
+  }
+  const idx = CERTS.findIndex(c => c.certId === rejectTargetId);
+  if (idx > -1) {
+    CERTS[idx].approvalStatus   = 'rejected';
+    CERTS[idx].rejectionReason  = reason;
+    showToast('warning',
+      'Rejected',
+      `"${CERTS[idx].name}" rejected.`);
+  }
+  closeRejectModal();
+  renderTable();
+}
+
+/* ═══════════════════════════════════════════════════════
    ASSET INSPECTION HISTORY — shown in cert detail drawer
 ═══════════════════════════════════════════════════════ */
 function buildAssetCertHistory(assetId, currentCertId) {
@@ -1726,17 +1855,15 @@ function openDeleteModal(id) {
     `Delete "${c?.name||id}"? This cannot be undone.`;
   document.getElementById('deleteModal').classList.add('open');
 }
-async function confirmDelete() {
-  const c=CERTS.find(x=>(x.id||x.certId)===deleteTargetId);
+function confirmDelete() {
+  const c = CERTS.find(x => x.certId === deleteTargetId);
+  CERTS = CERTS.filter(x => x.certId !== deleteTargetId);
   document.getElementById('deleteModal').classList.remove('open');
-  try {
-    const res=await apiFetch('/api/certificates/'+deleteTargetId,{method:'DELETE'});
-    const d=await res.json();
-    if(!d.success){showToast('error','Delete Failed',d.error||'Could not delete.');return;}
-    CERTS=CERTS.filter(x=>(x.id||x.certId)!==deleteTargetId);
-    showToast('success','Deleted','"'+(c?.name||deleteTargetId)+'" deleted.');renderTable();
-  }catch(e){showToast('error','Network Error','Could not delete.');}
-
+  showToast('success',
+    'Deleted',
+    `"${c?.name||deleteTargetId}" deleted.`);
+  renderTable();
+}
 
 /* ═══════════════════════════════════════════════════════
    COLUMN VISIBILITY
@@ -2040,35 +2167,9 @@ document.addEventListener('DOMContentLoaded', () => {
     ha.innerHTML = `<span class="sap-badge sap-badge--neutral" style="font-size:12px;padding:6px 12px;">Read-Only View</span>`;
   }
 
+  renderTable(); // also calls syncCerts() inside
   loadColState();
-  loadCerts();
 });
-
-async function loadCerts() {
-  try {
-    const res  = await apiFetch('/api/certificates?limit=200');
-    const data = await res.json();
-    if (data.success) {
-      CERTS = (data.data.certificates || []).map(c => ({
-        ...c,
-        certId:          c.cert_number || c.id,
-        certType:        c.cert_type,
-        approvalStatus:  c.approval_status,
-        expiryDate:      c.expiry_date,
-        issueDate:       c.issue_date,
-        issuedBy:        c.issued_by,
-        assetId:         c.asset_id,
-        client:          c.client_id,
-        fileName:        c.file_name || '',
-        rejectionReason: c.rejection_reason || '',
-        jobNumber:       c.notes || '',
-        uploadedBy:      '',
-        uploadTime:      (c.created_at||'').split('T')[0],
-      }));
-    } else { CERTS = []; }
-  } catch(e) { CERTS = []; }
-  renderTable();
-}
 </script>
 </body>
 </html>

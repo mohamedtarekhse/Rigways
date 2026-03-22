@@ -9,7 +9,6 @@
     font-src 'self' https://fonts.gstatic.com;
     img-src 'self' data: blob:;
     connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787;
-    frame-ancestors 'self';
     object-src 'none';
     base-uri 'self';
   "/>
@@ -564,8 +563,7 @@ let session = null;
 let charts = {};
 
 /* ── Auth ── */
-/* Session helpers — use SapSession from app.js when available,
-   otherwise fall back to inline implementation (defensive). */
+/* Session helpers — use SapSession from app.js when available */
 function getSession() {
   if (typeof SapSession !== 'undefined') return SapSession.get();
   try {

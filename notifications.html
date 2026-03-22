@@ -9,7 +9,6 @@
     font-src 'self' https://fonts.gstatic.com;
     img-src 'self' data: blob:;
     connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787;
-    frame-ancestors 'self';
     object-src 'none';
     base-uri 'self';
   "/>
@@ -607,8 +606,7 @@ function fmtCertId(certId, jobNumber) {
 }
 
 /* ── Auth ── */
-/* Session helpers — use SapSession from app.js when available,
-   otherwise fall back to inline implementation (defensive). */
+/* Session helpers — use SapSession from app.js when available */
 function getSession() {
   if (typeof SapSession !== 'undefined') return SapSession.get();
   try {
@@ -640,9 +638,118 @@ document.addEventListener('click', e => {
 ═══════════════════════════════════════════════════════ */
 function dFromNow(d) { const dt=new Date(); dt.setDate(dt.getDate()+d); return dt.toISOString().split('T')[0]; }
 
-/* NOTIFICATIONS loaded from API — see loadNotifications() */
-/* NOTIFICATIONS loaded from API */
-let NOTIFICATIONS = [];
+let NOTIFICATIONS = [
+  /* ── Expiry: Critical (≤7d) ── */
+  { id:'N001', type:'expiry', priority:'critical', read:false, dismissed:false,
+    titleEn:'ISO 9001 Certificate expiring in 3 days',
+    titleAr:'شهادة ISO 9001 تنتهي خلال 3 أيام',
+    descEn:'Certificate CERT-0001 for Acme Corp will expire on '+dFromNow(3)+'. Immediate renewal required.',
+    descAr:'الشهادة CERT-0001 لشركة Acme Corp ستنتهي في '+dFromNow(3)+'. مطلوب التجديد الفوري.',
+    client:'C001', certId:'CERT-0001', daysLeft:3, time:'Just now', link:'certificates.html' },
+
+  { id:'N002', type:'expiry', priority:'critical', read:false, dismissed:false,
+    titleEn:'Fire Safety Certificate expiring in 7 days',
+    titleAr:'شهادة السلامة من الحريق تنتهي خلال 7 أيام',
+    descEn:'Certificate CERT-0002 for Gulf Holdings will expire on '+dFromNow(7)+'. Action required.',
+    descAr:'الشهادة CERT-0002 لـ Gulf Holdings ستنتهي في '+dFromNow(7)+'.',
+    client:'C002', certId:'CERT-0002', daysLeft:7, time:'1 hour ago', link:'certificates.html' },
+
+  /* ── Expiry: Warning (8–14d) ── */
+  { id:'N003', type:'expiry', priority:'high', read:false, dismissed:false,
+    titleEn:'Electrical Inspection Cert expiring in 12 days',
+    titleAr:'شهادة الفحص الكهربائي تنتهي خلال 12 يوماً',
+    descEn:'Certificate CERT-0003 for Acme Corp expires on '+dFromNow(12)+'. Schedule renewal.',
+    descAr:'الشهادة CERT-0003 لـ Acme Corp تنتهي في '+dFromNow(12)+'.',
+    client:'C001', certId:'CERT-0003', daysLeft:12, time:'2 hours ago', link:'certificates.html' },
+
+  { id:'N004', type:'expiry', priority:'high', read:true, dismissed:false,
+    titleEn:'Pressure Vessel Compliance expiring in 18 days',
+    titleAr:'امتثال وعاء الضغط ينتهي خلال 18 يوماً',
+    descEn:'Certificate CERT-0004 for Delta Industries expires on '+dFromNow(18)+'. Plan renewal.',
+    descAr:'الشهادة CERT-0004 لـ Delta Industries تنتهي في '+dFromNow(18)+'.',
+    client:'C003', certId:'CERT-0004', daysLeft:18, time:'3 hours ago', link:'certificates.html' },
+
+  /* ── Expiry: Notice (15–30d) ── */
+  { id:'N005', type:'expiry', priority:'medium', read:false, dismissed:false,
+    titleEn:'OHSAS 18001 expiring in 22 days',
+    titleAr:'شهادة OHSAS 18001 تنتهي خلال 22 يوماً',
+    descEn:'Certificate CERT-0005 for Nile Ventures will expire soon. Begin renewal process.',
+    descAr:'الشهادة CERT-0005 لـ Nile Ventures ستنتهي قريباً. ابدأ عملية التجديد.',
+    client:'C004', certId:'CERT-0005', daysLeft:22, time:'5 hours ago', link:'certificates.html' },
+
+  { id:'N006', type:'expiry', priority:'medium', read:true, dismissed:false,
+    titleEn:'Equipment Calibration Cert expiring in 27 days',
+    titleAr:'شهادة معايرة المعدات تنتهي خلال 27 يوماً',
+    descEn:'Certificate CERT-0006 for Acme Corp approaching expiry date.',
+    descAr:'الشهادة CERT-0006 لـ Acme Corp تقترب من تاريخ انتهائها.',
+    client:'C001', certId:'CERT-0006', daysLeft:27, time:'6 hours ago', link:'certificates.html' },
+
+  /* ── Expired ── */
+  { id:'N007', type:'expiry', priority:'critical', read:false, dismissed:false,
+    titleEn:'Forklift Operator Cert has EXPIRED',
+    titleAr:'شهادة مشغل الرافعة الشوكية انتهت صلاحيتها',
+    descEn:'Certificate CERT-0012 for Gulf Holdings expired 10 days ago. Immediate action required!',
+    descAr:'الشهادة CERT-0012 لـ Gulf Holdings انتهت صلاحيتها منذ 10 أيام. مطلوب إجراء فوري!',
+    client:'C002', certId:'CERT-0012', daysLeft:-10, time:'Yesterday', link:'certificates.html' },
+
+  { id:'N008', type:'expiry', priority:'critical', read:false, dismissed:false,
+    titleEn:'Boiler Safety Certificate has EXPIRED',
+    titleAr:'شهادة أمان المرجل انتهت صلاحيتها',
+    descEn:'Certificate CERT-0013 for Gulf Holdings expired 30 days ago. Equipment may not be in compliance.',
+    descAr:'الشهادة CERT-0013 لـ Gulf Holdings انتهت منذ 30 يوماً. قد لا تكون المعدات متوافقة.',
+    client:'C002', certId:'CERT-0013', daysLeft:-30, time:'1 month ago', link:'certificates.html' },
+
+  /* ── Approval events ── */
+  { id:'N009', type:'approval', priority:'info', read:false, dismissed:false,
+    titleEn:'New certificate uploaded — pending your approval',
+    titleAr:'تم رفع شهادة جديدة — بانتظار موافقتك',
+    descEn:'Ali Technician uploaded "Crane Inspection Cert" (CERT-0007) for Acme Corp. Review and approve.',
+    descAr:'رفع الفني علي "شهادة فحص الرافعة" (CERT-0007) لـ Acme Corp. راجع ووافق.',
+    client:'C001', certId:'CERT-0007', daysLeft:null, time:'Today 09:12', link:'certificates.html' },
+
+  { id:'N010', type:'approval', priority:'info', read:false, dismissed:false,
+    titleEn:'Certificate approval request: Gas Safety Certificate',
+    titleAr:'طلب موافقة: شهادة سلامة الغاز',
+    descEn:'Ali Technician uploaded "Gas Safety Certificate" (CERT-0008) for Gulf Holdings.',
+    descAr:'رفع الفني علي "شهادة سلامة الغاز" (CERT-0008) لـ Gulf Holdings.',
+    client:'C002', certId:'CERT-0008', daysLeft:null, time:'Today 08:45', link:'certificates.html' },
+
+  { id:'N011', type:'approval', priority:'success', read:true, dismissed:false,
+    titleEn:'Certificate approved: Generator Load Test',
+    titleAr:'تمت الموافقة على: اختبار تحميل المولد',
+    descEn:'Admin approved "Generator Load Test" (CERT-0015) for Delta Industries.',
+    descAr:'وافق المسؤول على "اختبار تحميل المولد" (CERT-0015) لـ Delta Industries.',
+    client:'C003', certId:'CERT-0015', daysLeft:null, time:'Yesterday 14:30', link:'certificates.html' },
+
+  { id:'N012', type:'approval', priority:'critical', read:true, dismissed:false,
+    titleEn:'Certificate REJECTED: HVAC Commissioning',
+    titleAr:'تم رفض الشهادة: تفعيل نظام التكييف',
+    descEn:'Admin rejected "HVAC Commissioning" (CERT-0014). Reason: Missing inspector signature on page 3.',
+    descAr:'رفض المسؤول "تفعيل نظام التكييف" (CERT-0014). السبب: توقيع المفتش مفقود.',
+    client:'C001', certId:'CERT-0014', daysLeft:null, time:'2 days ago', link:'certificates.html' },
+
+  /* ── System events ── */
+  { id:'N013', type:'system', priority:'info', read:true, dismissed:false,
+    titleEn:'New asset added: Server Rack #02',
+    titleAr:'تمت إضافة أصل جديد: حامل الخادم #02',
+    descEn:'Admin added asset AST-0011 (Server Rack #02) for Acme Corp (C001).',
+    descAr:'أضاف المسؤول الأصل AST-0011 (حامل الخادم #02) لـ Acme Corp (C001).',
+    client:'C001', certId:null, daysLeft:null, time:'Today 11:00', link:'assets.html' },
+
+  { id:'N014', type:'system', priority:'info', read:true, dismissed:false,
+    titleEn:'Status change request: HVAC Unit #01',
+    titleAr:'طلب تغيير الحالة: وحدة التكييف #01',
+    descEn:'Technician Ali requested status change for AST-0002 from Active to Under Maintenance.',
+    descAr:'طلب الفني علي تغيير حالة AST-0002 من نشط إلى تحت الصيانة.',
+    client:'C001', certId:null, daysLeft:null, time:'Today 10:15', link:'assets.html' },
+
+  { id:'N015', type:'system', priority:'success', read:true, dismissed:false,
+    titleEn:'New client added: Nile Ventures (C004)',
+    titleAr:'تمت إضافة عميل جديد: Nile Ventures (C004)',
+    descEn:'Admin added new client Nile Ventures with Customer ID C004.',
+    descAr:'أضاف المسؤول عميلاً جديداً Nile Ventures برقم العميل C004.',
+    client:'C004', certId:null, daysLeft:null, time:'Yesterday', link:'clients.html' },
+];
 
 /* ═══════════════════════════════════════════════════════
    CONFIG
@@ -738,9 +845,6 @@ function setTab(tab, el) {
   renderNotifs();
 }
 
-function _mapNotif(n) {
-  return { ...n, read: n.read || n.is_read || false, dismissed: n.dismissed || false };
-}
 function renderNotifs() {
   const role    = session?.role;
   const search  = (document.getElementById('searchInput').value || '').toLowerCase();
@@ -885,41 +989,40 @@ function renderNotifItem(n, role) {
 /* ═══════════════════════════════════════════════════════
    ACTIONS
 ═══════════════════════════════════════════════════════ */
-async async async function markRead(id) {
-  try {
-    await apiFetch(`/api/notifications/${id}`, { method:'PATCH', body: JSON.stringify({ is_read: true }) });
-    const n = NOTIFICATIONS.find(x => x.id === id);
-    if (n) { n.is_read = true; n.isRead = true; }
-    renderNotifications();
-    updateBadge();
-  } catch(e) {}
+function markRead(id) {
+  const n = NOTIFICATIONS.find(x => x.id === id);
+  if (n) n.read = true;
+  renderNotifs();
 }
-async async async function dismissNotif(id, e) {
-  if (e) e.stopPropagation();
-  try {
-    await apiFetch(`/api/notifications/${id}`, { method:'DELETE' });
-    NOTIFICATIONS = NOTIFICATIONS.filter(x => x.id !== id);
-    renderNotifications();
-    updateBadge();
-  } catch(err) {}
+
+function dismissNotif(id, e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  const n = NOTIFICATIONS.find(x => x.id === id);
+  if (n) { n.dismissed = true; n.read = true; }
+  /* Animate out */
+  const el = document.getElementById('notif-' + id);
+  if (el) { el.style.transition = 'opacity .3s, max-height .3s'; el.style.opacity = '0'; el.style.maxHeight = '0'; el.style.overflow = 'hidden'; }
+  setTimeout(() => renderNotifs(), 320);
 }
-async async async function markAllRead() {
-  try {
-    await apiFetch('/api/notifications/mark-all-read', { method:'POST' });
-    NOTIFICATIONS.forEach(n => { n.is_read = true; n.isRead = true; });
-    renderNotifications();
-    updateBadge();
-  } catch(e) {}
+
+function markAllRead() {
+  NOTIFICATIONS.forEach(n => { if (!n.dismissed) n.read = true; });
+  renderNotifs();
+  showToast('success',
+    'Marked All Read',
+    'All notifications marked as read.');
 }
-async async async function dismissAll() {
-  try {
-    // Delete each read notification
-    const readIds = NOTIFICATIONS.filter(n => n.is_read||n.isRead).map(n=>n.id);
-    await Promise.all(readIds.map(id => apiFetch(`/api/notifications/${id}`,{method:'DELETE'})));
-    NOTIFICATIONS = NOTIFICATIONS.filter(n => !(n.is_read||n.isRead));
-    renderNotifications();
-  } catch(e) {}
+
+function dismissAll() {
+  const confirmed = confirm('Clear all notifications? This cannot be undone.');
+  if (!confirmed) return;
+  NOTIFICATIONS.forEach(n => { n.dismissed = true; });
+  renderNotifs();
+  showToast('info',
+    'Cleared',
+    'All notifications cleared.');
 }
+
 function bulkRead()    { markAllRead(); }
 function bulkDismiss() { dismissAll(); }
 
@@ -951,31 +1054,7 @@ function openEmailModal() {
   }
 
   /* Subject with today's date */
-  const today = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric'   loadNotifications();
-});
-
-async function loadNotifications() {
-  try {
-    const res  = await apiFetch('/api/notifications?limit=100');
-    const data = await res.json();
-    NOTIFICATIONS = data.success ? (data.data.notifications||[]).map(n=>({
-      ...n, isRead: n.is_read,
-      type:  n.type||'info',
-      title: n.title,
-      msg:   n.body||'',
-      time:  new Date(n.created_at).toLocaleString(),
-      ref:   n.ref_id ? { type: n.ref_type, id: n.ref_id } : null,
-    })) : [];
-  } catch(e) { NOTIFICATIONS = []; }
-  renderNotifications();
-  updateBadge();
-}
-
-function updateBadge() {
-  const count = NOTIFICATIONS.filter(n => !n.is_read && !n.isRead).length;
-  const badge = document.getElementById('notifBadge');
-  if (badge) { badge.textContent = count > 9 ? '9+' : count||''; badge.style.display = count>0?'block':'none'; }
-}
+  const today = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
   document.getElementById('emailSubject').value = `SAP ACM — Active Alerts Summary — ${today}`;
 
   /* Count badge */
@@ -1195,7 +1274,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   loadConfig();
-  loadNotifications();
+  renderNotifs();
 
   /* Close email modal on overlay click */
   document.getElementById('emailModal').addEventListener('click', function(e) {
@@ -1204,31 +1283,15 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Refresh preview when subject changes */
   document.getElementById('emailSubject').addEventListener('input', refreshEmailPreview);
 
-  /* Welcome toast — loaded after API call in loadNotifications() */
+  /* Welcome toast for unread */
+  const unread = NOTIFICATIONS.filter(n=>!n.read&&!n.dismissed).length;
+  if (unread > 0) {
+    setTimeout(() => showToast('warning',
+      `${unread} Unread Notifications`,
+      'You have alerts requiring your attention.'
+    ), 500);
+  }
 });
-
-async function loadNotifications() {
-  try {
-    const res  = await apiFetch('/api/notifications?limit=100');
-    const data = await res.json();
-    if (data.success) {
-      NOTIFICATIONS = (data.data.notifications || []).map(n => ({
-        ...n,
-        read:      n.is_read || false,
-        dismissed: false,
-        type:      n.type || 'info',
-        message:   n.body || '',
-        time:      n.created_at ? new Date(n.created_at).toLocaleString() : '',
-        icon:      n.ref_type === 'certificate' ? 'cert' : n.ref_type === 'asset' ? 'asset' : 'info',
-        color:     '#0070f2',
-        client:    '',
-      }));
-    } else { NOTIFICATIONS = []; }
-  } catch(e) { NOTIFICATIONS = []; }
-  renderNotifs();
-  const unread = NOTIFICATIONS.filter(n => !n.read && !n.dismissed).length;
-  if (unread > 0) setTimeout(() => showToast('warning', unread+' Unread Notifications','You have alerts requiring your attention.'), 500);
-}
 </script>
 </body>
 </html>

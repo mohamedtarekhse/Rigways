@@ -9,7 +9,6 @@
     font-src 'self' https://fonts.gstatic.com;
     img-src 'self' data: blob:;
     connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787;
-    frame-ancestors 'self';
     object-src 'none';
     base-uri 'self';
   "/>
@@ -697,8 +696,7 @@ let deleteTargetId = null;
 const AVATAR_COLORS = ['#0070f2','#188918','#e76500','#bb0000','#7b1fa2','#0277bd','#2e7d32'];
 
 /* ── Auth ── */
-/* Session helpers — use SapSession from app.js when available,
-   otherwise fall back to inline implementation (defensive). */
+/* Session helpers — use SapSession from app.js when available */
 function getSession() {
   if (typeof SapSession !== 'undefined') return SapSession.get();
   try {
@@ -746,8 +744,132 @@ document.addEventListener('click', e => {
 /* ═══════════════════════════════════════════════════════
    DEMO DATA
 ═══════════════════════════════════════════════════════ */
-/* INSPECTORS loaded from API — see loadInspectors() */
-let INSPECTORS = [];
+let INSPECTORS = [
+  {
+    inspectorId: 'INS-001',
+    name: 'Ahmed Al-Rashidi',
+    title: 'Senior Mechanical Inspector',
+    email: 'a.rashidi@inspection.ae',
+    phone: '+971 50 123 4567',
+    status: 'active',
+    color: '#0070f2',
+    experienceYears: 15,
+    experienceDesc: 'Specialized in pressure vessel, piping, and rotating equipment inspection. Extensive experience in oil & gas and petrochemical industries across the GCC region.',
+    education: [
+      { degree: 'B.Sc. Mechanical Engineering', institution: 'UAE University', year: '2005' },
+      { degree: 'M.Sc. Materials Science', institution: 'Khalifa University', year: '2009' },
+    ],
+    trainings: [
+      { name: 'API 510 Pressure Vessel Inspector', provider: 'API', year: '2010' },
+      { name: 'ASNT Level III NDT', provider: 'ASNT', year: '2012' },
+      { name: 'API 570 Piping Inspector', provider: 'API', year: '2014' },
+    ],
+    cvFile: 'ahmed_rashidi_cv.pdf', cvUrl: '',
+    trainingCerts: [
+      { name: 'API 510 Certificate', file: 'api510_cert.pdf', url: '' },
+      { name: 'ASNT Level III Certificate', file: 'asnt_cert.pdf', url: '' },
+      { name: 'API 570 Certificate', file: '', url: 'https://api.org/certs/api570' },
+    ],
+  },
+  {
+    inspectorId: 'INS-002',
+    name: 'Sara Al-Khalil',
+    title: 'Electrical Systems Inspector',
+    email: 's.khalil@inspection.ae',
+    phone: '+971 55 234 5678',
+    status: 'active',
+    color: '#188918',
+    experienceYears: 9,
+    experienceDesc: 'Expert in high-voltage electrical systems, power distribution networks, and fire alarm systems inspection. DEWA certified for the UAE.',
+    education: [
+      { degree: 'B.Sc. Electrical Engineering', institution: 'American University of Sharjah', year: '2012' },
+    ],
+    trainings: [
+      { name: 'DEWA Approved Inspector Certification', provider: 'DEWA', year: '2015' },
+      { name: 'IEE Wiring Regulations (BS 7671)', provider: 'IET', year: '2016' },
+      { name: 'Fire Alarm System Design & Inspection', provider: 'NFPA', year: '2018' },
+    ],
+    cvFile: '', cvUrl: 'https://linkedin.com/in/sara-khalil-inspector',
+    trainingCerts: [
+      { name: 'DEWA Inspector Certificate', file: 'dewa_cert.pdf', url: '' },
+      { name: 'BS 7671 Certificate', file: '', url: 'https://iet.org/certs/bs7671-2024' },
+    ],
+  },
+  {
+    inspectorId: 'INS-003',
+    name: 'Mohamed Hassan',
+    title: 'HSE & Safety Inspector',
+    email: 'm.hassan@inspection.ae',
+    phone: '+971 56 345 6789',
+    status: 'active',
+    color: '#e76500',
+    experienceYears: 12,
+    experienceDesc: 'Specializes in occupational health and safety, fire safety systems, and HSE management systems auditing. ISO 45001 Lead Auditor.',
+    education: [
+      { degree: 'B.Sc. Occupational Health & Safety', institution: 'Higher Colleges of Technology', year: '2008' },
+      { degree: 'Diploma in Fire Safety Engineering', institution: 'University of Central Lancashire', year: '2011' },
+    ],
+    trainings: [
+      { name: 'NEBOSH International General Certificate', provider: 'NEBOSH', year: '2009' },
+      { name: 'OHSAS 18001 Lead Auditor', provider: 'BSI', year: '2013' },
+      { name: 'Fire Investigation & Analysis', provider: 'NFPA', year: '2015' },
+      { name: 'ISO 45001 Lead Auditor', provider: 'Bureau Veritas', year: '2019' },
+    ],
+    cvFile: 'hassan_cv.pdf', cvUrl: '',
+    trainingCerts: [
+      { name: 'NEBOSH Certificate', file: 'nebosh.pdf', url: '' },
+      { name: 'OHSAS 18001 Certificate', file: 'ohsas_cert.pdf', url: '' },
+      { name: 'ISO 45001 Lead Auditor Certificate', file: 'iso45001.pdf', url: '' },
+    ],
+  },
+  {
+    inspectorId: 'INS-004',
+    name: 'Layla Bin Rashid',
+    title: 'Quality Management Inspector',
+    email: 'l.rashid@inspection.ae',
+    phone: '+971 54 456 7890',
+    status: 'active',
+    color: '#7b1fa2',
+    experienceYears: 11,
+    experienceDesc: 'Quality management systems specialist with deep expertise in ISO standards auditing and certification across manufacturing and service industries.',
+    education: [
+      { degree: 'B.Sc. Industrial Engineering', institution: 'UAE University', year: '2009' },
+      { degree: 'MBA – Quality Management', institution: 'University of Wollongong Dubai', year: '2013' },
+    ],
+    trainings: [
+      { name: 'ISO 9001 Lead Auditor', provider: 'Bureau Veritas', year: '2012' },
+      { name: 'ISO 14001 Environmental Management', provider: 'SGS', year: '2014' },
+      { name: 'Six Sigma Black Belt', provider: 'ASQ', year: '2016' },
+    ],
+    cvFile: '', cvUrl: 'https://linkedin.com/in/layla-rashid-quality',
+    trainingCerts: [
+      { name: 'ISO 9001 Lead Auditor Certificate', file: '', url: 'https://bureauveritas.com/certs/9001la' },
+      { name: 'Six Sigma Black Belt Certificate', file: 'ssbb.pdf', url: '' },
+    ],
+  },
+  {
+    inspectorId: 'INS-005',
+    name: 'Khalid Al-Mansouri',
+    title: 'Civil & Structural Inspector',
+    email: 'k.mansouri@inspection.sa',
+    phone: '+966 55 567 8901',
+    status: 'inactive',
+    color: '#bb0000',
+    experienceYears: 18,
+    experienceDesc: 'Civil and structural engineering inspection for commercial and industrial buildings. Chartered engineer with ICE.',
+    education: [
+      { degree: 'B.Sc. Civil Engineering', institution: 'King Fahd University of Petroleum & Minerals', year: '2002' },
+    ],
+    trainings: [
+      { name: 'Chartered Structural Engineer (CEng)', provider: 'ICE', year: '2010' },
+      { name: 'ACI Concrete Field Testing Technician', provider: 'ACI', year: '2007' },
+    ],
+    cvFile: 'mansouri_cv.pdf', cvUrl: '',
+    trainingCerts: [
+      { name: 'CEng Certificate', file: 'ceng.pdf', url: '' },
+    ],
+  },
+];
 
 /* Inspector → Certificates mapping (inspector issued these certs) */
 const INSPECTOR_CERT_MAP = {
@@ -1195,31 +1317,82 @@ function openEditModal(id) {
 
 function closeModal() { document.getElementById('inspectorModal').classList.remove('open'); }
 
-async async function saveInspector() {
-  const editId = document.getElementById('editInspectorId')?.value || '';
-  const name   = document.getElementById('f_name').value.trim();
-  if (!name) { showToast('error','Required','Name is required.'); return; }
-  const payload = {
-    name,
-    title:            document.getElementById('f_title')?.value||null,
-    email:            document.getElementById('f_email')?.value||null,
-    phone:            document.getElementById('f_phone')?.value||null,
-    status:           document.getElementById('f_status')?.value||'active',
-    experience_years: parseInt(document.getElementById('f_experienceYears')?.value)||null,
-    experience_desc:  document.getElementById('f_experienceDesc')?.value||null,
-    color:            document.getElementById('f_color')?.value||'#0070f2',
-  };
-  try {
-    const url    = editId ? `/api/inspectors/${editId}` : '/api/inspectors';
-    const method = editId ? 'PATCH' : 'POST';
-    const res    = await apiFetch(url, { method, body: JSON.stringify(payload) });
-    const data   = await res.json();
-    if (!data.success) { showToast('error','Save Failed', data.error||'Could not save.'); return; }
-    showToast('success', editId ? 'Updated' : 'Added', `"${name}" saved.`);
-    document.getElementById('inspectorModal')?.classList.remove('open');
-    await loadInspectors();
-  } catch(e) { showToast('error','Network Error','Could not save inspector.'); }
+function saveInspector() {
+  const name       = document.getElementById('f_name').value.trim();
+  const title      = document.getElementById('f_title').value.trim();
+  const email      = document.getElementById('f_email').value.trim();
+  const phone      = document.getElementById('f_phone').value.trim();
+  const status     = document.getElementById('f_status').value;
+  const expYears   = parseInt(document.getElementById('f_expYears').value) || 0;
+  const expDesc    = document.getElementById('f_expDesc').value.trim();
+
+  if (!name || !title || !email || !status) {
+    showToast('error', currentLang==='ar'?'حقول مطلوبة':'Required Fields', currentLang==='ar'?'الرجاء ملء جميع الحقول المطلوبة.':'Please fill all required fields (Name, Title, Email, Status).');
+    return;
+  }
+
+  /* Read education */
+  const education = [];
+  document.querySelectorAll('#educationContainer .dynamic-row').forEach(row => {
+    const degree = row.querySelector('.edu-degree').value.trim();
+    const inst   = row.querySelector('.edu-institution').value.trim();
+    const year   = row.querySelector('.edu-year').value.trim();
+    if (degree) education.push({ degree, institution: inst, year });
+  });
+
+  /* Read trainings */
+  const trainings = [];
+  document.querySelectorAll('#trainingContainer .dynamic-row').forEach(row => {
+    const n = row.querySelector('.tr-name').value.trim();
+    const p = row.querySelector('.tr-provider').value.trim();
+    const y = row.querySelector('.tr-year').value.trim();
+    if (n) trainings.push({ name: n, provider: p, year: y });
+  });
+
+  /* Read CV */
+  const cvModeBtn = document.querySelector('.file-url-btn[data-mode].active');
+  const cvMode = cvModeBtn ? cvModeBtn.dataset.mode : 'file';
+  let cvFile = ''; let cvUrl = '';
+  if (cvMode === 'file') {
+    const fi = document.getElementById('cvFileInput');
+    cvFile = fi.files[0]?.name || fi.dataset.existing || '';
+  } else {
+    cvUrl = document.getElementById('cvUrlInput').value.trim();
+  }
+
+  /* Read training certs */
+  const trainingCerts = [];
+  document.querySelectorAll('#trainingCertsContainer .dynamic-row').forEach(row => {
+    const tcName = row.querySelector('.tc-name').value.trim();
+    const tcMode = row.dataset.tcMode || 'file';
+    const fi     = row.querySelector('.tc-file');
+    const tcFile = tcMode === 'file' ? (fi.files[0]?.name || fi.dataset.existing || '') : '';
+    const tcUrl  = tcMode === 'url'  ? row.querySelector('.tc-url').value.trim() : '';
+    if (tcName) trainingCerts.push({ name: tcName, file: tcFile, url: tcUrl });
+  });
+
+  const editId = document.getElementById('editInspectorId').value;
+
+  if (editId) {
+    const idx = INSPECTORS.findIndex(i => i.inspectorId === editId);
+    if (idx > -1) {
+      INSPECTORS[idx] = { ...INSPECTORS[idx], name, title, email, phone, status, experienceYears: expYears, experienceDesc: expDesc, education, trainings, cvFile, cvUrl, trainingCerts };
+      showToast('success', currentLang==='ar'?'تم التحديث':'Updated', currentLang==='ar'?`تم تحديث بيانات "${name}".`:`"${name}" updated successfully.`);
+    }
+  } else {
+    const newId = nextInspectorId();
+    INSPECTORS.push({
+      inspectorId: newId, name, title, email, phone, status,
+      experienceYears: expYears, experienceDesc: expDesc,
+      education, trainings, cvFile, cvUrl, trainingCerts,
+      color: AVATAR_COLORS[INSPECTORS.length % AVATAR_COLORS.length],
+    });
+    INSPECTOR_CERT_MAP[newId] = [];
+    showToast('success', currentLang==='ar'?'تمت الإضافة':'Added', currentLang==='ar'?`تمت إضافة "${name}" (${newId}).`:`"${name}" added as ${newId}.`);
+  }
+  closeModal(); renderTable();
 }
+
 /* ═══════════════════════════════════════════════════════
    DETAIL DRAWER
 ═══════════════════════════════════════════════════════ */
@@ -1466,17 +1639,15 @@ function openDeleteModal(id) {
       : `Delete inspector "${insp?.name||id}" (${id})? This cannot be undone.`;
   document.getElementById('deleteModal').classList.add('open');
 }
-async async function confirmDelete() {
-  const insp = INSPECTORS.find(x => x.id === deleteTargetId);
-  document.getElementById('deleteModal')?.classList.remove('open');
-  try {
-    const res  = await apiFetch(`/api/inspectors/${deleteTargetId}`, { method:'DELETE' });
-    const data = await res.json();
-    if (!data.success) { showToast('error','Failed', data.error||'Could not delete.'); return; }
-    showToast('success','Deleted', `"${insp?.name||deleteTargetId}" deleted.`);
-    await loadInspectors();
-  } catch(e) { showToast('error','Network Error','Could not delete.'); }
+function confirmDelete() {
+  const insp = INSPECTORS.find(i => i.inspectorId === deleteTargetId);
+  INSPECTORS = INSPECTORS.filter(i => i.inspectorId !== deleteTargetId);
+  delete INSPECTOR_CERT_MAP[deleteTargetId];
+  document.getElementById('deleteModal').classList.remove('open');
+  showToast('success', currentLang==='ar'?'تم الحذف':'Deleted', currentLang==='ar'?`تم حذف "${insp?.name||deleteTargetId}".`:`"${insp?.name||deleteTargetId}" deleted.`);
+  renderTable();
 }
+
 /* ═══════════════════════════════════════════════════════
    EXPORT CSV
 ═══════════════════════════════════════════════════════ */

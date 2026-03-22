@@ -9,7 +9,6 @@
     font-src 'self' https://fonts.gstatic.com;
     img-src 'self' data: blob:;
     connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787;
-    frame-ancestors 'self';
     object-src 'none';
     base-uri 'self';
   "/>
@@ -358,42 +357,36 @@ const DEFAULT_ASSETS = [
   {assetId:'AST-0018', location:'Workshop A'},
 ];
 
-let _assetsCache = null;
-async function loadAssets() {
-  if (_assetsCache) return _assetsCache;
+function loadAssets() {
   try {
-    const res = await apiFetch('/api/assets?limit=500');
-    const d   = await res.json();
-    _assetsCache = d.success ? (d.data.assets||[]).map(a=>({assetId:a.asset_number||a.id, location:a.functional_location||''})) : DEFAULT_ASSETS;
-  } catch(e) { _assetsCache = DEFAULT_ASSETS; }
-  return _assetsCache;
+    const s = localStorage.getItem(ASSETS_SYNC_KEY);
+    if (s) return JSON.parse(s);
+  } catch(e) {}
+  return DEFAULT_ASSETS;
 }
 
 function countAssetsForLoc(locName) {
-  return (_assetsCache || DEFAULT_ASSETS).filter(a => a.location === locName).length;
+  return loadAssets().filter(a => a.location === locName).length;
 }
 const CLIENT_COLORS = { C001:'#0070f2', C002:'#188918', C003:'#e76500', C004:'#bb0000' };
 
-async function loadLocs() {
+function loadLocs() {
   try {
-    const res=await apiFetch('/api/functional-locations?limit=200');
-    const d=await res.json();
-    if(d.success) return (d.data.functional_locations||[]).map(l=>({
-      ...l, id:l.fl_id||l.id, client:l.client_id||'', desc:l.notes||''
-    }));
-  } catch(e){}
-  return [...DEFAULT_FUNC_LOCS];
+    const s = localStorage.getItem(FL_KEY);
+    if (!s) return [...DEFAULT_FUNC_LOCS];
+    const locs = JSON.parse(s);
+    // migrate old records without client field
+    return locs.map(l => ({ client:'C001', ...l }));
+  } catch(e) { return [...DEFAULT_FUNC_LOCS]; }
 }
-function saveLocs(locs) { /* handled by API */ }
+function saveLocs(locs) { localStorage.setItem(FL_KEY, JSON.stringify(locs)); }
 function nextId() {
-  const locs = window._locsData || [];
-  const nums = locs.map(l => parseInt(l.id.replace('FL-',''))).filter(n => !isNaN(n));
+  const nums = loadLocs().map(l => parseInt(l.id.replace('FL-',''))).filter(n => !isNaN(n));
   return 'FL-' + String(Math.max(0,...nums) + 1).padStart(3,'0');
 }
 
 /* ── Auth ── */
-/* Session helpers — use SapSession from app.js when available,
-   otherwise fall back to inline implementation (defensive). */
+/* Session helpers — use SapSession from app.js when available */
 function getSession() {
   if (typeof SapSession !== 'undefined') return SapSession.get();
   try {
@@ -441,7 +434,7 @@ function render() {
   const role        = session?.role;
   const myClientId  = session?.customerId;
 
-  let data = window._locsData || [];
+  let data = loadLocs();
 
   /* Scope: user sees only their client's locations */
   if (role === 'user' || role === 'technician') {
@@ -592,17 +585,15 @@ function updateMassBar(){
   document.getElementById('massCount').textContent=`${ids.length} selected`;
 }
 function clearSelection(){document.querySelectorAll('#locTableBody input[type="checkbox"]').forEach(c=>c.checked=false);const sc=document.getElementById('selectAllChk');if(sc)sc.checked=false;updateMassBar();}
-async async function massDelete(){
+function massDelete(){
   if(!canEdit)return;
   const ids=getSelectedIds();if(!ids.length)return;
   if(!confirm(`Delete ${ids.length} location${ids.length>1?'s':''}? This cannot be undone.`))return;
-  try{
-    await Promise.all(ids.map(id=>apiFetch('/api/functional-locations/'+id,{method:'DELETE'})));
-    window._locsData=(window._locsData||[]).filter(l=>!ids.includes(l.id));
-    showToast('success','Deleted',`${ids.length} location${ids.length>1?'s':''} deleted.`);
-    clearSelection();render();
-  }catch(e){showToast('error','Error','Could not delete locations.');}
+  saveLocs(loadLocs().filter(l=>!ids.includes(l.id)));
+  showToast('success','Deleted',`${ids.length} location${ids.length>1?'s':''} deleted.`);
+  clearSelection();render();
 }
+
 /* ── Modal ── */
 function openAddModal(){
   if(!canEdit)return;
@@ -617,7 +608,7 @@ function openAddModal(){
 }
 function openEditModal(id){
   if(!canEdit)return;
-  const loc=(window._locsData||[]).find(l=>l.id===id);if(!loc)return;
+  const loc=loadLocs().find(l=>l.id===id);if(!loc)return;
   document.getElementById('editLocId').value=id;
   document.getElementById('f_loc_name').value=loc.name;
   document.getElementById('f_loc_type').value=loc.type;
@@ -628,66 +619,47 @@ function openEditModal(id){
   document.getElementById('locModal').classList.add('open');
 }
 function closeModal(){document.getElementById('locModal').classList.remove('open');}
-async function saveLocation() {
+function saveLocation(){
   if(!canEdit)return;
-  const name  = document.getElementById('f_loc_name').value.trim();
-  const type  = document.getElementById('f_loc_type').value;
-  const client= document.getElementById('f_loc_client').value;
-  const desc  = document.getElementById('f_loc_desc').value.trim();
-  const editId= document.getElementById('editLocId').value;
+  const name=document.getElementById('f_loc_name').value.trim();
+  const type=document.getElementById('f_loc_type').value;
+  const client=document.getElementById('f_loc_client').value;
+  const desc=document.getElementById('f_loc_desc').value.trim();
+  const editId=document.getElementById('editLocId').value;
   if(!name){showToast('error','Required','Please enter a location name.');return;}
-  const payload={name,type,client_id:client||undefined,notes:desc||undefined};
-  try{
-    let res,data;
-    if(editId){
-      res=await apiFetch('/api/functional-locations/'+editId,{method:'PATCH',body:JSON.stringify(payload)});
-      data=await res.json();
-      if(!data.success){showToast('error','Save Failed',data.error||'Could not update.');return;}
-      showToast('success','Updated','"'+name+'" updated.');
-    }else{
-      payload.fl_id='FL-'+Date.now().toString().slice(-4);
-      res=await apiFetch('/api/functional-locations',{method:'POST',body:JSON.stringify(payload)});
-      data=await res.json();
-      if(!data.success){showToast('error','Save Failed',data.error||'Could not create.');return;}
-      showToast('success','Added','"'+name+'" added.');
-    }
-    closeModal();
-    window._locsData = null; // clear cache
-    const locs = await loadLocs();
-    window._locsData = locs;
-    filteredData = locs;
-    render();
-  }catch(e){showToast('error','Network Error','Could not save location.');}
+  if(!client){showToast('error','Required','Please select a client.');return;}
+  let locs=loadLocs();
+  const dup=locs.find(l=>l.name.toLowerCase()===name.toLowerCase()&&l.client===client&&l.id!==editId);
+  if(dup){showToast('error','Duplicate',`"${name}" already exists for this client.`);return;}
+  if(editId){
+    const idx=locs.findIndex(l=>l.id===editId);
+    if(idx>-1)locs[idx]={...locs[idx],name,type,client,desc};
+    showToast('success','Updated',`"${name}" updated successfully.`);
+  } else {
+    locs.push({id:nextId(),name,type,client,desc});
+    showToast('success','Added',`"${name}" added to ${CLIENTS_MAP[client]||client}.`);
+  }
+  saveLocs(locs);closeModal();render();
 }
 
 /* ── Delete ── */
 function openDeleteModal(id){
   if(!canEdit)return;
   deleteTargetId=id;
-  const loc=(window._locsData||[]).find(l=>l.id===id);
+  const loc=loadLocs().find(l=>l.id===id);
   document.getElementById('deleteMsg').textContent=`Delete "${loc?.name||id}"? This cannot be undone.`;
   document.getElementById('deleteModal').classList.add('open');
 }
-async function confirmDelete() {
-  const locs=await loadLocs();
-  const loc=locs.find(l=>l.id===deleteTargetId);
+function confirmDelete(){
+  const loc=loadLocs().find(l=>l.id===deleteTargetId);
+  saveLocs(loadLocs().filter(l=>l.id!==deleteTargetId));
   document.getElementById('deleteModal').classList.remove('open');
-  try{
-    const res=await apiFetch('/api/functional-locations/'+deleteTargetId,{method:'DELETE'});
-    const d=await res.json();
-    if(!d.success){showToast('error','Delete Failed',d.error||'Could not delete.');return;}
-    showToast('success','Deleted','"'+(loc?.name||deleteTargetId)+'" deleted.');
-    window._locsData = null;
-    const updated = await loadLocs();
-    window._locsData = updated;
-    filteredData = updated;
-    render();
-  }catch(e){showToast('error','Network Error','Could not delete location.');}
+  showToast('success','Deleted',`"${loc?.name||deleteTargetId}" deleted.`);render();
 }
 
 /* ── Export CSV ── */
 function exportCSV(){
-  const data=filteredData.length?filteredData:(window._locsData||[]);
+  const data=filteredData.length?filteredData:loadLocs();
   const headers=['Location ID','Name','Type','Client ID','Client Name','Description'];
   const rows=data.map(l=>[l.id,l.name,l.type,l.client||'',CLIENTS_MAP[l.client]||'',l.desc||''].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','));
   const csv=[headers.join(','),...rows].join('\n');
@@ -758,8 +730,10 @@ document.addEventListener('DOMContentLoaded',()=>{
       `Your fleet locations — ${CLIENTS_MAP[session.customerId]||session.customerId}`;
   }
 
-  /* Load from API then render */
-  loadLocs().then(locs => { window._locsData = locs; render(); });
+  /* Init default data if empty */
+  if(!localStorage.getItem(FL_KEY)) saveLocs([...DEFAULT_FUNC_LOCS]);
+
+  render();
 
   document.querySelectorAll('.sap-modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
   document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.sap-modal-overlay.open').forEach(o=>o.classList.remove('open'));});
