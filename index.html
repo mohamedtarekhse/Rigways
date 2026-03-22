@@ -617,7 +617,7 @@ async function handleLogin(e) {
   const pInput   = document.getElementById('password');
   const btn      = document.getElementById('loginBtn');
 
-  if (!email || !password) {
+  if (!username || !password) {
     errorBox.classList.add('show');
     document.getElementById('errorMsg').textContent = 'Username and password are required.';
     return;

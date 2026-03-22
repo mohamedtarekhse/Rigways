@@ -240,14 +240,6 @@ async function handleAuth(request, env, path) {
     });
     if (!valid) return badReq(errors.join('; '), 'VALIDATION', env);
 
-    // Check env vars explicitly before trying Supabase
-    if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-      return json({ success: false, error: 'Missing env vars: SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY not set in Cloudflare Pages environment variables', code: 'MISSING_ENV' }, 500, env);
-    }
-    if (!env.JWT_SECRET) {
-      return json({ success: false, error: 'Missing env var: JWT_SECRET not set in Cloudflare Pages environment variables', code: 'MISSING_ENV' }, 500, env);
-    }
-
     const db = createSupabase(env);
     const { data: rows, error } = await db.from('users', {
       filters: { 'username.ilike': body.username.toLowerCase() },
