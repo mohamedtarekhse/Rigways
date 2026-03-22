@@ -1519,7 +1519,7 @@ async function massDelete() {
     } else {
       showToast('success','Deleted',`${ids.length} asset${ids.length > 1 ? 's' : ''} deleted.`);
     }
-    ASSETS = ASSETS.filter(a => !ids.includes(a.id || a.assetId));
+    ASSETS = ASSETS.filter(a => !ids.includes(a.assetId));
     clearSelection();
     renderTable();
   } catch(e) {
@@ -1583,90 +1583,77 @@ function openEditModal(id) {
 
 function closeModal() { document.getElementById('assetModal').classList.remove('open'); }
 
-function saveAsset(e) {
+async function saveAsset(e) {
   if (e && e.preventDefault) e.preventDefault();
-  const name     = document.getElementById('f_name').value.trim();
-  const type     = document.getElementById('f_type').value;
-  const status   = document.getElementById('f_status').value;
-  const location = document.getElementById('f_location').value;
-  const appliedStandard = document.getElementById('f_appliedStandard').value.trim();
-  const client   = document.getElementById('f_client').value || session.customerId;
-  if (!name || !type || !status || !location || !client) {
-    showToast('error',
-      'Required Fields',
-      'Please fill all required fields.');
-    return;
+  const name          = document.getElementById('f_name').value.trim();
+  const type          = document.getElementById('f_type').value;
+  const status        = document.getElementById('f_status').value;
+  const location      = document.getElementById('f_location')?.value || '';
+  const client        = document.getElementById('f_client')?.value || session?.customerId || '';
+  const serial        = document.getElementById('f_serial')?.value?.trim() || '';
+  const zoneEquipment = document.getElementById('f_zone_equipment')?.value?.trim() || '';
+  const appliedStd    = document.getElementById('f_appliedStandard')?.value?.trim() || '';
+  const notes         = document.getElementById('f_notes')?.value || '';
+  const editId        = document.getElementById('editAssetId')?.value || '';
+
+  if (!name || !type || !status) {
+    showToast('error','Required','Name, type and status are required.'); return;
   }
-
-  const serial = document.getElementById('f_serial').value.trim();
-  const zoneEquipment = document.getElementById('f_zone_equipment').value.trim();
-
   if (!serial) {
-    showToast('error', 'Required', 'Serial Number is required.');
-    document.getElementById('f_serial').focus();
-    return;
-  }
-  if (!zoneEquipment) {
-    showToast('error', 'Required', 'Zone of Equipment is required.');
-    document.getElementById('f_zone_equipment').focus();
-    return;
+    showToast('error','Required','Serial number is required.');
+    document.getElementById('f_serial')?.focus(); return;
   }
 
-  const editId = document.getElementById('editAssetId').value;
-  // Duplicate serial check — serial must be unique across all assets
-  const duplicate = ASSETS.find(a => a.serial === serial && a.assetId !== editId);
-  if (duplicate) {
-    showToast('error', 'Duplicate Serial', `Serial "${serial}" is already used by "${duplicate.name}" (${duplicate.assetId}).`);
-    document.getElementById('f_serial').focus();
-    return;
-  }
+  const payload = {
+    name,
+    asset_type:          type,
+    status,
+    functional_location: location || null,
+    client_id:           client   || null,
+    serial_number:       serial,
+    description:         appliedStd || null,
+    model:               zoneEquipment || null,
+    notes:               notes || null,
+  };
 
-  const isTech = session.role === 'technician';
+  try {
+    const url    = editId ? `/api/assets/${editId}` : '/api/assets'; // editId is AST-0001, worker resolves to UUID
+    const method = editId ? 'PATCH' : 'POST';
+    if (!editId) payload.asset_number = 'AST-' + Date.now();
 
-  if (editId) {
-    const idx = ASSETS.findIndex(a => a.assetId === editId);
-    if (idx > -1) {
-      const old = ASSETS[idx];
-      if (isTech && old.status !== status) {
-        ASSETS[idx]._pendingStatus = status;
-        showToast('info',
-          'Request Sent',
-          'Status change request sent to Admin for approval.');
-      } else {
-        const oldLocation = old.location;
-        ASSETS[idx] = { ...old, name, type,
-          serial, status, location, appliedStandard,
-          zoneEquipment,
-          zone: zoneEquipment,
-          client,
-          notes: document.getElementById('f_notes').value };
-        // Auto-log transfer if location changed
-        if (oldLocation && oldLocation !== location) {
-          logTransfer(old.assetId, oldLocation, location, session.name, 'Updated via edit modal', new Date().toISOString().split('T')[0]);
-        }
-        showToast('success',
-          'Updated',
-          `${name} updated successfully.`);
-      }
+    const res  = await apiFetch(url, { method, body: JSON.stringify(payload) });
+    const data = await res.json();
+    const d    = data.data || data;
+
+    if (!data.success) {
+      showToast('error','Save Failed', d.error || data.error || 'Could not save asset.'); return;
     }
-  } else {
-    const newId = 'AST-' + String(ASSETS.length + 1).padStart(4,'0');
-    ASSETS.push({
-      assetId: newId, name, type,
-      serial, status, location, appliedStandard,
-      zoneEquipment,
-      zone: zoneEquipment,
-      client,
-      notes:    document.getElementById('f_notes').value
-    });
-    showToast('success',
-      'Added',
-      `${name} (${newId}) added successfully.`);
-  }
 
-  closeModal();
-  renderTable();
+    // Update local array
+    if (editId) {
+      const idx = ASSETS.findIndex(a => a.assetId === editId);
+      if (idx > -1) ASSETS[idx] = { ...ASSETS[idx], ...d,
+        assetId: d.asset_number || d.id,
+        type: d.asset_type, serial: d.serial_number,
+        location: d.functional_location || '', client: d.client_id || '',
+      };
+      showToast('success','Updated', `"${name}" updated successfully.`);
+    } else {
+      const newAsset = { ...d, assetId: d.asset_number,
+        type: d.asset_type, serial: d.serial_number,
+        location: d.functional_location || '', client: d.client_id || '',
+      };
+      ASSETS.push(newAsset);
+      showToast('success','Added', `"${name}" added successfully.`);
+    }
+    closeModal();
+    renderTable();
+  } catch(err) {
+    showToast('error','Network Error','Could not save asset. Please try again.');
+  }
 }
+
+
 
 /* ═══════════════════════════════════════════════════════
    STATUS MODAL (Technician)
@@ -2294,16 +2281,26 @@ async function testMassDelete() {
   debugClear();
   debugLog('=== MASS DELETE TEST ===', '#60a5fa');
   const ids = typeof getSelectedIds === 'function' ? getSelectedIds() : [];
-  debugLog('selected IDs: ' + ids.length, ids.length ? '#10b981' : '#f59e0b');
+  debugLog('selected IDs count: ' + ids.length, ids.length ? '#10b981' : '#f59e0b');
   if (!ids.length) {
-    debugLog('Select checkboxes first, then press this button', '#f59e0b');
+    debugLog('Tick checkboxes in table first', '#f59e0b');
+    // Show all checkboxes found
+    const cbs = document.querySelectorAll('#assetTableBody input[type="checkbox"]');
+    debugLog('Total checkboxes in table: ' + cbs.length, '#94a3b8');
+    const checked = document.querySelectorAll('#assetTableBody input[type="checkbox"]:checked');
+    debugLog('Checked checkboxes: ' + checked.length, '#94a3b8');
+    if (checked.length) {
+      checked.forEach(cb => debugLog('  data-id: ' + cb.getAttribute('data-id'), '#94a3b8'));
+    }
     return;
   }
+  ids.forEach(id => debugLog('ID: ' + id, '#94a3b8'));
+  const token = window._debugToken || JSON.parse(sessionStorage.getItem('sap_session')||'{}').token || '';
   for (const id of ids) {
     try {
       const r = await fetch('/api/assets/' + id, {
         method: 'DELETE',
-        headers: { 'Authorization': 'Bearer ' + (window._debugToken || JSON.parse(sessionStorage.getItem('sap_session')||'{}').token || '') }
+        headers: { 'Authorization': 'Bearer ' + token }
       });
       debugLog('DELETE ' + id.slice(0,8) + '... status: ' + r.status, r.status < 300 ? '#10b981' : '#ef4444');
       const d = await r.json();
@@ -2468,7 +2465,7 @@ async function loadAssets() {
     const d      = data.data || data;
     ASSETS = (d.assets || d || []).map(a => ({
       ...a,
-      assetId:   a.asset_number || a.id,
+      assetId:   a.asset_number, // AST-0001 format — used as primary key in UI
       type:      a.asset_type,
       serial:    a.serial_number,
       location:  a.functional_location || '',

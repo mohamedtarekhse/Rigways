@@ -701,17 +701,7 @@
           <!-- Linked Asset -->
           <div class="sap-field">
             <label class="sap-label">Linked Asset ID</label>
-            <select id="f_assetId" class="sap-select">
-              <option value="">Select asset…</option>
-              <option value="AST-0001">AST-0001 – Server Rack #01</option>
-              <option value="AST-0002">AST-0002 – HVAC Unit #01</option>
-              <option value="AST-0003">AST-0003 – Generator #01</option>
-              <option value="AST-0004">AST-0004 – Forklift #03</option>
-              <option value="AST-0005">AST-0005 – Fire Panel #01</option>
-              <option value="AST-0006">AST-0006 – Pump Station #2</option>
-              <option value="AST-0007">AST-0007 – UPS System #01</option>
-              <option value="AST-0008">AST-0008 – Crane #01</option>
-            </select>
+            <select id="f_assetId" class="sap-select"><option value="">Select asset…</option></select>
           </div>
 
           <!-- Client -->
@@ -1336,6 +1326,24 @@ async function massDelete() {
 /* ═══════════════════════════════════════════════════════
    UPLOAD / EDIT MODAL
 ═══════════════════════════════════════════════════════ */
+async function loadAssetDropdown() {
+  const sel = document.getElementById('f_assetId');
+  if (!sel) return;
+  try {
+    const res  = await apiFetch('/api/assets?limit=500');
+    const data = await res.json();
+    const d    = data.data || data;
+    const assets = d.assets || d || [];
+    sel.innerHTML = '<option value="">Select asset…</option>' +
+      assets.map(a => {
+        const displayId = a.asset_number || a.id;
+        return `<option value="${displayId}">${displayId} — ${a.name}</option>`;
+      }).join('');
+  } catch(e) {
+    sel.innerHTML = '<option value="">Could not load assets</option>';
+  }
+}
+
 function openUploadModal() {
   document.getElementById('editCertId').value = '';
   document.getElementById('certForm').reset();
@@ -1358,9 +1366,10 @@ function openUploadModal() {
   /* Set today as default issue date */
   document.getElementById('f_issueDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('certModal').classList.add('open');
+  loadAssetDropdown();
 }
 
-function openEditModal(id) {
+async function openEditModal(id) {
   const c = CERTS.find(x => x.certId === id);
   if (!c) return;
 
@@ -1405,6 +1414,7 @@ function openEditModal(id) {
   document.getElementById('techUploadNote').style.display = session.role === 'technician' ? 'block' : 'none';
   if (session.customerId) document.getElementById('f_client_wrap').style.display = 'none';
   document.getElementById('certModal').classList.add('open');
+  await loadAssetDropdown();
 }
 
 function closeModal() {
@@ -2127,10 +2137,22 @@ function showToast(type, title, msg) {
 
 async function loadCerts() {
   try {
-    const res  = await apiFetch('/api/certificates?limit=200');
-    const data = await res.json();
-    const d    = data.data || data;
-    CERTS = (d.certificates || d || []).map(cert => ({
+    // Load certs and assets in parallel
+    const [certRes, assetRes] = await Promise.all([
+      apiFetch('/api/certificates?limit=200').then(r => r.json()),
+      apiFetch('/api/assets?limit=500').then(r => r.json()),
+    ]);
+    const cd = certRes.data || certRes;
+    const ad = assetRes.data || assetRes;
+
+    // Build UUID → asset_number lookup map
+    const assetMap = {};
+    (ad.assets || ad || []).forEach(a => {
+      if (a.id) assetMap[a.id] = a.asset_number || a.id;
+    });
+    window._assetMap = assetMap;
+
+    CERTS = (cd.certificates || cd || []).map(cert => ({
       ...cert,
       certId:          cert.cert_number || cert.id,
       certType:        cert.cert_type,
@@ -2138,7 +2160,8 @@ async function loadCerts() {
       expiryDate:      cert.expiry_date,
       issueDate:       cert.issue_date,
       issuedBy:        cert.issued_by,
-      assetId:         cert.asset_id,
+      // Show AST-0001 format — resolve UUID to asset_number
+      assetId:         assetMap[cert.asset_id] || cert.asset_id || '—',
       client:          cert.client_id,
       fileName:        cert.file_name || '',
       fileUrl:         cert.file_url  || '',

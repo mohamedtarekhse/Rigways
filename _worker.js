@@ -435,14 +435,31 @@ async function handleUsers(request, env, path) {
 const ASSET_TYPES = ['Equipment', 'Vehicle', 'Facility', 'Tool', 'IT', 'Other'];
 const ASSET_STATUSES = ['active', 'inactive', 'maintenance', 'decommissioned'];
 
+// Resolve AST-number (e.g. AST-0001) to UUID for DB operations
+// Returns the UUID or the original value if it's already a UUID
+async function resolveAssetId(db, rawId) {
+  if (!rawId) return rawId;
+  // If it looks like AST-xxx, look up by asset_number
+  if (/^AST-/i.test(rawId)) {
+    const { data } = await db.from('assets', {
+      filters: { 'asset_number.ilike': rawId },
+      select: 'id',
+      limit: 1,
+    });
+    const row = Array.isArray(data) ? data[0] : data;
+    return row?.id || rawId;
+  }
+  return rawId; // already a UUID
+}
+
+
 async function handleAssets(request, env, path) {
   const session = await getSession(request, env);
   if (!session) return unauth(env);
 
   const method = request.method;
-  const db = createSupabase(env);
+  const db  = createSupabase(env);
   const url = new URL(request.url);
-
   /* ── GET /api/assets/stats — dashboard KPIs ── */
   if (path === '/assets/stats' && method === 'GET') {
     const filters = {};
@@ -458,8 +475,8 @@ async function handleAssets(request, env, path) {
     return ok({ total: total.count, active: active.count, maintenance: maintenance.count, inactive: inactive.count }, env);
   }
 
-  const idM = path.match(/^\/assets\/([^/]+)$/);
-  const asId = idM?.[1];
+  const idM    = path.match(/^\/assets\/([^/]+)$/);
+  const asId    = idM?.[1] ? await resolveAssetId(db, idM[1]) : undefined;
 
   /* LIST */
   if (!asId && method === 'GET') {
@@ -761,10 +778,15 @@ async function handleCertificates(request, env, path) {
     });
     if (!valid) return badReq(errors.join('; '), 'VALIDATION', env);
 
-    // Verify asset exists
-    const { data: aRows } = await db.from('assets', { filters: { 'id.eq': body.asset_id }, select: 'id,client_id', limit: 1 });
+    // Verify asset exists — accept both UUID and AST-0001 format
+    const assetFilter = /^AST-/i.test(body.asset_id || '')
+      ? { 'asset_number.ilike': body.asset_id }
+      : { 'id.eq': body.asset_id };
+    const { data: aRows } = await db.from('assets', { filters: assetFilter, select: 'id,asset_number,client_id', limit: 1 });
     const asset = Array.isArray(aRows) ? aRows[0] : aRows;
     if (!asset) return notFound('Asset', env);
+    // Always store UUID in asset_id FK column
+    body.asset_id = asset.id;
     if (session.role === 'technician' && session.customerId && asset.client_id !== session.customerId)
       return forbidden(env);
 
