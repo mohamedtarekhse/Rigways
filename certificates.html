@@ -848,7 +848,7 @@ let deleteTargetId = null;
 let rejectTargetId = null;
 
 /* ── Helpers ── */
-/* Session helpers */
+/* Session helpers — delegate to SapSession from app.js */
 function getSession() {
   if (typeof SapSession !== 'undefined') return SapSession.get();
   try {
@@ -1275,37 +1275,62 @@ function clearSelection() {
   updateMassBar();
 }
 
-function massApprove() {
+async function massApprove() {
   const ids = getSelectedIds();
-  if (!ids.length) return;
-  let count = 0;
-  ids.forEach(id => {
-    const idx = CERTS.findIndex(c => c.certId === id);
-    if (idx > -1 && CERTS[idx].approvalStatus === 'pending') {
-      CERTS[idx].approvalStatus = 'approved';
-      CERTS[idx].rejectionReason = '';
-      count++;
-    }
+  if (!ids.length) { showToast('warning','Nothing Selected','Select at least one certificate.'); return; }
+  const pending = ids.filter(id => {
+    const cert = CERTS.find(x => (x.id||x.certId) === id);
+    return cert && cert.approvalStatus === 'pending';
   });
-  showToast('success',
-    'Approved',
-    `${count} certificate${count > 1 ? 's' : ''} approved.`
-  );
-  clearSelection();
-  renderTable();
+  if (!pending.length) { showToast('info','No Pending','Selected certificates are not pending approval.'); return; }
+
+  try {
+    const results = await Promise.all(
+      pending.map(id => apiFetch(`/api/certificates/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ approval_status: 'approved' })
+      }).then(r => r.json()))
+    );
+    const failed = results.filter(r => !r.success);
+    // Update local array
+    results.forEach((r, i) => {
+      if (r.success) {
+        const idx = CERTS.findIndex(x => (x.id||x.certId) === pending[i]);
+        if (idx > -1) { CERTS[idx].approvalStatus = 'approved'; CERTS[idx].approval_status = 'approved'; }
+      }
+    });
+    if (failed.length) {
+      showToast('warning','Partial Approve',`${pending.length - failed.length} approved, ${failed.length} failed.`);
+    } else {
+      showToast('success','Approved',`${pending.length} certificate${pending.length > 1 ? 's' : ''} approved.`);
+    }
+    clearSelection();
+    renderTable();
+  } catch(e) {
+    showToast('error','Network Error','Could not approve certificates. Please try again.');
+  }
 }
 
-function massDelete() {
+async function massDelete() {
   const ids = getSelectedIds();
-  if (!ids.length) return;
-  if (!confirm(`Delete ${ids.length} selected certificate${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
-  CERTS = CERTS.filter(c => !ids.includes(c.certId));
-  showToast('success',
-    'Deleted',
-    `${ids.length} certificate${ids.length > 1 ? 's' : ''} deleted.`
-  );
-  clearSelection();
-  renderTable();
+  if (!ids.length) { showToast('warning','Nothing Selected','Select at least one certificate.'); return; }
+  if (!confirm(`Delete ${ids.length} certificate${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+  try {
+    const results = await Promise.all(
+      ids.map(id => apiFetch(`/api/certificates/${id}`, { method:'DELETE' }).then(r => r.json()))
+    );
+    const failed = results.filter(r => !r.success);
+    if (failed.length) {
+      showToast('warning','Partial Delete',`${ids.length - failed.length} deleted, ${failed.length} failed.`);
+    } else {
+      showToast('success','Deleted',`${ids.length} certificate${ids.length > 1 ? 's' : ''} deleted.`);
+    }
+    CERTS = CERTS.filter(x => !ids.includes(x.id||x.certId));
+    clearSelection();
+    renderTable();
+  } catch(e) {
+    showToast('error','Network Error','Could not delete certificates. Please try again.');
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1445,53 +1470,51 @@ async function saveCert() {
   const editId      = document.getElementById('editCertId')?.value || '';
 
   if (!name || !certType || !issuedBy || !issueDate || !expiryDate) {
-    showToast('error', 'Required Fields', 'Please fill all required fields.'); return;
+    showToast('error','Required Fields','Please fill all required fields.'); return;
   }
   if (certType === 'LIFTING' && !liftingSubtype) {
-    showToast('error', 'Lifting Sub-type Required', 'Please select a lifting sub-type.'); return;
+    showToast('error','Lifting Sub-type Required','Please select a lifting sub-type.'); return;
   }
   if (!editId && !selectedFile) {
-    showToast('error', 'File Required', 'Please upload the certificate file.'); return;
+    showToast('error','File Required','Please upload the certificate file.'); return;
   }
   if (issueDate && expiryDate && new Date(expiryDate) <= new Date(issueDate)) {
-    showToast('error', 'Invalid Date', 'Expiry date must be after issue date.'); return;
+    showToast('error','Invalid Date','Expiry date must be after issue date.'); return;
   }
 
-  // Show uploading state
-  const saveBtn = document.getElementById('saveCertBtn') || document.querySelector('[onclick*="saveCert"]');
+  const saveBtn = document.querySelector('[onclick*="saveCert"]');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Uploading…'; }
 
   let fileName = null, fileKey = null;
 
-  // Step 1: Upload file to R2 (if a file is selected)
+  // Step 1: Upload file to R2
   if (selectedFile) {
     try {
-      const fd = new FormData();
+      const fd    = new FormData();
       fd.append('file', selectedFile);
-      // Use raw fetch here — apiFetch sets Content-Type to json which breaks FormData
       const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
       const uploadRes = await fetch('/api/certificates/upload', {
         method: 'POST',
         headers: token ? { 'Authorization': 'Bearer ' + token } : {},
         body: fd,
       });
-      const uploadData = await uploadRes.json();
-      const ud = uploadData.data || uploadData;
-      if (!uploadData.success) {
-        showToast('error', 'Upload Failed', ud.error || 'Could not upload file.');
+      const ud = await uploadRes.json();
+      const udd = ud.data || ud;
+      if (!ud.success) {
+        showToast('error','Upload Failed', udd.error || 'Could not upload file.');
         if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
         return;
       }
-      fileName = ud.file_name;
-      fileKey  = ud.file_url; // R2 key stored as file_url
+      fileName = udd.file_name;
+      fileKey  = udd.file_url;
     } catch(e) {
-      showToast('error', 'Upload Error', 'File upload failed. Please try again.');
+      showToast('error','Upload Error','File upload failed. Please try again.');
       if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
       return;
     }
   }
 
-  // Step 2: Save certificate metadata
+  // Step 2: Save cert metadata
   if (saveBtn) saveBtn.textContent = 'Saving…';
   const payload = {
     name,
@@ -1506,38 +1529,37 @@ async function saveCert() {
   };
 
   try {
-    const url    = editId ? '/api/certificates/' + editId : '/api/certificates';
+    const url    = editId ? `/api/certificates/${editId}` : '/api/certificates';
     const method = editId ? 'PATCH' : 'POST';
     const res    = await apiFetch(url, { method, body: JSON.stringify(payload) });
     const data   = await res.json();
     if (!data.success) {
-      showToast('error', 'Save Failed', (data.data||data).error || 'Could not save.');
+      showToast('error','Save Failed',(data.data||data).error || 'Could not save.');
       if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
       return;
     }
     selectedFile = null;
     showToast('success', editId ? 'Updated' : 'Uploaded',
-      '"' + name + '" ' + (editId ? 'updated' : 'uploaded & sent for approval') + '.');
+      '"' + name + '" ' + (editId ? 'updated.' : 'uploaded & sent for approval.'));
     document.getElementById('uploadModal')?.classList.remove('open');
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
     await loadCerts();
   } catch(e) {
-    showToast('error', 'Network Error', 'Could not save certificate. Please try again.');
+    showToast('error','Network Error','Could not save certificate. Please try again.');
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
   }
 }
-
 
 /* ═══════════════════════════════════════════════════════
    APPROVAL
 ═══════════════════════════════════════════════════════ */
 async function approveCert(id) {
   try {
-    const res  = await apiFetch('/api/certificates/' + id, { method:'PATCH', body: JSON.stringify({ approval_status:'approved' }) });
+    const res  = await apiFetch(`/api/certificates/${id}`, { method:'PATCH', body: JSON.stringify({ approval_status:'approved' }) });
     const data = await res.json();
     if (!data.success) { showToast('error','Failed',(data.data||data).error||'Could not approve.'); return; }
-    const idx2 = CERTS.findIndex(x => (x.id||x.certId) === id);
-    if (idx2 > -1) { CERTS[idx2].approvalStatus = 'approved'; CERTS[idx2].approval_status = 'approved'; }
+    const idx  = CERTS.findIndex(x => (x.id||x.certId) === id);
+    if (idx > -1) { CERTS[idx].approvalStatus = 'approved'; CERTS[idx].approval_status = 'approved'; }
     showToast('success','Approved','Certificate approved.');
     renderTable();
   } catch(e) { showToast('error','Network Error','Could not approve.'); }
@@ -1556,11 +1578,11 @@ async function confirmReject() {
   const reason = document.getElementById('rejectReason')?.value?.trim() || '';
   if (!reason) { showToast('error','Required','Please enter a rejection reason.'); return; }
   try {
-    const res  = await apiFetch('/api/certificates/' + rejectTargetId, { method:'PATCH', body: JSON.stringify({ approval_status:'rejected', rejection_reason: reason }) });
+    const res  = await apiFetch(`/api/certificates/${rejectTargetId}`, { method:'PATCH', body: JSON.stringify({ approval_status:'rejected', rejection_reason: reason }) });
     const data = await res.json();
     if (!data.success) { closeRejectModal?.(); showToast('error','Failed',(data.data||data).error||'Could not reject.'); return; }
-    const idx2 = CERTS.findIndex(x => (x.id||x.certId) === rejectTargetId);
-    if (idx2 > -1) { CERTS[idx2].approvalStatus = 'rejected'; CERTS[idx2].rejectionReason = reason; }
+    const idx  = CERTS.findIndex(x => (x.id||x.certId) === rejectTargetId);
+    if (idx > -1) { CERTS[idx].approvalStatus = 'rejected'; CERTS[idx].rejectionReason = reason; }
     showToast('warning','Rejected','Certificate rejected.');
   } catch(e) { showToast('error','Network Error','Could not reject.'); }
   if (typeof closeRejectModal === 'function') closeRejectModal();
@@ -1813,17 +1835,12 @@ document.getElementById('drawerOverlay').addEventListener('click', function(e) {
 /* ── Certificate file link opener ── */
 async function openCertLink(certId) {
   try {
-    const res  = await apiFetch('/api/certificates/file/' + certId);
+    const res  = await apiFetch(`/api/certificates/file/${certId}`);
     const data = await res.json();
     const d    = data.data || data;
-    if (!data.success) {
-      showToast('info', 'No File', d.error || 'No file attached to this certificate.');
-      return;
-    }
+    if (!data.success) { showToast('info','No File', d.error || 'No file attached.'); return; }
     window.open(d.url, '_blank', 'noopener,noreferrer');
-  } catch(e) {
-    showToast('error', 'Error', 'Could not open file. Please try again.');
-  }
+  } catch(e) { showToast('error','Error','Could not open file. Please try again.'); }
 }
 
 /* ── File preview ── */
@@ -1846,7 +1863,7 @@ async function confirmDelete() {
   const cert = CERTS.find(x => (x.id||x.certId) === deleteTargetId);
   document.getElementById('deleteModal')?.classList.remove('open');
   try {
-    const res  = await apiFetch('/api/certificates/' + deleteTargetId, { method:'DELETE' });
+    const res  = await apiFetch(`/api/certificates/${deleteTargetId}`, { method:'DELETE' });
     const data = await res.json();
     if (!data.success) { showToast('error','Failed',(data.data||data).error||'Could not delete.'); return; }
     CERTS = CERTS.filter(x => (x.id||x.certId) !== deleteTargetId);
@@ -2129,7 +2146,6 @@ async function loadCerts() {
       jobNumber:       cert.notes || '',
       uploadTime:      (cert.created_at||'').split('T')[0],
     }));
-    // Map cert UUID -> file_url for signed URL lookups
     window._certUrls = {};
     CERTS.forEach(cert => { if (cert.file_url) window._certUrls[cert.id] = cert.file_url; });
   } catch(e) { CERTS = []; }
