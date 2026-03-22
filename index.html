@@ -639,7 +639,16 @@ async function handleLogin(e) {
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ username, password }),
     });
-    const data = await res.json();
+
+    /* Safely parse JSON — empty or HTML error pages won't crash */
+    let data = {};
+    try {
+      const text = await res.text();
+      if (text) data = JSON.parse(text);
+    } catch(parseErr) {
+      console.error('Non-JSON response, status:', res.status);
+      throw new Error('API not reachable — check that functions/api/[[route]].js is deployed and secrets are set in Cloudflare Pages.');
+    }
 
     if (!res.ok) {
       errorBox.classList.add('show');
