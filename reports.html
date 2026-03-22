@@ -563,7 +563,7 @@ let session = null;
 let charts = {};
 
 /* ── Auth ── */
-/* Session helpers — use SapSession from app.js when available */
+/* Session helpers — delegate to SapSession from app.js */
 function getSession() {
   if (typeof SapSession !== 'undefined') return SapSession.get();
   try {
@@ -622,7 +622,7 @@ function buildAssetStatusChart() {
     type: 'doughnut',
     data: {
       labels: ['Operation','Stacked'],
-      datasets: [{ data:[156,18], backgroundColor:['#188918','#9ea3a8'], borderWidth:3, borderColor:'#fff', hoverOffset:8 }]
+      datasets: [{ data:[(window._reportStats?.assets?.active||0),(window._reportStats?.assets?.maintenance||0)], backgroundColor:['#188918','#9ea3a8'], borderWidth:3, borderColor:'#fff', hoverOffset:8 }]
     },
     options: {
       cutout:'70%', responsive:true, maintainAspectRatio:false,
@@ -642,7 +642,7 @@ function buildCertComplianceChart() {
         'Expired',
         'Pending'
       ],
-      datasets: [{ data:[79,14,5,20], backgroundColor:['#188918','#e76500','#bb0000','#f57f17'], borderWidth:3, borderColor:'#fff', hoverOffset:8 }]
+      datasets: [{ data:[(window._reportStats?.certificates?.valid||0),(window._reportStats?.certificates?.expiring||0),(window._reportStats?.certificates?.expired||0),(window._reportStats?.certificates?.pending||0)], backgroundColor:['#188918','#e76500','#bb0000','#f57f17'], borderWidth:3, borderColor:'#fff', hoverOffset:8 }]
     },
     options: {
       cutout:'70%', responsive:true, maintainAspectRatio:false,
@@ -1037,6 +1037,22 @@ function showToast(type, title, msg) {
 /* ═══════════════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════════════ */
+
+async function loadReportData() {
+  try {
+    const [sumRes, expRes] = await Promise.all([
+      apiFetch('/api/reports/summary').then(r => r.json()),
+      apiFetch('/api/reports/expiring?days=30').then(r => r.json()),
+    ]);
+    window._reportStats    = (sumRes.data    || sumRes)    || {};
+    window._reportExpiring = ((expRes.data   || expRes).certificates) || [];
+  } catch(e) {
+    window._reportStats    = {};
+    window._reportExpiring = [];
+  }
+  initAllCharts();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   session = getSession();
   if (!session) return;
@@ -1086,7 +1102,7 @@ document.addEventListener('DOMContentLoaded', () => {
     `${from.toLocaleString('en',{month:'short',year:'numeric'})} – ${now.toLocaleString('en',{month:'short',year:'numeric'})}`;
 
   /* Init all charts after a tick (ensures canvas is ready) */
-  setTimeout(initAllCharts, 80);
+  loadReportData();
 });
 </script>
 </body>

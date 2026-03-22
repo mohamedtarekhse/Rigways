@@ -610,7 +610,7 @@ function applyLang(lang) {
 function toggleLang() {}
 let session = null;
 
-/* Session helpers — use SapSession from app.js when available */
+/* Session helpers — delegate to SapSession from app.js */
 function getSession() {
   if (typeof SapSession !== 'undefined') return SapSession.get();
   try {
@@ -662,63 +662,11 @@ function startClock() {
 /* ═══════════════════════════════════════════════════════
    DEMO DATA
 ═══════════════════════════════════════════════════════ */
-const ALL_EXPIRING = [
-  { name:'ISO 9001 Certificate',   client:'Acme Corp',      days:3,  type:'Quality', id:'CERT-0012' },
-  { name:'Fire Safety Cert',       client:'Gulf Holdings',  days:7,  type:'Safety',  id:'CERT-0031' },
-  { name:'Electrical Inspection',  client:'Acme Corp',      days:12, type:'Inspection', id:'CERT-0044' },
-  { name:'Pressure Vessel Cert',   client:'Delta Ind.',     days:18, type:'Compliance', id:'CERT-0056' },
-  { name:'OHSAS 18001',            client:'Nile Ventures',  days:22, type:'Safety',  id:'CERT-0071' },
-  { name:'Equipment Calibration',  client:'Acme Corp',      days:27, type:'Technical', id:'CERT-0083' },
-];
 
-const ALL_ACTIVITY = [
-  { user:'Ali T.',   color:'#0070f2', action:'uploaded certificate', target:'Fire Safety Cert', time:'2 min ago',   badge:'info',    badgeText:'Upload' },
-  { user:'Admin',    color:'#bb0000', action:'approved',             target:'OHSAS 18001',       time:'14 min ago',  badge:'success', badgeText:'Approved' },
-  { user:'Admin',    color:'#bb0000', action:'added asset',          target:'Server Rack #12',   time:'1 hr ago',    badge:'info',    badgeText:'New Asset' },
-  { user:'Sara M.',  color:'#e76500', action:'generated report',     target:'Q1 Assets Report',  time:'2 hrs ago',   badge:'neutral', badgeText:'Report' },
-  { user:'Ali T.',   color:'#0070f2', action:'updated status on',    target:'HVAC Unit #03',     time:'3 hrs ago',   badge:'warning', badgeText:'Status' },
-  { user:'Admin',    color:'#bb0000', action:'added client',         target:'Nile Ventures',     time:'Yesterday',   badge:'info',    badgeText:'Client' },
-  { user:'Mohamed',  color:'#188918', action:'viewed',               target:'Asset List C001',   time:'Yesterday',   badge:'neutral', badgeText:'View' },
-];
 
-const APPROVAL_QUEUE = [
-  { id:'CERT-0091', name:'Crane Inspection Cert',  by:'Ali T.',  client:'Acme Corp',      time:'Today 09:12' },
-  { id:'CERT-0092', name:'Gas Safety Certificate', by:'Ali T.',  client:'Gulf Holdings',  time:'Today 08:45' },
-  { id:'CERT-0088', name:'ISO 14001 Renewal',      by:'Ali T.',  client:'Delta Ind.',     time:'Yesterday'   },
-  { id:'CERT-0085', name:'Pressure Test Cert',     by:'Ali T.',  client:'Nile Ventures',  time:'Yesterday'   },
-  { id:'CERT-0079', name:'Electrical Safety',      by:'Ali T.',  client:'Acme Corp',      time:'2 days ago'  },
-];
 
 /* KPI definitions per role */
-const KPI_SETS = {
-  admin: [
-    { label:'Total Assets',        labelAr:'إجمالي الأصول',         value:174, color:'blue',   icon:'asset',  change:'+12 this month' },
-    { label:'Active Clients',      labelAr:'العملاء النشطون',        value:4,   color:'green',  icon:'users',  change:'No change' },
-    { label:'Valid Certificates',  labelAr:'شهادات سارية',           value:89,  color:'green',  icon:'cert',   change:'+7 this month' },
-    { label:'Expiring (30d)',      labelAr:'ينتهي (30 يوم)',         value:14,  color:'orange', icon:'warn',   change:'⚠ Action needed' },
-    { label:'Expired',             labelAr:'منتهية الصلاحية',         value:6,   color:'red',    icon:'err',    change:'🔴 Urgent' },
-    { label:'Pending Approval',    labelAr:'في انتظار الموافقة',      value:5,   color:'gray',   icon:'clock',  change:'Awaiting review' },
-  ],
-  manager: [
-    { label:'Total Assets',        labelAr:'إجمالي الأصول',         value:174, color:'blue',   icon:'asset',  change:'+12 this month' },
-    { label:'Valid Certificates',  labelAr:'شهادات سارية',           value:89,  color:'green',  icon:'cert',   change:'+7 this month' },
-    { label:'Expiring (30d)',      labelAr:'ينتهي (30 يوم)',         value:14,  color:'orange', icon:'warn',   change:'⚠ Action needed' },
-    { label:'Expired',             labelAr:'منتهية الصلاحية',         value:6,   color:'red',    icon:'err',    change:'🔴 Urgent' },
-    { label:'Pending Approval',    labelAr:'في انتظار الموافقة',      value:5,   color:'gray',   icon:'clock',  change:'Awaiting review' },
-  ],
-  technician: [
-    { label:'My Uploads (30d)',    labelAr:'رفعاتي (30 يوم)',        value:12,  color:'blue',   icon:'upload', change:'+3 this week' },
-    { label:'Approved',           labelAr:'موافق عليها',              value:9,   color:'green',  icon:'cert',   change:'75% approval rate' },
-    { label:'Pending',            labelAr:'معلق',                     value:2,   color:'orange', icon:'clock',  change:'Awaiting review' },
-    { label:'Assets I Updated',   labelAr:'الأصول التي حدّثتها',     value:7,   color:'gray',   icon:'asset',  change:'This month' },
-  ],
-  user: [
-    { label:'My Assets',          labelAr:'أصولي',                   value:23,  color:'blue',   icon:'asset',  change:'Assigned to you' },
-    { label:'My Certificates',    labelAr:'شهاداتي',                  value:18,  color:'green',  icon:'cert',   change:'Active' },
-    { label:'Expiring Soon',      labelAr:'ينتهي قريباً',             value:3,   color:'orange', icon:'warn',   change:'Next 30 days' },
-    { label:'Expired',            labelAr:'منتهية الصلاحية',          value:1,   color:'red',    icon:'err',    change:'Needs renewal' },
-  ],
-};
+
 
 const QUICK_ACTIONS = {
   admin: [
@@ -1011,6 +959,172 @@ function showToast(type, title, msg) {
 /* ═══════════════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════════════ */
+
+/* ── Dashboard API data loading ── */
+async function loadDashboardData(role) {
+  try {
+    const [assetRes, certRes, expiringRes, pendingRes, notifRes] = await Promise.all([
+      apiFetch('/api/assets/stats').then(r => r.json()),
+      apiFetch('/api/certificates/stats').then(r => r.json()),
+      apiFetch('/api/certificates/expiring?days=30').then(r => r.json()),
+      apiFetch('/api/certificates?approval_status=pending&limit=10').then(r => r.json()),
+      apiFetch('/api/notifications/unread-count').then(r => r.json()),
+    ]);
+
+    const as = (assetRes.data || assetRes) || {};
+    const cs = (certRes.data || certRes) || {};
+    const expiring = ((expiringRes.data || expiringRes).certificates) || [];
+    const pending  = ((pendingRes.data  || pendingRes).certificates)  || [];
+    const unread   = ((notifRes.data    || notifRes).count)            || 0;
+
+    // Render KPIs
+    renderKPIs(as, cs, role);
+
+    // Render expiry list
+    renderExpiryList(expiring);
+
+    // Render approval queue
+    renderApprovalQueue(pending, role);
+
+    // Update notification badge
+    const badge = document.getElementById('notifBadge');
+    if (badge && unread > 0) {
+      badge.style.display = 'block';
+      badge.textContent = unread > 9 ? '9+' : unread;
+    }
+
+    // Alert strip
+    const alertText = document.getElementById('alertText');
+    if (alertText) {
+      const expCount = cs.expiring || 0;
+      alertText.textContent = expCount > 0
+        ? expCount + ' certificate' + (expCount > 1 ? 's are' : ' is') + ' expiring within 30 days.'
+        : 'All certificates are currently up to date.';
+    }
+
+  } catch(err) {
+    console.error('Dashboard load error:', err);
+    renderKPIs({}, {}, role);
+    renderExpiryList([]);
+    renderApprovalQueue([], role);
+  }
+}
+
+function renderKPIs(as, cs, role) {
+  const grid = document.getElementById('kpiGrid');
+  if (!grid) return;
+  const colorMap = { blue:'#0070f2', green:'#188918', orange:'#e76500', red:'#bb0000', gray:'#6a6d70' };
+  const sets = {
+    admin: [
+      { label:'Total Assets',       value: as.total    ?? '—', color:'blue',   icon:'asset' },
+      { label:'Valid Certificates', value: cs.valid    ?? '—', color:'green',  icon:'cert'  },
+      { label:'Expiring (30d)',     value: cs.expiring ?? '—', color:'orange', icon:'warn'  },
+      { label:'Expired',           value: cs.expired  ?? '—', color:'red',    icon:'err'   },
+      { label:'Pending Approval',  value: cs.pending  ?? '—', color:'gray',   icon:'clock' },
+    ],
+    manager: [
+      { label:'Total Assets',       value: as.total    ?? '—', color:'blue',   icon:'asset' },
+      { label:'Valid Certificates', value: cs.valid    ?? '—', color:'green',  icon:'cert'  },
+      { label:'Expiring (30d)',     value: cs.expiring ?? '—', color:'orange', icon:'warn'  },
+      { label:'Expired',           value: cs.expired  ?? '—', color:'red',    icon:'err'   },
+      { label:'Pending Approval',  value: cs.pending  ?? '—', color:'gray',   icon:'clock' },
+    ],
+    technician: [
+      { label:'Total Assets',       value: as.total    ?? '—', color:'blue',   icon:'asset' },
+      { label:'Valid Certificates', value: cs.valid    ?? '—', color:'green',  icon:'cert'  },
+      { label:'Pending',           value: cs.pending  ?? '—', color:'orange', icon:'clock' },
+      { label:'Expiring (30d)',     value: cs.expiring ?? '—', color:'red',    icon:'warn'  },
+    ],
+    user: [
+      { label:'My Assets',          value: as.total    ?? '—', color:'blue',   icon:'asset' },
+      { label:'My Certificates',    value: cs.total    ?? '—', color:'green',  icon:'cert'  },
+      { label:'Expiring Soon',      value: cs.expiring ?? '—', color:'orange', icon:'warn'  },
+      { label:'Expired',           value: cs.expired  ?? '—', color:'red',    icon:'err'   },
+    ],
+  };
+  const set = sets[role] || sets.user;
+  const icons = {
+    asset:'<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    cert:'<path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>',
+    warn:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    err:'<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+    clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  };
+  grid.innerHTML = set.map(k => `
+    <div class="kpi-card">
+      <div class="kpi-card__icon" style="background:${colorMap[k.color]}15;color:${colorMap[k.color]}">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${icons[k.icon]||icons.asset}</svg>
+      </div>
+      <div class="kpi-card__body">
+        <div class="kpi-card__value" style="color:${colorMap[k.color]}">${k.value}</div>
+        <div class="kpi-card__label">${k.label}</div>
+      </div>
+    </div>`).join('');
+}
+
+function renderExpiryList(certs) {
+  const list = document.getElementById('expiryList');
+  if (!list) return;
+  if (!certs || !certs.length) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--sap-text-secondary);font-size:13px;">No certificates expiring in the next 30 days</div>';
+    return;
+  }
+  const today = new Date(); today.setHours(0,0,0,0);
+  list.innerHTML = certs.slice(0,8).map(cert => {
+    const days = Math.ceil((new Date(cert.expiry_date) - today) / 86400000);
+    const cls  = days <= 7 ? 'red' : days <= 14 ? 'orange' : 'yellow';
+    return `<div class="expiry-item" onclick="window.location.href='certificates.html'" style="cursor:pointer">
+      <div class="expiry-dot expiry-dot--${cls}"></div>
+      <div class="expiry-item__info">
+        <div class="expiry-item__name">${cert.name || cert.cert_number || ''}</div>
+        <div class="expiry-item__sub">${cert.cert_type || ''} · ${cert.cert_number || ''}</div>
+      </div>
+      <div class="expiry-item__days expiry-item__days--${cls}">${days}d left</div>
+    </div>`;
+  }).join('');
+}
+
+function renderApprovalQueue(certs, role) {
+  const card = document.getElementById('approvalCard');
+  if (card && role === 'user') { card.style.display = 'none'; return; }
+  const list = document.getElementById('approvalList');
+  if (!list) return;
+  if (!certs || !certs.length) {
+    list.innerHTML = '<div style="padding:16px;color:var(--sap-text-secondary);font-size:13px;text-align:center;">No pending approvals</div>';
+    return;
+  }
+  const isReadOnly = role === 'technician';
+  list.innerHTML = certs.slice(0,5).map(cert => `
+    <div class="approval-item">
+      <div class="approval-item__info">
+        <div class="approval-item__name">${cert.name || ''}</div>
+        <div class="approval-item__meta">${cert.cert_number||''} · ${cert.cert_type||''} · ${new Date(cert.created_at).toLocaleDateString()}</div>
+      </div>
+      ${isReadOnly ? '<span class="sap-badge sap-badge--pending">Pending</span>' : `
+        <div class="approval-actions">
+          <button class="btn btn-success btn-sm" onclick="dashApproveCert('${cert.id}',this)">✓</button>
+          <button class="btn btn-danger btn-sm"  onclick="dashRejectCert('${cert.id}',this)">✗</button>
+        </div>`}
+    </div>`).join('');
+}
+
+async function dashApproveCert(id, btn) {
+  btn.disabled = true;
+  try {
+    await apiFetch('/api/certificates/' + id, { method:'PATCH', body: JSON.stringify({ approval_status:'approved' }) });
+    btn.closest('.approval-item').querySelector('.approval-actions').innerHTML = '<span class="sap-badge sap-badge--success">Approved</span>';
+    showToast('success','Approved','Certificate approved.');
+  } catch(e) { btn.disabled = false; }
+}
+async function dashRejectCert(id, btn) {
+  btn.disabled = true;
+  try {
+    await apiFetch('/api/certificates/' + id, { method:'PATCH', body: JSON.stringify({ approval_status:'rejected', rejection_reason:'Rejected from dashboard' }) });
+    btn.closest('.approval-item').querySelector('.approval-actions').innerHTML = '<span class="sap-badge sap-badge--error">Rejected</span>';
+    showToast('warning','Rejected','Certificate rejected.');
+  } catch(e) { btn.disabled = false; }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   session = getSession();
   if (!session) return;

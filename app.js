@@ -65,11 +65,8 @@ const SAP_CONFIG = {
 
 /* ================================================================
    API FETCH HELPER
-   Attaches Bearer token to every request automatically.
-   Use this on ALL inner pages instead of raw fetch().
-   Usage:
-     apiFetch('/api/assets').then(r => r.json())
-     apiFetch('/api/assets', { method:'POST', body: JSON.stringify({}) })
+   Auto-attaches Bearer token to every request.
+   Use on all pages: apiFetch('/api/assets').then(r => r.json())
 ================================================================ */
 function apiFetch(path, options = {}) {
   let token = '';
@@ -133,10 +130,10 @@ const SapSession = (() => {
     return s;
   }
 
+
   function logout() {
     const s = get();
     SapEventBus.emit('session:logout', s);
-    // Call API logout with Bearer token (fire-and-forget)
     try {
       const token = s?.token || '';
       fetch('/api/auth/logout', {

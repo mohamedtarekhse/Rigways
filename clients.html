@@ -634,7 +634,7 @@ let currentView = 'card';
 let deleteTargetId = null;
 
 /* ── Auth ── */
-/* Session helpers — use SapSession from app.js when available */
+/* Session helpers — delegate to SapSession from app.js */
 function getSession() {
   if (typeof SapSession !== 'undefined') return SapSession.get();
   try {
@@ -675,40 +675,8 @@ function setView(v) {
 ═══════════════════════════════════════════════════════ */
 const AVATAR_COLORS = ['#0070f2','#188918','#e76500','#bb0000','#7b1fa2','#0277bd','#2e7d32'];
 
-let CLIENTS = [
-  {
-    customerId:'C001', name:'Acme Corporation', industry:'Oil & Gas',
-    contact:'James Wheeler', email:'j.wheeler@acme.com', phone:'+971 50 112 3456',
-    country:'UAE', city:'Dubai', status:'active',
-    contractStart:'2022-01-15', contractEnd:'2025-01-14',
-    notes:'Primary client – high-priority account. Quarterly review required.',
-    color:'#0070f2', assets:8, certs:6, expiring:3,
-  },
-  {
-    customerId:'C002', name:'Gulf Holdings Ltd', industry:'Construction',
-    contact:'Fatima Al-Rashid', email:'f.rashid@gulfholdings.ae', phone:'+971 55 234 5678',
-    country:'UAE', city:'Abu Dhabi', status:'active',
-    contractStart:'2021-06-01', contractEnd:'2024-05-31',
-    notes:'Large construction conglomerate. Multi-site asset tracking.',
-    color:'#188918', assets:5, certs:4, expiring:1,
-  },
-  {
-    customerId:'C003', name:'Delta Industries', industry:'Manufacturing',
-    contact:'Omar Khalil', email:'o.khalil@delta.sa', phone:'+966 11 345 6789',
-    country:'KSA', city:'Riyadh', status:'active',
-    contractStart:'2023-03-10', contractEnd:'2026-03-09',
-    notes:'New client – onboarding in progress. Initial asset survey complete.',
-    color:'#e76500', assets:4, certs:3, expiring:0,
-  },
-  {
-    customerId:'C004', name:'Nile Ventures', industry:'Real Estate',
-    contact:'Sara Hassan', email:'s.hassan@nileventures.eg', phone:'+20 10 456 7890',
-    country:'EGY', city:'Cairo', status:'inactive',
-    contractStart:'2020-09-01', contractEnd:'2023-08-31',
-    notes:'Contract expired – pending renewal negotiations.',
-    color:'#bb0000', assets:3, certs:5, expiring:2,
-  },
-];
+let CLIENTS = [];
+
 
 const STATUS_MAP = {
   active:    { cls:'success', en:'Active',    ar:'نشط' },
@@ -927,59 +895,37 @@ function openEditModal(id) {
 
 function closeModal() { document.getElementById('clientModal').classList.remove('open'); }
 
-function saveClient() {
-  const name    = document.getElementById('f_name').value.trim();
-  const industry= document.getElementById('f_industry').value;
-  const contact = document.getElementById('f_contact').value.trim();
-  const email   = document.getElementById('f_email').value.trim();
-  const country = document.getElementById('f_country').value;
-  const status  = document.getElementById('f_status').value;
-  const editId  = document.getElementById('editClientId').value;
-
-  if (!name || !industry || !contact || !email || !country || !status) {
-    showToast('error',
-      'Required Fields',
-      'Please fill all required fields.');
-    return;
-  }
-
-  if (editId) {
-    const idx = CLIENTS.findIndex(c => c.customerId === editId);
-    if (idx > -1) {
-      CLIENTS[idx] = {
-        ...CLIENTS[idx], name, industry, contact, email,
-        phone:         document.getElementById('f_phone').value,
-        country,
-        city:          document.getElementById('f_city').value,
-        status,
-        contractStart: document.getElementById('f_contractStart').value,
-        contractEnd:   document.getElementById('f_contractEnd').value,
-        notes:         document.getElementById('f_notes').value,
-      };
-      showToast('success',
-        'Updated',
-        `"${name}" updated successfully.`);
-    }
-  } else {
-    const newId = nextCustomerId();
-    CLIENTS.push({
-      customerId: newId, name, industry, contact, email,
-      phone:         document.getElementById('f_phone').value,
-      country,
-      city:          document.getElementById('f_city').value,
-      status,
-      contractStart: document.getElementById('f_contractStart').value,
-      contractEnd:   document.getElementById('f_contractEnd').value,
-      notes:         document.getElementById('f_notes').value,
-      color:         AVATAR_COLORS[CLIENTS.length % AVATAR_COLORS.length],
-      assets: 0, certs: 0, expiring: 0,
-    });
-    showToast('success',
-      'Client Added',
-      `"${name}" added with Customer ID ${newId}.`);
-  }
-  closeModal();
-  renderClients();
+async function saveClient() {
+  const editId = document.getElementById('editClientId')?.value || '';
+  const name   = document.getElementById('f_name')?.value?.trim() || '';
+  if (!name) { showToast('error','Required','Client name is required.'); return; }
+  const clientId = document.getElementById('f_customerId')?.value?.trim().toUpperCase() || ('C' + Date.now().toString().slice(-4));
+  const payload = {
+    name,
+    client_id:      editId ? undefined : clientId,
+    name_ar:        document.getElementById('f_nameAr')?.value || null,
+    industry:       document.getElementById('f_industry')?.value || null,
+    contact:        document.getElementById('f_contact')?.value || null,
+    email:          document.getElementById('f_email')?.value || null,
+    phone:          document.getElementById('f_phone')?.value || null,
+    country:        document.getElementById('f_country')?.value || null,
+    city:           document.getElementById('f_city')?.value || null,
+    status:         document.getElementById('f_status')?.value || 'active',
+    contract_start: document.getElementById('f_contractStart')?.value || null,
+    contract_end:   document.getElementById('f_contractEnd')?.value || null,
+    notes:          document.getElementById('f_notes')?.value || null,
+    color:          document.getElementById('f_color')?.value || '#0070f2',
+  };
+  try {
+    const url    = editId ? '/api/clients/' + editId : '/api/clients';
+    const method = editId ? 'PATCH' : 'POST';
+    const res    = await apiFetch(url, { method, body: JSON.stringify(payload) });
+    const data   = await res.json();
+    if (!data.success) { showToast('error','Save Failed',(data.data||data).error||'Could not save.'); return; }
+    showToast('success', editId ? 'Updated' : 'Added', '"' + name + '" saved.');
+    document.getElementById('clientModal')?.classList.remove('open');
+    await loadClients();
+  } catch(e) { showToast('error','Network Error','Could not save client.'); }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -992,14 +938,16 @@ function openDeleteModal(id) {
     `Delete client "${c?.name||id}" (${id})? This cannot be undone.`;
   document.getElementById('deleteModal').classList.add('open');
 }
-function confirmDelete() {
-  const c = CLIENTS.find(x => x.customerId === deleteTargetId);
-  CLIENTS = CLIENTS.filter(x => x.customerId !== deleteTargetId);
-  document.getElementById('deleteModal').classList.remove('open');
-  showToast('success',
-    'Deleted',
-    `"${c?.name||deleteTargetId}" deleted.`);
-  renderClients();
+async function confirmDelete() {
+  const cl = CLIENTS.find(x => x.id === deleteTargetId);
+  document.getElementById('deleteModal')?.classList.remove('open');
+  try {
+    const res  = await apiFetch('/api/clients/' + deleteTargetId, { method:'DELETE' });
+    const data = await res.json();
+    if (!data.success) { showToast('error','Failed',(data.data||data).error||'Could not delete.'); return; }
+    showToast('success','Deactivated','"' + (cl?.name||deleteTargetId) + '" deactivated.');
+    await loadClients();
+  } catch(e) { showToast('error','Network Error','Could not delete.'); }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1175,6 +1123,18 @@ function showToast(type, title, msg) {
 /* ═══════════════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════════════ */
+
+async function loadClients() {
+  try {
+    const res  = await apiFetch('/api/clients?limit=200');
+    const data = await res.json();
+    const d    = data.data || data;
+    CLIENTS = d.clients || d || [];
+  } catch(e) { CLIENTS = []; }
+  if (typeof renderCards === 'function') renderCards();
+  else if (typeof render === 'function') render();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   session = getSession();
   if (!session) return;
