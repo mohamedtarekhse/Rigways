@@ -1,0 +1,191 @@
+// worker/src/routes/certificates.js
+import { createSupabase }                    from '../lib/supabase.js';
+import { getSession, requireRole }           from '../middleware/jwt.js';
+import { ok, created, badReq, unauth, forbidden, notFound, serverErr } from '../utils/response.js';
+import { validate, pick, compact }           from '../utils/validate.js';
+
+const TYPES    = ['Quality','Safety','Inspection','Compliance','Technical','Environmental','Other'];
+const STATUSES = ['pending','approved','rejected'];
+
+export async function handleCertificates(request, env, path) {
+  const session = await getSession(request, env);
+  if (!session) return unauth(env);
+
+  const method = request.method;
+  const db     = createSupabase(env);
+  const url    = new URL(request.url);
+
+  /* ── GET /api/certificates/expiring?days=30 — dashboard widget ── */
+  if (path === '/certificates/expiring' && method === 'GET') {
+    const days   = parseInt(url.searchParams.get('days') || '30');
+    const today  = new Date().toISOString().split('T')[0];
+    const cutoff = new Date(Date.now() + days * 86_400_000).toISOString().split('T')[0];
+    const filters = { 'approval_status.eq':'approved', 'expiry_date.gte': today, 'expiry_date.lte': cutoff };
+    if (['user','technician'].includes(session.role) && session.customerId)
+      filters['client_id.eq'] = session.customerId;
+    const { data, error } = await db.from('certificates', { select:'*', filters, order:'expiry_date.asc', limit:200 });
+    if (error) return serverErr(env);
+    return ok({ certificates: data || [], days }, env);
+  }
+
+  /* ── GET /api/certificates/stats — dashboard ── */
+  if (path === '/certificates/stats' && method === 'GET') {
+    const today  = new Date().toISOString().split('T')[0];
+    const soon   = new Date(Date.now() + 30 * 86_400_000).toISOString().split('T')[0];
+    const fBase  = {};
+    if (['user','technician'].includes(session.role) && session.customerId)
+      fBase['client_id.eq'] = session.customerId;
+
+    const [total, valid, expiring, expired, pending] = await Promise.all([
+      db.count('certificates', { filters: { ...fBase } }),
+      db.count('certificates', { filters: { ...fBase, 'approval_status.eq':'approved', 'expiry_date.gt': soon } }),
+      db.count('certificates', { filters: { ...fBase, 'approval_status.eq':'approved', 'expiry_date.gte': today, 'expiry_date.lte': soon } }),
+      db.count('certificates', { filters: { ...fBase, 'approval_status.eq':'approved', 'expiry_date.lt': today } }),
+      db.count('certificates', { filters: { ...fBase, 'approval_status.eq':'pending' } }),
+    ]);
+    return ok({ total: total.count, valid: valid.count, expiring: expiring.count, expired: expired.count, pending: pending.count }, env);
+  }
+
+  const idM   = path.match(/^\/certificates\/([^/]+)$/);
+  const certId = idM?.[1];
+
+  /* LIST */
+  if (!certId && method === 'GET') {
+    const limit  = Math.min(parseInt(url.searchParams.get('limit') || '50'),200);
+    const offset = parseInt(url.searchParams.get('offset') || '0');
+    const filters = {};
+    if (['user','technician'].includes(session.role) && session.customerId)
+      filters['client_id.eq'] = session.customerId;
+    if (url.searchParams.get('approval_status')) filters['approval_status.eq'] = url.searchParams.get('approval_status');
+    if (url.searchParams.get('cert_type'))       filters['cert_type.eq']        = url.searchParams.get('cert_type');
+    if (url.searchParams.get('asset_id'))        filters['asset_id.eq']         = url.searchParams.get('asset_id');
+    if (url.searchParams.get('client_id') && requireRole(session,['admin','manager']))
+      filters['client_id.eq'] = url.searchParams.get('client_id');
+    const { data, error } = await db.from('certificates', { select:'*', filters, limit, offset, order:'expiry_date.asc' });
+    if (error) return serverErr(env);
+    return ok({ certificates: data || [], limit, offset }, env);
+  }
+
+  /* GET ONE */
+  if (certId && method === 'GET') {
+    const { data } = await db.from('certificates', { filters: { 'id.eq': certId }, select:'*', limit:1 });
+    const cert = Array.isArray(data) ? data[0] : data;
+    if (!cert) return notFound('Certificate', env);
+    if (['user','technician'].includes(session.role) && session.customerId && cert.client_id !== session.customerId)
+      return forbidden(env);
+    return ok(cert, env);
+  }
+
+  /* CREATE */
+  if (!certId && method === 'POST') {
+    if (!requireRole(session, ['admin','manager','technician'])) return forbidden(env);
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON','BAD_JSON',env); }
+    const { valid, errors } = validate(body, {
+      name:        { required: true, type:'string', minLength:2, maxLength:200 },
+      cert_type:   { required: true, type:'string', enum: TYPES },
+      asset_id:    { required: true, type:'string' },
+      issued_by:   { required: true, type:'string', minLength:2, maxLength:200 },
+      issue_date:  { required: true, type:'string', pattern:/^\d{4}-\d{2}-\d{2}$/ },
+      expiry_date: { required: true, type:'string', pattern:/^\d{4}-\d{2}-\d{2}$/ },
+    });
+    if (!valid) return badReq(errors.join('; '),'VALIDATION',env);
+
+    // Verify asset exists
+    const { data: aRows } = await db.from('assets', { filters: { 'id.eq': body.asset_id }, select:'id,client_id', limit:1 });
+    const asset = Array.isArray(aRows) ? aRows[0] : aRows;
+    if (!asset) return notFound('Asset', env);
+    if (session.role === 'technician' && session.customerId && asset.client_id !== session.customerId)
+      return forbidden(env);
+
+    const { data, error } = await db.insert('certificates', {
+      name:            body.name,
+      cert_type:       body.cert_type,
+      asset_id:        body.asset_id,
+      client_id:       body.client_id || asset.client_id || null,
+      inspector_id:    body.inspector_id || null,
+      issued_by:       body.issued_by,
+      issue_date:      body.issue_date,
+      expiry_date:     body.expiry_date,
+      file_name:       body.file_name || null,
+      file_url:        body.file_url  || null,
+      notes:           body.notes     || null,
+      approval_status: session.role === 'admin' ? 'approved' : 'pending',
+      uploaded_by:     session.sub,
+    });
+    if (error) return serverErr(env);
+    const cert = Array.isArray(data) ? data[0] : data;
+
+    // Notify managers/admins about pending certs
+    if (cert.approval_status === 'pending') await _notifyApprovers(db, session, cert);
+    return created(cert, env);
+  }
+
+  /* UPDATE / APPROVE / REJECT */
+  if (certId && method === 'PATCH') {
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON','BAD_JSON',env); }
+    const { data: ex } = await db.from('certificates', { filters: { 'id.eq': certId }, select:'*', limit:1 });
+    const existing = Array.isArray(ex) ? ex[0] : ex;
+    if (!existing) return notFound('Certificate', env);
+
+    const isUploader = existing.uploaded_by === session.sub;
+    const isApprover = requireRole(session, ['admin','manager']);
+    if (!isUploader && !isApprover) return forbidden(env);
+    if (isUploader && !isApprover && existing.approval_status !== 'pending')
+      return badReq('Cannot edit a reviewed certificate','INVALID_STATE',env);
+    if (!isApprover && body.approval_status)
+      return forbidden(env);
+
+    const allowed = isApprover
+      ? ['name','cert_type','issued_by','issue_date','expiry_date','file_name','file_url','notes','approval_status','rejection_reason','inspector_id']
+      : ['name','cert_type','issued_by','issue_date','expiry_date','file_name','file_url','notes'];
+
+    const update = compact({
+      ...pick(body, allowed),
+      updated_at:  new Date().toISOString(),
+      ...(body.approval_status && isApprover ? { reviewed_by: session.sub, reviewed_at: new Date().toISOString() } : {}),
+    });
+    const { data, error } = await db.update('certificates', update, { filters: { 'id.eq': certId } });
+    if (error) return serverErr(env);
+    const updated = Array.isArray(data) ? data[0] : data;
+
+    // Notify uploader of decision
+    if (body.approval_status && body.approval_status !== existing.approval_status && existing.uploaded_by)
+      await _notifyUser(db, existing.uploaded_by, 'cert_reviewed', `Certificate ${body.approval_status}`,
+        `Your certificate "${updated.name}" has been ${body.approval_status}.`, 'certificate', certId);
+
+    return ok(updated || existing, env);
+  }
+
+  /* DELETE */
+  if (certId && method === 'DELETE') {
+    if (!requireRole(session, ['admin'])) return forbidden(env);
+    const { data: ex } = await db.from('certificates', { filters: { 'id.eq': certId }, select:'id', limit:1 });
+    if (!(Array.isArray(ex) ? ex[0] : ex)) return notFound('Certificate', env);
+    await db.delete('certificates', { filters: { 'id.eq': certId } });
+    return ok({ id: certId, deleted: true }, env);
+  }
+
+  return badReq('Not found','NOT_FOUND',env);
+}
+
+async function _notifyApprovers(db, session, cert) {
+  try {
+    const { data: approvers } = await db.from('users', {
+      filters: { 'role.in': ['admin','manager'], 'is_active.is': true }, select: 'id',
+    });
+    if (!Array.isArray(approvers)) return;
+    const notifs = approvers.filter(u => u.id !== session.sub).map(u => ({
+      user_id: u.id, type: 'cert_uploaded',
+      title: 'Certificate Pending Approval',
+      body:  `${session.name} uploaded "${cert.name}" — awaiting review.`,
+      ref_type: 'certificate', ref_id: cert.id, is_read: false,
+    }));
+    if (notifs.length) await db.insert('notifications', notifs);
+  } catch(e) { console.warn('Notify failed:', e); }
+}
+
+async function _notifyUser(db, userId, type, title, body, refType, refId) {
+  try {
+    await db.insert('notifications', { user_id: userId, type, title, body, ref_type: refType, ref_id: refId, is_read: false });
+  } catch(e) { console.warn('Notify failed:', e); }
+}
