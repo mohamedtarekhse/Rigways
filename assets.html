@@ -1264,11 +1264,11 @@ function renderTable() {
 
   /* Search */
   if (search) data = data.filter(a =>
-    (a.name     || '').toLowerCase().includes(search) ||
-    (a.assetId  || '').toLowerCase().includes(search) ||
-    (a.serial   || '').toLowerCase().includes(search) ||
-    (a.location || '').toLowerCase().includes(search) ||
-    (a.type     || '').toLowerCase().includes(search)
+    a.name.toLowerCase().includes(search) ||
+    a.assetId.toLowerCase().includes(search) ||
+    a.serial.toLowerCase().includes(search) ||
+    a.location.toLowerCase().includes(search) ||
+    a.type.toLowerCase().includes(search)
   );
 
   /* Sort */
@@ -1583,79 +1583,90 @@ function openEditModal(id) {
 
 function closeModal() { document.getElementById('assetModal').classList.remove('open'); }
 
-async function saveAsset(e) {
+function saveAsset(e) {
   if (e && e.preventDefault) e.preventDefault();
-  const name          = document.getElementById('f_name').value.trim();
-  const type          = document.getElementById('f_type').value;
-  const status        = document.getElementById('f_status').value;
-  const location      = document.getElementById('f_location')?.value || '';
-  const client        = document.getElementById('f_client')?.value || session?.customerId || '';
-  const serial        = document.getElementById('f_serial')?.value?.trim() || '';
-  const zoneEquipment = document.getElementById('f_zone_equipment')?.value?.trim() || '';
-  const appliedStd    = document.getElementById('f_appliedStandard')?.value?.trim() || '';
-  const notes         = document.getElementById('f_notes')?.value || '';
-  const editId        = document.getElementById('editAssetId')?.value || '';
-
-  if (!name || !type || !status) {
-    showToast('error','Required','Name, type and status are required.'); return;
+  const name     = document.getElementById('f_name').value.trim();
+  const type     = document.getElementById('f_type').value;
+  const status   = document.getElementById('f_status').value;
+  const location = document.getElementById('f_location').value;
+  const appliedStandard = document.getElementById('f_appliedStandard').value.trim();
+  const client   = document.getElementById('f_client').value || session.customerId;
+  if (!name || !type || !status || !location || !client) {
+    showToast('error',
+      'Required Fields',
+      'Please fill all required fields.');
+    return;
   }
+
+  const serial = document.getElementById('f_serial').value.trim();
+  const zoneEquipment = document.getElementById('f_zone_equipment').value.trim();
+
   if (!serial) {
-    showToast('error','Required','Serial number is required.');
-    document.getElementById('f_serial')?.focus(); return;
+    showToast('error', 'Required', 'Serial Number is required.');
+    document.getElementById('f_serial').focus();
+    return;
+  }
+  if (!zoneEquipment) {
+    showToast('error', 'Required', 'Zone of Equipment is required.');
+    document.getElementById('f_zone_equipment').focus();
+    return;
   }
 
-  const payload = {
-    name,
-    asset_type:          type,
-    status,
-    functional_location: location || null,
-    client_id:           client   || null,
-    serial_number:       serial,
-    description:         appliedStd   || null,
-    model:               zoneEquipment || null,
-    notes:               notes || null,
-  };
-
-  try {
-    const url    = editId ? `/api/assets/${editId}` : '/api/assets';
-    const method = editId ? 'PATCH' : 'POST';
-    if (!editId) payload.asset_number = 'AST-' + Date.now();
-
-    const res  = await apiFetch(url, { method, body: JSON.stringify(payload) });
-    const data = await res.json();
-    const d    = data.data || data;
-
-    if (!data.success) {
-      showToast('error','Save Failed', d.error || data.error || 'Could not save asset.'); return;
-    }
-
-    if (editId) {
-      const idx = ASSETS.findIndex(a => a.assetId === editId);
-      if (idx > -1) ASSETS[idx] = { ...ASSETS[idx], ...d,
-        assetId:  d.asset_number || d.id || editId,
-        type:     d.asset_type   || '',
-        serial:   d.serial_number || '',
-        location: d.functional_location || '',
-        client:   d.client_id    || '',
-      };
-      showToast('success','Updated', `"${name}" updated successfully.`);
-    } else {
-      ASSETS.push({ ...d,
-        assetId:  d.asset_number || d.id,
-        type:     d.asset_type   || '',
-        serial:   d.serial_number || '',
-        location: d.functional_location || '',
-        client:   d.client_id    || '',
-      });
-      showToast('success','Added', `"${name}" added successfully.`);
-    }
-    closeModal();
-    renderTable();
-  } catch(err) {
-    showToast('error','Network Error','Could not save asset. Please try again.');
+  const editId = document.getElementById('editAssetId').value;
+  // Duplicate serial check — serial must be unique across all assets
+  const duplicate = ASSETS.find(a => a.serial === serial && a.assetId !== editId);
+  if (duplicate) {
+    showToast('error', 'Duplicate Serial', `Serial "${serial}" is already used by "${duplicate.name}" (${duplicate.assetId}).`);
+    document.getElementById('f_serial').focus();
+    return;
   }
+
+  const isTech = session.role === 'technician';
+
+  if (editId) {
+    const idx = ASSETS.findIndex(a => a.assetId === editId);
+    if (idx > -1) {
+      const old = ASSETS[idx];
+      if (isTech && old.status !== status) {
+        ASSETS[idx]._pendingStatus = status;
+        showToast('info',
+          'Request Sent',
+          'Status change request sent to Admin for approval.');
+      } else {
+        const oldLocation = old.location;
+        ASSETS[idx] = { ...old, name, type,
+          serial, status, location, appliedStandard,
+          zoneEquipment,
+          zone: zoneEquipment,
+          client,
+          notes: document.getElementById('f_notes').value };
+        // Auto-log transfer if location changed
+        if (oldLocation && oldLocation !== location) {
+          logTransfer(old.assetId, oldLocation, location, session.name, 'Updated via edit modal', new Date().toISOString().split('T')[0]);
+        }
+        showToast('success',
+          'Updated',
+          `${name} updated successfully.`);
+      }
+    }
+  } else {
+    const newId = 'AST-' + String(ASSETS.length + 1).padStart(4,'0');
+    ASSETS.push({
+      assetId: newId, name, type,
+      serial, status, location, appliedStandard,
+      zoneEquipment,
+      zone: zoneEquipment,
+      client,
+      notes:    document.getElementById('f_notes').value
+    });
+    showToast('success',
+      'Added',
+      `${name} (${newId}) added successfully.`);
+  }
+
+  closeModal();
+  renderTable();
 }
-
 
 /* ═══════════════════════════════════════════════════════
    STATUS MODAL (Technician)
@@ -2166,180 +2177,6 @@ function exportPDF() {
       🖨 Print / Save as PDF
     </button>
   </div>
-
-<!-- ══ DEBUG PANEL — remove before final delivery ══ -->
-<div id="debugPanel" style="
-  position:fixed;bottom:16px;left:16px;z-index:99999;
-  background:#1a1a2e;color:#e2e8f0;border-radius:12px;
-  padding:16px;width:320px;max-height:70vh;overflow-y:auto;
-  font-family:monospace;font-size:12px;box-shadow:0 8px 32px rgba(0,0,0,.5);
-  display:none;">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-    <strong style="color:#60a5fa;">🔧 Debug Panel</strong>
-    <button onclick="document.getElementById('debugPanel').style.display='none'"
-      style="background:#ef4444;border:none;color:#fff;border-radius:6px;padding:2px 8px;cursor:pointer;">✕</button>
-  </div>
-  <div id="debugOut" style="white-space:pre-wrap;line-height:1.6;"></div>
-  <button onclick="runDebug()" style="
-    margin-top:12px;width:100%;background:#3b82f6;border:none;color:#fff;
-    border-radius:8px;padding:8px;cursor:pointer;font-size:13px;">
-    ▶ Run All Tests
-  </button>
-  <button onclick="testMassDelete()" style="
-    margin-top:6px;width:100%;background:#ef4444;border:none;color:#fff;
-    border-radius:8px;padding:8px;cursor:pointer;font-size:13px;">
-    ▶ Test Mass Delete
-  </button>
-  <button onclick="testSingleSave()" style="
-    margin-top:6px;width:100%;background:#10b981;border:none;color:#fff;
-    border-radius:8px;padding:8px;cursor:pointer;font-size:13px;">
-    ▶ Test Single Save
-  </button>
-</div>
-
-<!-- Floating trigger button -->
-<button onclick="document.getElementById('debugPanel').style.display='block'"
-  style="position:fixed;bottom:16px;left:16px;z-index:99998;
-  background:#1a1a2e;color:#60a5fa;border:2px solid #3b82f6;
-  border-radius:50%;width:44px;height:44px;font-size:18px;
-  cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.4);" title="Debug">🔧</button>
-
-<script>
-function debugLog(msg, color) {
-  const out = document.getElementById('debugOut');
-  const line = document.createElement('div');
-  line.style.color = color || '#e2e8f0';
-  line.textContent = msg;
-  out.appendChild(line);
-}
-function debugClear() { document.getElementById('debugOut').innerHTML = ''; }
-
-async function runDebug() {
-  debugClear();
-  debugLog('=== DIAGNOSTICS ===', '#60a5fa');
-
-  // 1. apiFetch
-  debugLog('apiFetch: ' + typeof apiFetch, typeof apiFetch === 'function' ? '#10b981' : '#ef4444');
-
-  // 2. Session
-  try {
-    const s = JSON.parse(sessionStorage.getItem('sap_session') || '{}');
-    debugLog('token: ' + (s.token ? '✓ exists' : '✗ MISSING'), s.token ? '#10b981' : '#ef4444');
-    debugLog('role: ' + (s.role || 'MISSING'), s.role ? '#10b981' : '#ef4444');
-    debugLog('token[0:20]: ' + (s.token||'').slice(0,20) + '...', '#94a3b8');
-    window._debugToken = s.token;
-    window._debugSession = s;
-  } catch(e) {
-    debugLog('Session parse error: ' + e.message, '#ef4444');
-  }
-
-  // 3. GET assets
-  debugLog('--- GET /api/assets ---', '#60a5fa');
-  try {
-    const r = await fetch('/api/assets?limit=1', {
-      headers: { 'Authorization': 'Bearer ' + (window._debugToken||'') }
-    });
-    debugLog('status: ' + r.status, r.status === 200 ? '#10b981' : '#ef4444');
-    const d = await r.json();
-    debugLog('success: ' + d.success, d.success ? '#10b981' : '#ef4444');
-    const assets = d.data?.assets || d.data || [];
-    debugLog('count: ' + assets.length, '#94a3b8');
-    if (assets[0]) {
-      window._debugAssetId = assets[0].id;
-      debugLog('first id: ' + assets[0].id?.slice(0,8) + '...', '#94a3b8');
-    }
-    if (!d.success) debugLog('error: ' + d.error, '#ef4444');
-  } catch(e) {
-    debugLog('GET error: ' + e.message, '#ef4444');
-  }
-
-  // 4. PATCH asset
-  debugLog('--- PATCH /api/assets/:id ---', '#60a5fa');
-  if (window._debugAssetId) {
-    try {
-      const r = await fetch('/api/assets/' + window._debugAssetId, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + (window._debugToken||'')
-        },
-        body: JSON.stringify({ notes: 'debug-test-' + Date.now() })
-      });
-      debugLog('status: ' + r.status, r.status === 200 ? '#10b981' : '#ef4444');
-      const d = await r.json();
-      debugLog('success: ' + d.success, d.success ? '#10b981' : '#ef4444');
-      if (!d.success) debugLog('error: ' + (d.data?.error||d.error||JSON.stringify(d)), '#ef4444');
-    } catch(e) {
-      debugLog('PATCH error: ' + e.message, '#ef4444');
-    }
-  } else {
-    debugLog('No asset ID — GET failed', '#f59e0b');
-  }
-
-  debugLog('=== DONE ===', '#60a5fa');
-}
-
-async function testMassDelete() {
-  debugClear();
-  debugLog('=== MASS DELETE TEST ===', '#60a5fa');
-  const ids = typeof getSelectedIds === 'function' ? getSelectedIds() : [];
-  debugLog('selected IDs: ' + ids.length, ids.length ? '#10b981' : '#f59e0b');
-  if (!ids.length) {
-    debugLog('Select checkboxes first, then press this button', '#f59e0b');
-    return;
-  }
-  for (const id of ids) {
-    try {
-      const r = await fetch('/api/assets/' + id, {
-        method: 'DELETE',
-        headers: { 'Authorization': 'Bearer ' + (window._debugToken || JSON.parse(sessionStorage.getItem('sap_session')||'{}').token || '') }
-      });
-      debugLog('DELETE ' + id.slice(0,8) + '... status: ' + r.status, r.status < 300 ? '#10b981' : '#ef4444');
-      const d = await r.json();
-      debugLog('  result: ' + (d.success ? 'OK' : d.error || JSON.stringify(d)), d.success ? '#10b981' : '#ef4444');
-    } catch(e) {
-      debugLog('  error: ' + e.message, '#ef4444');
-    }
-  }
-}
-
-async function testSingleSave() {
-  debugClear();
-  debugLog('=== SINGLE SAVE TEST ===', '#60a5fa');
-  if (!window._debugAssetId) {
-    await runDebug();
-    debugClear();
-    debugLog('=== SINGLE SAVE TEST ===', '#60a5fa');
-  }
-  if (!window._debugAssetId) {
-    debugLog('Run diagnostics first to get an asset ID', '#f59e0b');
-    return;
-  }
-  const testNote = 'persist-test-' + Date.now();
-  debugLog('Writing: ' + testNote, '#94a3b8');
-  try {
-    const token = window._debugToken || JSON.parse(sessionStorage.getItem('sap_session')||'{}').token || '';
-    const r = await fetch('/api/assets/' + window._debugAssetId, {
-      method: 'PATCH',
-      headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+token },
-      body: JSON.stringify({ notes: testNote })
-    });
-    debugLog('PATCH status: ' + r.status, r.status===200?'#10b981':'#ef4444');
-    const d = await r.json();
-    debugLog('success: ' + d.success, d.success?'#10b981':'#ef4444');
-    if (d.success) {
-      debugLog('Saved! Now refresh the page and check if the note persists in DB', '#10b981');
-      debugLog('Note written: ' + testNote, '#94a3b8');
-    } else {
-      debugLog('FAILED: ' + (d.data?.error||d.error||JSON.stringify(d)), '#ef4444');
-    }
-  } catch(e) {
-    debugLog('Error: ' + e.message, '#ef4444');
-  }
-}
-</script>
-<!-- ══ END DEBUG PANEL ══ -->
-
 </body></html>`;
 
   const win = window.open('', '_blank', 'width=1000,height=700');
@@ -2457,18 +2294,13 @@ async function loadAssets() {
     const d      = data.data || data;
     ASSETS = (d.assets || d || []).map(a => ({
       ...a,
-      assetId:   a.asset_number  || a.id    || '',
-      type:      a.asset_type    || '',
-      serial:    a.serial_number || '',
+      assetId:   a.asset_number || a.id,
+      type:      a.asset_type,
+      serial:    a.serial_number,
       location:  a.functional_location || '',
-      client:    a.client_id     || '',
-      notes:     a.notes         || '',
+      client:    a.client_id || '',
     }));
-  } catch(e) {
-    console.error('loadAssets error:', e);
-    ASSETS = [];
-    showToast('error', 'Load Failed', 'Could not load assets: ' + (e?.message || String(e)));
-  }
+  } catch(e) { ASSETS = []; }
   renderTable();
 }
 
@@ -2537,205 +2369,5 @@ document.addEventListener('DOMContentLoaded', () => {
   loadColState();
 });
 </script>
-
-<!-- ══ DEBUG PANEL — remove before final delivery ══ -->
-<div id="debugPanel" style="
-  position:fixed;bottom:16px;left:16px;z-index:99999;
-  background:#1a1a2e;color:#e2e8f0;border-radius:12px;
-  padding:16px;width:320px;max-height:70vh;overflow-y:auto;
-  font-family:monospace;font-size:12px;box-shadow:0 8px 32px rgba(0,0,0,.5);
-  display:none;">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-    <strong style="color:#60a5fa;">🔧 Debug Panel</strong>
-    <button onclick="document.getElementById('debugPanel').style.display='none'"
-      style="background:#ef4444;border:none;color:#fff;border-radius:6px;padding:2px 8px;cursor:pointer;">✕</button>
-  </div>
-  <div id="debugOut" style="white-space:pre-wrap;line-height:1.6;"></div>
-  <button onclick="runDebug()" style="
-    margin-top:12px;width:100%;background:#3b82f6;border:none;color:#fff;
-    border-radius:8px;padding:8px;cursor:pointer;font-size:13px;">
-    ▶ Run All Tests
-  </button>
-  <button onclick="testMassDelete()" style="
-    margin-top:6px;width:100%;background:#ef4444;border:none;color:#fff;
-    border-radius:8px;padding:8px;cursor:pointer;font-size:13px;">
-    ▶ Test Mass Delete
-  </button>
-  <button onclick="testSingleSave()" style="
-    margin-top:6px;width:100%;background:#10b981;border:none;color:#fff;
-    border-radius:8px;padding:8px;cursor:pointer;font-size:13px;">
-    ▶ Test Single Save
-  </button>
-</div>
-
-<!-- Floating trigger button -->
-<button onclick="document.getElementById('debugPanel').style.display='block'"
-  style="position:fixed;bottom:16px;left:16px;z-index:99998;
-  background:#1a1a2e;color:#60a5fa;border:2px solid #3b82f6;
-  border-radius:50%;width:44px;height:44px;font-size:18px;
-  cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.4);" title="Debug">🔧</button>
-
-<script>
-/* ── API error interceptor — remove before final delivery ──
-   Shows a toast for any API call that fails so nothing is silent */
-const _origFetch = window.fetch;
-window.fetch = async function(...args) {
-  try {
-    const res = await _origFetch(...args);
-    const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
-    if (!res.ok && url.includes('/api/')) {
-      console.error('API call failed:', url, res.status);
-      if (typeof showToast === 'function') {
-        showToast('error', 'API Error ' + res.status, url.replace('/api',''));
-      }
-    }
-    return res;
-  } catch(e) {
-    const url = typeof args[0] === 'string' ? args[0] : '';
-    console.error('Fetch threw:', url, e.message);
-    if (url.includes('/api/') && typeof showToast === 'function') {
-      showToast('error', 'Network Error', url.replace('/api','') + ': ' + e.message);
-    }
-    throw e;
-  }
-};
-/* ── End interceptor ── */
-
-
-function debugLog(msg, color) {
-  const out = document.getElementById('debugOut');
-  const line = document.createElement('div');
-  line.style.color = color || '#e2e8f0';
-  line.textContent = msg;
-  out.appendChild(line);
-}
-function debugClear() { document.getElementById('debugOut').innerHTML = ''; }
-
-async function runDebug() {
-  debugClear();
-  debugLog('=== DIAGNOSTICS ===', '#60a5fa');
-
-  // 1. apiFetch
-  debugLog('apiFetch: ' + typeof apiFetch, typeof apiFetch === 'function' ? '#10b981' : '#ef4444');
-
-  // 2. Session
-  try {
-    const s = JSON.parse(sessionStorage.getItem('sap_session') || '{}');
-    debugLog('token: ' + (s.token ? '✓ exists' : '✗ MISSING'), s.token ? '#10b981' : '#ef4444');
-    debugLog('role: ' + (s.role || 'MISSING'), s.role ? '#10b981' : '#ef4444');
-    debugLog('token[0:20]: ' + (s.token||'').slice(0,20) + '...', '#94a3b8');
-    window._debugToken = s.token;
-    window._debugSession = s;
-  } catch(e) {
-    debugLog('Session parse error: ' + e.message, '#ef4444');
-  }
-
-  // 3. GET assets
-  debugLog('--- GET /api/assets ---', '#60a5fa');
-  try {
-    const r = await fetch('/api/assets?limit=1', {
-      headers: { 'Authorization': 'Bearer ' + (window._debugToken||'') }
-    });
-    debugLog('status: ' + r.status, r.status === 200 ? '#10b981' : '#ef4444');
-    const d = await r.json();
-    debugLog('success: ' + d.success, d.success ? '#10b981' : '#ef4444');
-    const assets = d.data?.assets || d.data || [];
-    debugLog('count: ' + assets.length, '#94a3b8');
-    if (assets[0]) {
-      window._debugAssetId = assets[0].id;
-      debugLog('first id: ' + assets[0].id?.slice(0,8) + '...', '#94a3b8');
-    }
-    if (!d.success) debugLog('error: ' + d.error, '#ef4444');
-  } catch(e) {
-    debugLog('GET error: ' + e.message, '#ef4444');
-  }
-
-  // 4. PATCH asset
-  debugLog('--- PATCH /api/assets/:id ---', '#60a5fa');
-  if (window._debugAssetId) {
-    try {
-      const r = await fetch('/api/assets/' + window._debugAssetId, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + (window._debugToken||'')
-        },
-        body: JSON.stringify({ notes: 'debug-test-' + Date.now() })
-      });
-      debugLog('status: ' + r.status, r.status === 200 ? '#10b981' : '#ef4444');
-      const d = await r.json();
-      debugLog('success: ' + d.success, d.success ? '#10b981' : '#ef4444');
-      if (!d.success) debugLog('error: ' + (d.data?.error||d.error||JSON.stringify(d)), '#ef4444');
-    } catch(e) {
-      debugLog('PATCH error: ' + e.message, '#ef4444');
-    }
-  } else {
-    debugLog('No asset ID — GET failed', '#f59e0b');
-  }
-
-  debugLog('=== DONE ===', '#60a5fa');
-}
-
-async function testMassDelete() {
-  debugClear();
-  debugLog('=== MASS DELETE TEST ===', '#60a5fa');
-  const ids = typeof getSelectedIds === 'function' ? getSelectedIds() : [];
-  debugLog('selected IDs: ' + ids.length, ids.length ? '#10b981' : '#f59e0b');
-  if (!ids.length) {
-    debugLog('Select checkboxes first, then press this button', '#f59e0b');
-    return;
-  }
-  for (const id of ids) {
-    try {
-      const r = await fetch('/api/assets/' + id, {
-        method: 'DELETE',
-        headers: { 'Authorization': 'Bearer ' + (window._debugToken || JSON.parse(sessionStorage.getItem('sap_session')||'{}').token || '') }
-      });
-      debugLog('DELETE ' + id.slice(0,8) + '... status: ' + r.status, r.status < 300 ? '#10b981' : '#ef4444');
-      const d = await r.json();
-      debugLog('  result: ' + (d.success ? 'OK' : d.error || JSON.stringify(d)), d.success ? '#10b981' : '#ef4444');
-    } catch(e) {
-      debugLog('  error: ' + e.message, '#ef4444');
-    }
-  }
-}
-
-async function testSingleSave() {
-  debugClear();
-  debugLog('=== SINGLE SAVE TEST ===', '#60a5fa');
-  if (!window._debugAssetId) {
-    await runDebug();
-    debugClear();
-    debugLog('=== SINGLE SAVE TEST ===', '#60a5fa');
-  }
-  if (!window._debugAssetId) {
-    debugLog('Run diagnostics first to get an asset ID', '#f59e0b');
-    return;
-  }
-  const testNote = 'persist-test-' + Date.now();
-  debugLog('Writing: ' + testNote, '#94a3b8');
-  try {
-    const token = window._debugToken || JSON.parse(sessionStorage.getItem('sap_session')||'{}').token || '';
-    const r = await fetch('/api/assets/' + window._debugAssetId, {
-      method: 'PATCH',
-      headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+token },
-      body: JSON.stringify({ notes: testNote })
-    });
-    debugLog('PATCH status: ' + r.status, r.status===200?'#10b981':'#ef4444');
-    const d = await r.json();
-    debugLog('success: ' + d.success, d.success?'#10b981':'#ef4444');
-    if (d.success) {
-      debugLog('Saved! Now refresh the page and check if the note persists in DB', '#10b981');
-      debugLog('Note written: ' + testNote, '#94a3b8');
-    } else {
-      debugLog('FAILED: ' + (d.data?.error||d.error||JSON.stringify(d)), '#ef4444');
-    }
-  } catch(e) {
-    debugLog('Error: ' + e.message, '#ef4444');
-  }
-}
-</script>
-<!-- ══ END DEBUG PANEL ══ -->
-
 </body>
 </html>
