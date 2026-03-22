@@ -9,7 +9,6 @@
     font-src 'self' https://fonts.gstatic.com;
     img-src 'self' data: blob:;
     connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787;
-    frame-ancestors 'self';
     object-src 'none';
     base-uri 'self';
   "/>
@@ -582,16 +581,13 @@ function h(s){if(s===null||s===undefined)return '';return String(s).replace(/&/g
 function safeUrl(url){if(!url||typeof url!=='string')return null;try{const u=new URL(url);if(u.protocol!=='http:'&&u.protocol!=='https:')return null;return url;}catch{return null;}}
 function safeOpen(url){const safe=safeUrl(url);if(!safe){showToast('error','Invalid URL','Only http and https links can be opened.');return;}window.open(safe,'_blank','noopener,noreferrer');}
 
-/* ── API base URL ──
-   Production (Cloudflare Pages): same-origin, so '' works for /api/...
-   Local dev: run  npx wrangler pages dev . --proxy 8787
-   That serves everything on :8788, proxying /api/* to the Worker on :8787. ── */
+/* ── API base URL — update before deploying ── */
 const API_BASE = (function () {
   const h = window.location.hostname, p = window.location.port;
   if (h === 'localhost' || h === '127.0.0.1') {
     return p === '8788' ? '' : 'http://localhost:8787';
   }
-  return '';
+  return ''; // production: same-origin — Cloudflare Pages serves /api/* via _worker.js
 }());
 
 /* ── Language (EN only — Arabic removed) ── */
@@ -612,7 +608,7 @@ function togglePwd() {
   }
 }
 
-/* ── Login ── */
+/* ── Login — calls the Cloudflare Workers backend API ── */
 async function handleLogin(e) {
   e.preventDefault();
 
@@ -622,9 +618,8 @@ async function handleLogin(e) {
   const uInput   = document.getElementById('username');
   const pInput   = document.getElementById('password');
   const btn      = document.getElementById('loginBtn');
-  const SIGN_IN_BTN = '<svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg><span>Sign In</span>';
 
-  if (!username || !password) {
+  if (!email || !password) {
     errorBox.classList.add('show');
     document.getElementById('errorMsg').textContent = 'Username and password are required.';
     return;
@@ -634,7 +629,7 @@ async function handleLogin(e) {
   btn.disabled  = true;
 
   try {
-    const res  = await fetch(`${API_BASE}/api/auth/login`, {
+    const res = await fetch(`${API_BASE}/api/auth/login`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ username, password }),
@@ -647,7 +642,7 @@ async function handleLogin(e) {
       if (text) data = JSON.parse(text);
     } catch(parseErr) {
       console.error('Non-JSON response, status:', res.status);
-      throw new Error('API not reachable — check that functions/api/[[route]].js is deployed and secrets are set in Cloudflare Pages.');
+      throw new Error('Server returned an unexpected response.');
     }
 
     if (!res.ok) {
@@ -658,12 +653,12 @@ async function handleLogin(e) {
       pInput.classList.add('error');
       pInput.style.animation = 'shake .4s ease';
       setTimeout(() => { pInput.style.animation = ''; }, 400);
-      btn.innerHTML = SIGN_IN_BTN;
-      btn.disabled  = false;
+      btn.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg><span>Sign In</span>';
+      btn.disabled = false;
       return;
     }
 
-    /* Store token + display info — token is read by apiFetch() on every page */
+    /* Store token + all fields needed by inner pages */
     sessionStorage.setItem('sap_session', JSON.stringify({
       token:      data.token,
       userId:     data.user.id,
@@ -680,15 +675,16 @@ async function handleLogin(e) {
     pInput.classList.remove('error');
 
     const roleLabel = { admin:'Administrator', manager:'Manager', technician:'Technician', user:'Regular User' };
-    showToast('success', 'Signed In', `Welcome, ${h(data.user.name)} — ${roleLabel[data.user.role] || data.user.role}`);
+    showToast('success', 'Signed In',
+      `Welcome, ${h(data.user.name)} — ${roleLabel[data.user.role] || data.user.role}`);
+
     setTimeout(() => { window.location.href = 'dashboard.html'; }, 900);
 
-  } catch (err) {
-    console.error('Login error:', err);
+  } catch {
     errorBox.classList.add('show');
     document.getElementById('errorMsg').textContent = 'Network error — please try again.';
-    btn.innerHTML = SIGN_IN_BTN;
-    btn.disabled  = false;
+    btn.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg><span>Sign In</span>';
+    btn.disabled = false;
   }
 }
 
