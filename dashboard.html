@@ -1214,30 +1214,17 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('clientFilterBar').style.display = 'flex';
   }
 
-  /* Render */
-  renderKPIs(role);
-  renderExpiryList(session.customerId);
-  renderActivity();
-  renderApprovalQueue(role);
-  renderQuickActions(role);
-  initCharts();
-  startClock();
+  /* Init charts and clock */
+  if (typeof initCharts === 'function') initCharts();
+  if (typeof startClock === 'function') startClock();
+  if (typeof renderQuickActions === 'function') renderQuickActions(role);
 
-  /* Notification badge */
-  if (role !== 'user') {
-    document.getElementById('notifBadge').style.display = 'block';
-  }
-
-  /* Alert strip */
-  const alertText = document.getElementById('alertText');
-  alertText.textContent = '5 certificates are expiring within 30 days — immediate action required.';
+  /* Load all data from API */
+  loadDashboardData(role);
 
   /* Welcome toast */
   setTimeout(() => {
-    showToast('success',
-      `Welcome back, ${session.name}`,
-      'Dashboard loaded successfully.'
-    );
+    showToast('success', `Welcome back, ${session.name}`, 'Dashboard loaded successfully.');
   }, 600);
 });
 </script>
