@@ -13,3 +13,8 @@ JWT_EXPIRES_SEC       = "86400"
 # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY, JWT_SECRET
 # are set as encrypted secrets via Cloudflare Dashboard
 # Pages → Settings → Environment Variables → Add as "Secret" type
+
+# ── R2 Bucket — certificate file storage ──
+[[r2_buckets]]
+binding     = "CERT_BUCKET"
+bucket_name = "rigways-certs"

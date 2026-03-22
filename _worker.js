@@ -583,8 +583,100 @@ async function audit(db, session, table, id, action, before, after) {
 
 
 
-const CERT_TYPES = ['Quality', 'Safety', 'Inspection', 'Compliance', 'Technical', 'Environmental', 'Other'];
+const CERT_TYPES = ['CAT III','CAT IV','ORIGINAL COC','LOAD TEST','LIFTING','NDT','TUBULAR'];
 const CERT_STATUSES = ['pending', 'approved', 'rejected'];
+
+// ── CERTIFICATES FILE UPLOAD ──
+// POST /api/certificates/upload  — upload file to R2, returns file_key + public URL
+// GET  /api/certificates/file/:certId — get signed URL for a cert file
+
+async function handleCertUpload(request, env, path) {
+  const session = await getSession(request, env);
+  if (!session) return unauth(env);
+
+  // ── POST /api/certificates/upload ──
+  if (path === '/certificates/upload' && request.method === 'POST') {
+    if (!env.CERT_BUCKET) {
+      return json({ success: false, error: 'R2 bucket not configured. Add [[r2_buckets]] binding in wrangler.toml', code: 'NO_BUCKET' }, 500, env);
+    }
+
+    let formData;
+    try { formData = await request.formData(); }
+    catch(e) { return badReq('Could not parse form data', 'BAD_FORM', env); }
+
+    const file = formData.get('file');
+    if (!file || typeof file === 'string') return badReq('No file provided', 'NO_FILE', env);
+
+    // Validate file type
+    const allowedTypes = ['application/pdf','image/jpeg','image/png','image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      return badReq('Invalid file type. Allowed: PDF, JPG, PNG, WEBP', 'INVALID_TYPE', env);
+    }
+
+    // Max 10MB
+    if (file.size > 10 * 1024 * 1024) {
+      return badReq('File too large. Maximum size is 10MB', 'FILE_TOO_LARGE', env);
+    }
+
+    // Generate unique key
+    const ext      = file.name.split('.').pop().toLowerCase();
+    const key      = `certs/${session.sub}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const fileBuffer = await file.arrayBuffer();
+
+    try {
+      await env.CERT_BUCKET.put(key, fileBuffer, {
+        httpMetadata: { contentType: file.type },
+        customMetadata: {
+          originalName: file.name,
+          uploadedBy:   session.sub,
+          username:     session.username,
+        },
+      });
+    } catch(e) {
+      console.error('R2 upload error:', e);
+      return json({ success: false, error: 'File upload failed: ' + e.message, code: 'UPLOAD_FAILED' }, 500, env);
+    }
+
+    return ok({ key, file_name: file.name, file_url: key }, env);
+  }
+
+  // ── GET /api/certificates/file/:certId — get signed URL ──
+  const fileMatch = path.match(/^\/certificates\/file\/([^/]+)$/);
+  if (fileMatch && request.method === 'GET') {
+    if (!env.CERT_BUCKET) {
+      return json({ success: false, error: 'R2 bucket not configured', code: 'NO_BUCKET' }, 500, env);
+    }
+
+    const certId = fileMatch[1];
+    const db = createSupabase(env);
+    const { data: rows } = await db.from('certificates', {
+      filters: { 'id.eq': certId },
+      select: 'id,file_url,file_name,client_id',
+      limit: 1,
+    });
+    const cert = Array.isArray(rows) ? rows[0] : rows;
+    if (!cert) return notFound('Certificate', env);
+
+    // Check access
+    if (['user','technician'].includes(session.role) && session.customerId && cert.client_id !== session.customerId)
+      return forbidden(env);
+
+    if (!cert.file_url) return json({ success: false, error: 'No file attached to this certificate', code: 'NO_FILE' }, 404, env);
+
+    // Generate a signed URL valid for 1 hour
+    try {
+      const signedUrl = await env.CERT_BUCKET.createSignedUrl(cert.file_url, { expiresIn: 3600 });
+      return ok({ url: signedUrl, file_name: cert.file_name }, env);
+    } catch(e) {
+      // If R2 doesn't support signed URLs (free tier), return public URL fallback
+      const publicUrl = `https://pub-${env.R2_PUBLIC_BUCKET_ID || 'unknown'}.r2.dev/${cert.file_url}`;
+      return ok({ url: publicUrl, file_name: cert.file_name }, env);
+    }
+  }
+
+  return null; // signal: not handled here
+}
+
 
 async function handleCertificates(request, env, path) {
   const session = await getSession(request, env);
@@ -1190,7 +1282,11 @@ export default {
       if (path.startsWith('/auth')) return await handleAuth(request, env, path);
       if (path.startsWith('/users')) return await handleUsers(request, env, path);
       if (path.startsWith('/assets')) return await handleAssets(request, env, path);
-      if (path.startsWith('/certificates')) return await handleCertificates(request, env, path);
+      if (path.startsWith('/certificates/upload') || path.startsWith('/certificates/file/')) {
+      const uploadResult = await handleCertUpload(request, env, path);
+      if (uploadResult) return uploadResult;
+    }
+    if (path.startsWith('/certificates')) return await handleCertificates(request, env, path);
       if (path.startsWith('/clients')) return await handleClients(request, env, path);
       if (path.startsWith('/inspectors')) return await handleInspectors(request, env, path);
       if (path.startsWith('/functional-locations')) return await handleFunctionalLocations(request, env, path);

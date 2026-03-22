@@ -848,7 +848,7 @@ let deleteTargetId = null;
 let rejectTargetId = null;
 
 /* ── Helpers ── */
-/* Session helpers — delegate to SapSession from app.js */
+/* Session helpers */
 function getSession() {
   if (typeof SapSession !== 'undefined') return SapSession.get();
   try {
@@ -907,7 +907,6 @@ const INSPECTOR_NAMES = [
   'Khalid Al-Mansouri',
 ];
 
-/* CERTS loaded from API */
 let CERTS = [];
 
 
@@ -982,7 +981,8 @@ function getEditWindowBadge(cert) {
 ═══════════════════════════════════════════════════════ */
 /* ── Sync CERTS to localStorage so assets.html can read them ── */
 
-function syncCerts() {}
+function syncCerts() {
+  }
 
 function renderTable() {
   const role     = session.role;
@@ -1433,41 +1433,100 @@ zone.addEventListener('drop', e => {
 
 /* ── Save ── */
 async function saveCert() {
-  const name       = document.getElementById('f_name')?.value?.trim() || '';
-  const certType   = document.getElementById('f_certType')?.value || '';
-  const issuedBy   = document.getElementById('f_issuedBy')?.value?.trim() || '';
-  const issueDate  = document.getElementById('f_issueDate')?.value || '';
-  const expiryDate = document.getElementById('f_expiryDate')?.value || '';
-  const assetId    = document.getElementById('f_assetId')?.value || '';
-  const client     = document.getElementById('f_client')?.value || session?.customerId || '';
-  const editId     = document.getElementById('editCertId')?.value || '';
+  const jobNumber   = document.getElementById('f_jobNumber')?.value?.trim() || '';
+  const name        = document.getElementById('f_name')?.value?.trim() || '';
+  const certType    = document.getElementById('f_certType')?.value || '';
+  const liftingSubtype = certType === 'LIFTING' ? (document.getElementById('f_liftingSubtype')?.value || '') : '';
+  const issuedBy    = document.getElementById('f_issuedBy')?.value?.trim() || '';
+  const issueDate   = document.getElementById('f_issueDate')?.value || '';
+  const expiryDate  = document.getElementById('f_expiryDate')?.value || '';
+  const client      = document.getElementById('f_client')?.value || session?.customerId || '';
+  const assetId     = document.getElementById('f_assetId')?.value || '';
+  const editId      = document.getElementById('editCertId')?.value || '';
 
   if (!name || !certType || !issuedBy || !issueDate || !expiryDate) {
-    showToast('error','Required','Please fill all required fields.'); return;
+    showToast('error', 'Required Fields', 'Please fill all required fields.'); return;
   }
+  if (certType === 'LIFTING' && !liftingSubtype) {
+    showToast('error', 'Lifting Sub-type Required', 'Please select a lifting sub-type.'); return;
+  }
+  if (!editId && !selectedFile) {
+    showToast('error', 'File Required', 'Please upload the certificate file.'); return;
+  }
+  if (issueDate && expiryDate && new Date(expiryDate) <= new Date(issueDate)) {
+    showToast('error', 'Invalid Date', 'Expiry date must be after issue date.'); return;
+  }
+
+  // Show uploading state
+  const saveBtn = document.getElementById('saveCertBtn') || document.querySelector('[onclick*="saveCert"]');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Uploading…'; }
+
+  let fileName = null, fileKey = null;
+
+  // Step 1: Upload file to R2 (if a file is selected)
+  if (selectedFile) {
+    try {
+      const fd = new FormData();
+      fd.append('file', selectedFile);
+      // Use raw fetch here — apiFetch sets Content-Type to json which breaks FormData
+      const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
+      const uploadRes = await fetch('/api/certificates/upload', {
+        method: 'POST',
+        headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+        body: fd,
+      });
+      const uploadData = await uploadRes.json();
+      const ud = uploadData.data || uploadData;
+      if (!uploadData.success) {
+        showToast('error', 'Upload Failed', ud.error || 'Could not upload file.');
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
+        return;
+      }
+      fileName = ud.file_name;
+      fileKey  = ud.file_url; // R2 key stored as file_url
+    } catch(e) {
+      showToast('error', 'Upload Error', 'File upload failed. Please try again.');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
+      return;
+    }
+  }
+
+  // Step 2: Save certificate metadata
+  if (saveBtn) saveBtn.textContent = 'Saving…';
   const payload = {
-    name, cert_type: certType,
-    asset_id:    assetId   || undefined,
-    client_id:   client    || undefined,
-    issued_by:   issuedBy,
-    issue_date:  issueDate,
-    expiry_date: expiryDate,
-    file_name:   selectedFile?.name || null,
-    notes:       document.getElementById('f_jobNumber')?.value || null,
-    inspector_id: document.getElementById('f_issuedBy')?.value || null,
+    name,
+    cert_type:    certType + (liftingSubtype ? ' — ' + liftingSubtype : ''),
+    asset_id:     assetId   || undefined,
+    client_id:    client    || undefined,
+    issued_by:    issuedBy,
+    issue_date:   issueDate,
+    expiry_date:  expiryDate,
+    notes:        jobNumber || null,
+    ...(fileName ? { file_name: fileName, file_url: fileKey } : {}),
   };
+
   try {
     const url    = editId ? '/api/certificates/' + editId : '/api/certificates';
     const method = editId ? 'PATCH' : 'POST';
     const res    = await apiFetch(url, { method, body: JSON.stringify(payload) });
     const data   = await res.json();
-    const d      = data.data || data;
-    if (!data.success) { showToast('error','Save Failed', d.error || data.error || 'Could not save.'); return; }
-    showToast('success', editId ? 'Updated' : 'Uploaded', '"' + name + '" saved successfully.');
-    closeModal?.(); document.getElementById('uploadModal')?.classList.remove('open');
+    if (!data.success) {
+      showToast('error', 'Save Failed', (data.data||data).error || 'Could not save.');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
+      return;
+    }
+    selectedFile = null;
+    showToast('success', editId ? 'Updated' : 'Uploaded',
+      '"' + name + '" ' + (editId ? 'updated' : 'uploaded & sent for approval') + '.');
+    document.getElementById('uploadModal')?.classList.remove('open');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
     await loadCerts();
-  } catch(e) { showToast('error','Network Error','Could not save certificate.'); }
+  } catch(e) {
+    showToast('error', 'Network Error', 'Could not save certificate. Please try again.');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
+  }
 }
+
 
 /* ═══════════════════════════════════════════════════════
    APPROVAL
@@ -1477,8 +1536,8 @@ async function approveCert(id) {
     const res  = await apiFetch('/api/certificates/' + id, { method:'PATCH', body: JSON.stringify({ approval_status:'approved' }) });
     const data = await res.json();
     if (!data.success) { showToast('error','Failed',(data.data||data).error||'Could not approve.'); return; }
-    const idx  = CERTS.findIndex(x => (x.id||x.certId) === id);
-    if (idx > -1) { CERTS[idx].approvalStatus = 'approved'; CERTS[idx].approval_status = 'approved'; }
+    const idx2 = CERTS.findIndex(x => (x.id||x.certId) === id);
+    if (idx2 > -1) { CERTS[idx2].approvalStatus = 'approved'; CERTS[idx2].approval_status = 'approved'; }
     showToast('success','Approved','Certificate approved.');
     renderTable();
   } catch(e) { showToast('error','Network Error','Could not approve.'); }
@@ -1500,11 +1559,11 @@ async function confirmReject() {
     const res  = await apiFetch('/api/certificates/' + rejectTargetId, { method:'PATCH', body: JSON.stringify({ approval_status:'rejected', rejection_reason: reason }) });
     const data = await res.json();
     if (!data.success) { closeRejectModal?.(); showToast('error','Failed',(data.data||data).error||'Could not reject.'); return; }
-    const idx  = CERTS.findIndex(x => (x.id||x.certId) === rejectTargetId);
-    if (idx > -1) { CERTS[idx].approvalStatus = 'rejected'; CERTS[idx].rejectionReason = reason; }
+    const idx2 = CERTS.findIndex(x => (x.id||x.certId) === rejectTargetId);
+    if (idx2 > -1) { CERTS[idx2].approvalStatus = 'rejected'; CERTS[idx2].rejectionReason = reason; }
     showToast('warning','Rejected','Certificate rejected.');
   } catch(e) { showToast('error','Network Error','Could not reject.'); }
-  closeRejectModal?.();
+  if (typeof closeRejectModal === 'function') closeRejectModal();
   renderTable();
 }
 
@@ -1752,14 +1811,18 @@ document.getElementById('drawerOverlay').addEventListener('click', function(e) {
 });
 
 /* ── Certificate file link opener ── */
-function openCertLink(certId) {
-  const url = (window._certUrls || {})[certId];
-  if (url) {
-    window.open(url, '_blank', 'noopener');
-  } else {
-    showToast('info',
-      'No File',
-      'No file is attached to this certificate.');
+async function openCertLink(certId) {
+  try {
+    const res  = await apiFetch('/api/certificates/file/' + certId);
+    const data = await res.json();
+    const d    = data.data || data;
+    if (!data.success) {
+      showToast('info', 'No File', d.error || 'No file attached to this certificate.');
+      return;
+    }
+    window.open(d.url, '_blank', 'noopener,noreferrer');
+  } catch(e) {
+    showToast('error', 'Error', 'Could not open file. Please try again.');
   }
 }
 
@@ -2061,10 +2124,14 @@ async function loadCerts() {
       assetId:         cert.asset_id,
       client:          cert.client_id,
       fileName:        cert.file_name || '',
+      fileUrl:         cert.file_url  || '',
       rejectionReason: cert.rejection_reason || '',
       jobNumber:       cert.notes || '',
       uploadTime:      (cert.created_at||'').split('T')[0],
     }));
+    // Map cert UUID -> file_url for signed URL lookups
+    window._certUrls = {};
+    CERTS.forEach(cert => { if (cert.file_url) window._certUrls[cert.id] = cert.file_url; });
   } catch(e) { CERTS = []; }
   renderTable();
 }
