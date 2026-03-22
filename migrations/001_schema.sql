@@ -126,9 +126,9 @@ CREATE TABLE IF NOT EXISTS assets (
   asset_number         TEXT        NOT NULL UNIQUE,   -- e.g. AST-001
   name                 TEXT        NOT NULL,
   asset_type           TEXT        NOT NULL
-                                   CHECK (asset_type IN ('Equipment','Vehicle','Facility','Tool','IT','Other')),
+                                   CHECK (asset_type IN ('Hoisting Equipment','Drilling Equipment','Mud System Low Pressure','Mud System High Pressure','Wirelines','Structure','Well Control','Tubular')),
   status               TEXT        NOT NULL DEFAULT 'active'
-                                   CHECK (status IN ('active','inactive','maintenance','decommissioned')),
+                                   CHECK (status IN ('operation','stacked')),
   client_id            TEXT        REFERENCES clients(client_id) ON DELETE SET NULL,
   functional_location  TEXT,
   serial_number        TEXT,
@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS certificates (
   cert_number      TEXT        UNIQUE,             -- auto-generated CERT-0001
   name             TEXT        NOT NULL,
   cert_type        TEXT        NOT NULL
-                               CHECK (cert_type IN ('Quality','Safety','Inspection','Compliance','Technical','Environmental','Other')),
+                               CHECK (cert_type IN ('CAT III','CAT IV','ORIGINAL COC','LOAD TEST','LIFTING','NDT','TUBULAR')),
   asset_id         UUID        NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
   client_id        TEXT        REFERENCES clients(client_id) ON DELETE SET NULL,
   inspector_id     UUID        REFERENCES inspectors(id) ON DELETE SET NULL,
