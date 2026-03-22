@@ -2177,6 +2177,180 @@ function exportPDF() {
       🖨 Print / Save as PDF
     </button>
   </div>
+
+<!-- ══ DEBUG PANEL — remove before final delivery ══ -->
+<div id="debugPanel" style="
+  position:fixed;bottom:16px;left:16px;z-index:99999;
+  background:#1a1a2e;color:#e2e8f0;border-radius:12px;
+  padding:16px;width:320px;max-height:70vh;overflow-y:auto;
+  font-family:monospace;font-size:12px;box-shadow:0 8px 32px rgba(0,0,0,.5);
+  display:none;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <strong style="color:#60a5fa;">🔧 Debug Panel</strong>
+    <button onclick="document.getElementById('debugPanel').style.display='none'"
+      style="background:#ef4444;border:none;color:#fff;border-radius:6px;padding:2px 8px;cursor:pointer;">✕</button>
+  </div>
+  <div id="debugOut" style="white-space:pre-wrap;line-height:1.6;"></div>
+  <button onclick="runDebug()" style="
+    margin-top:12px;width:100%;background:#3b82f6;border:none;color:#fff;
+    border-radius:8px;padding:8px;cursor:pointer;font-size:13px;">
+    ▶ Run All Tests
+  </button>
+  <button onclick="testMassDelete()" style="
+    margin-top:6px;width:100%;background:#ef4444;border:none;color:#fff;
+    border-radius:8px;padding:8px;cursor:pointer;font-size:13px;">
+    ▶ Test Mass Delete
+  </button>
+  <button onclick="testSingleSave()" style="
+    margin-top:6px;width:100%;background:#10b981;border:none;color:#fff;
+    border-radius:8px;padding:8px;cursor:pointer;font-size:13px;">
+    ▶ Test Single Save
+  </button>
+</div>
+
+<!-- Floating trigger button -->
+<button onclick="document.getElementById('debugPanel').style.display='block'"
+  style="position:fixed;bottom:16px;left:16px;z-index:99998;
+  background:#1a1a2e;color:#60a5fa;border:2px solid #3b82f6;
+  border-radius:50%;width:44px;height:44px;font-size:18px;
+  cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.4);" title="Debug">🔧</button>
+
+<script>
+function debugLog(msg, color) {
+  const out = document.getElementById('debugOut');
+  const line = document.createElement('div');
+  line.style.color = color || '#e2e8f0';
+  line.textContent = msg;
+  out.appendChild(line);
+}
+function debugClear() { document.getElementById('debugOut').innerHTML = ''; }
+
+async function runDebug() {
+  debugClear();
+  debugLog('=== DIAGNOSTICS ===', '#60a5fa');
+
+  // 1. apiFetch
+  debugLog('apiFetch: ' + typeof apiFetch, typeof apiFetch === 'function' ? '#10b981' : '#ef4444');
+
+  // 2. Session
+  try {
+    const s = JSON.parse(sessionStorage.getItem('sap_session') || '{}');
+    debugLog('token: ' + (s.token ? '✓ exists' : '✗ MISSING'), s.token ? '#10b981' : '#ef4444');
+    debugLog('role: ' + (s.role || 'MISSING'), s.role ? '#10b981' : '#ef4444');
+    debugLog('token[0:20]: ' + (s.token||'').slice(0,20) + '...', '#94a3b8');
+    window._debugToken = s.token;
+    window._debugSession = s;
+  } catch(e) {
+    debugLog('Session parse error: ' + e.message, '#ef4444');
+  }
+
+  // 3. GET assets
+  debugLog('--- GET /api/assets ---', '#60a5fa');
+  try {
+    const r = await fetch('/api/assets?limit=1', {
+      headers: { 'Authorization': 'Bearer ' + (window._debugToken||'') }
+    });
+    debugLog('status: ' + r.status, r.status === 200 ? '#10b981' : '#ef4444');
+    const d = await r.json();
+    debugLog('success: ' + d.success, d.success ? '#10b981' : '#ef4444');
+    const assets = d.data?.assets || d.data || [];
+    debugLog('count: ' + assets.length, '#94a3b8');
+    if (assets[0]) {
+      window._debugAssetId = assets[0].id;
+      debugLog('first id: ' + assets[0].id?.slice(0,8) + '...', '#94a3b8');
+    }
+    if (!d.success) debugLog('error: ' + d.error, '#ef4444');
+  } catch(e) {
+    debugLog('GET error: ' + e.message, '#ef4444');
+  }
+
+  // 4. PATCH asset
+  debugLog('--- PATCH /api/assets/:id ---', '#60a5fa');
+  if (window._debugAssetId) {
+    try {
+      const r = await fetch('/api/assets/' + window._debugAssetId, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + (window._debugToken||'')
+        },
+        body: JSON.stringify({ notes: 'debug-test-' + Date.now() })
+      });
+      debugLog('status: ' + r.status, r.status === 200 ? '#10b981' : '#ef4444');
+      const d = await r.json();
+      debugLog('success: ' + d.success, d.success ? '#10b981' : '#ef4444');
+      if (!d.success) debugLog('error: ' + (d.data?.error||d.error||JSON.stringify(d)), '#ef4444');
+    } catch(e) {
+      debugLog('PATCH error: ' + e.message, '#ef4444');
+    }
+  } else {
+    debugLog('No asset ID — GET failed', '#f59e0b');
+  }
+
+  debugLog('=== DONE ===', '#60a5fa');
+}
+
+async function testMassDelete() {
+  debugClear();
+  debugLog('=== MASS DELETE TEST ===', '#60a5fa');
+  const ids = typeof getSelectedIds === 'function' ? getSelectedIds() : [];
+  debugLog('selected IDs: ' + ids.length, ids.length ? '#10b981' : '#f59e0b');
+  if (!ids.length) {
+    debugLog('Select checkboxes first, then press this button', '#f59e0b');
+    return;
+  }
+  for (const id of ids) {
+    try {
+      const r = await fetch('/api/assets/' + id, {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + (window._debugToken || JSON.parse(sessionStorage.getItem('sap_session')||'{}').token || '') }
+      });
+      debugLog('DELETE ' + id.slice(0,8) + '... status: ' + r.status, r.status < 300 ? '#10b981' : '#ef4444');
+      const d = await r.json();
+      debugLog('  result: ' + (d.success ? 'OK' : d.error || JSON.stringify(d)), d.success ? '#10b981' : '#ef4444');
+    } catch(e) {
+      debugLog('  error: ' + e.message, '#ef4444');
+    }
+  }
+}
+
+async function testSingleSave() {
+  debugClear();
+  debugLog('=== SINGLE SAVE TEST ===', '#60a5fa');
+  if (!window._debugAssetId) {
+    await runDebug();
+    debugClear();
+    debugLog('=== SINGLE SAVE TEST ===', '#60a5fa');
+  }
+  if (!window._debugAssetId) {
+    debugLog('Run diagnostics first to get an asset ID', '#f59e0b');
+    return;
+  }
+  const testNote = 'persist-test-' + Date.now();
+  debugLog('Writing: ' + testNote, '#94a3b8');
+  try {
+    const token = window._debugToken || JSON.parse(sessionStorage.getItem('sap_session')||'{}').token || '';
+    const r = await fetch('/api/assets/' + window._debugAssetId, {
+      method: 'PATCH',
+      headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+token },
+      body: JSON.stringify({ notes: testNote })
+    });
+    debugLog('PATCH status: ' + r.status, r.status===200?'#10b981':'#ef4444');
+    const d = await r.json();
+    debugLog('success: ' + d.success, d.success?'#10b981':'#ef4444');
+    if (d.success) {
+      debugLog('Saved! Now refresh the page and check if the note persists in DB', '#10b981');
+      debugLog('Note written: ' + testNote, '#94a3b8');
+    } else {
+      debugLog('FAILED: ' + (d.data?.error||d.error||JSON.stringify(d)), '#ef4444');
+    }
+  } catch(e) {
+    debugLog('Error: ' + e.message, '#ef4444');
+  }
+}
+</script>
+<!-- ══ END DEBUG PANEL ══ -->
+
 </body></html>`;
 
   const win = window.open('', '_blank', 'width=1000,height=700');
@@ -2369,5 +2543,179 @@ document.addEventListener('DOMContentLoaded', () => {
   loadColState();
 });
 </script>
+
+<!-- ══ DEBUG PANEL — remove before final delivery ══ -->
+<div id="debugPanel" style="
+  position:fixed;bottom:16px;left:16px;z-index:99999;
+  background:#1a1a2e;color:#e2e8f0;border-radius:12px;
+  padding:16px;width:320px;max-height:70vh;overflow-y:auto;
+  font-family:monospace;font-size:12px;box-shadow:0 8px 32px rgba(0,0,0,.5);
+  display:none;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <strong style="color:#60a5fa;">🔧 Debug Panel</strong>
+    <button onclick="document.getElementById('debugPanel').style.display='none'"
+      style="background:#ef4444;border:none;color:#fff;border-radius:6px;padding:2px 8px;cursor:pointer;">✕</button>
+  </div>
+  <div id="debugOut" style="white-space:pre-wrap;line-height:1.6;"></div>
+  <button onclick="runDebug()" style="
+    margin-top:12px;width:100%;background:#3b82f6;border:none;color:#fff;
+    border-radius:8px;padding:8px;cursor:pointer;font-size:13px;">
+    ▶ Run All Tests
+  </button>
+  <button onclick="testMassDelete()" style="
+    margin-top:6px;width:100%;background:#ef4444;border:none;color:#fff;
+    border-radius:8px;padding:8px;cursor:pointer;font-size:13px;">
+    ▶ Test Mass Delete
+  </button>
+  <button onclick="testSingleSave()" style="
+    margin-top:6px;width:100%;background:#10b981;border:none;color:#fff;
+    border-radius:8px;padding:8px;cursor:pointer;font-size:13px;">
+    ▶ Test Single Save
+  </button>
+</div>
+
+<!-- Floating trigger button -->
+<button onclick="document.getElementById('debugPanel').style.display='block'"
+  style="position:fixed;bottom:16px;left:16px;z-index:99998;
+  background:#1a1a2e;color:#60a5fa;border:2px solid #3b82f6;
+  border-radius:50%;width:44px;height:44px;font-size:18px;
+  cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.4);" title="Debug">🔧</button>
+
+<script>
+function debugLog(msg, color) {
+  const out = document.getElementById('debugOut');
+  const line = document.createElement('div');
+  line.style.color = color || '#e2e8f0';
+  line.textContent = msg;
+  out.appendChild(line);
+}
+function debugClear() { document.getElementById('debugOut').innerHTML = ''; }
+
+async function runDebug() {
+  debugClear();
+  debugLog('=== DIAGNOSTICS ===', '#60a5fa');
+
+  // 1. apiFetch
+  debugLog('apiFetch: ' + typeof apiFetch, typeof apiFetch === 'function' ? '#10b981' : '#ef4444');
+
+  // 2. Session
+  try {
+    const s = JSON.parse(sessionStorage.getItem('sap_session') || '{}');
+    debugLog('token: ' + (s.token ? '✓ exists' : '✗ MISSING'), s.token ? '#10b981' : '#ef4444');
+    debugLog('role: ' + (s.role || 'MISSING'), s.role ? '#10b981' : '#ef4444');
+    debugLog('token[0:20]: ' + (s.token||'').slice(0,20) + '...', '#94a3b8');
+    window._debugToken = s.token;
+    window._debugSession = s;
+  } catch(e) {
+    debugLog('Session parse error: ' + e.message, '#ef4444');
+  }
+
+  // 3. GET assets
+  debugLog('--- GET /api/assets ---', '#60a5fa');
+  try {
+    const r = await fetch('/api/assets?limit=1', {
+      headers: { 'Authorization': 'Bearer ' + (window._debugToken||'') }
+    });
+    debugLog('status: ' + r.status, r.status === 200 ? '#10b981' : '#ef4444');
+    const d = await r.json();
+    debugLog('success: ' + d.success, d.success ? '#10b981' : '#ef4444');
+    const assets = d.data?.assets || d.data || [];
+    debugLog('count: ' + assets.length, '#94a3b8');
+    if (assets[0]) {
+      window._debugAssetId = assets[0].id;
+      debugLog('first id: ' + assets[0].id?.slice(0,8) + '...', '#94a3b8');
+    }
+    if (!d.success) debugLog('error: ' + d.error, '#ef4444');
+  } catch(e) {
+    debugLog('GET error: ' + e.message, '#ef4444');
+  }
+
+  // 4. PATCH asset
+  debugLog('--- PATCH /api/assets/:id ---', '#60a5fa');
+  if (window._debugAssetId) {
+    try {
+      const r = await fetch('/api/assets/' + window._debugAssetId, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + (window._debugToken||'')
+        },
+        body: JSON.stringify({ notes: 'debug-test-' + Date.now() })
+      });
+      debugLog('status: ' + r.status, r.status === 200 ? '#10b981' : '#ef4444');
+      const d = await r.json();
+      debugLog('success: ' + d.success, d.success ? '#10b981' : '#ef4444');
+      if (!d.success) debugLog('error: ' + (d.data?.error||d.error||JSON.stringify(d)), '#ef4444');
+    } catch(e) {
+      debugLog('PATCH error: ' + e.message, '#ef4444');
+    }
+  } else {
+    debugLog('No asset ID — GET failed', '#f59e0b');
+  }
+
+  debugLog('=== DONE ===', '#60a5fa');
+}
+
+async function testMassDelete() {
+  debugClear();
+  debugLog('=== MASS DELETE TEST ===', '#60a5fa');
+  const ids = typeof getSelectedIds === 'function' ? getSelectedIds() : [];
+  debugLog('selected IDs: ' + ids.length, ids.length ? '#10b981' : '#f59e0b');
+  if (!ids.length) {
+    debugLog('Select checkboxes first, then press this button', '#f59e0b');
+    return;
+  }
+  for (const id of ids) {
+    try {
+      const r = await fetch('/api/assets/' + id, {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + (window._debugToken || JSON.parse(sessionStorage.getItem('sap_session')||'{}').token || '') }
+      });
+      debugLog('DELETE ' + id.slice(0,8) + '... status: ' + r.status, r.status < 300 ? '#10b981' : '#ef4444');
+      const d = await r.json();
+      debugLog('  result: ' + (d.success ? 'OK' : d.error || JSON.stringify(d)), d.success ? '#10b981' : '#ef4444');
+    } catch(e) {
+      debugLog('  error: ' + e.message, '#ef4444');
+    }
+  }
+}
+
+async function testSingleSave() {
+  debugClear();
+  debugLog('=== SINGLE SAVE TEST ===', '#60a5fa');
+  if (!window._debugAssetId) {
+    await runDebug();
+    debugClear();
+    debugLog('=== SINGLE SAVE TEST ===', '#60a5fa');
+  }
+  if (!window._debugAssetId) {
+    debugLog('Run diagnostics first to get an asset ID', '#f59e0b');
+    return;
+  }
+  const testNote = 'persist-test-' + Date.now();
+  debugLog('Writing: ' + testNote, '#94a3b8');
+  try {
+    const token = window._debugToken || JSON.parse(sessionStorage.getItem('sap_session')||'{}').token || '';
+    const r = await fetch('/api/assets/' + window._debugAssetId, {
+      method: 'PATCH',
+      headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+token },
+      body: JSON.stringify({ notes: testNote })
+    });
+    debugLog('PATCH status: ' + r.status, r.status===200?'#10b981':'#ef4444');
+    const d = await r.json();
+    debugLog('success: ' + d.success, d.success?'#10b981':'#ef4444');
+    if (d.success) {
+      debugLog('Saved! Now refresh the page and check if the note persists in DB', '#10b981');
+      debugLog('Note written: ' + testNote, '#94a3b8');
+    } else {
+      debugLog('FAILED: ' + (d.data?.error||d.error||JSON.stringify(d)), '#ef4444');
+    }
+  } catch(e) {
+    debugLog('Error: ' + e.message, '#ef4444');
+  }
+}
+</script>
+<!-- ══ END DEBUG PANEL ══ -->
+
 </body>
 </html>
