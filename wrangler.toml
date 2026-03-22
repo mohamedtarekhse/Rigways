@@ -1,20 +1,15 @@
 # wrangler.toml — Rigways ACM
-# Using _worker.js Advanced Mode — all environment variables must be
-# set in the Cloudflare Pages Dashboard, NOT here in wrangler.toml.
-# Declaring [vars] here conflicts with _worker.js bindings.
 
-name                   = "rigways"
+name                   = "rigways-acm"
 pages_build_output_dir = "."
 compatibility_date     = "2024-09-23"
 compatibility_flags    = ["nodejs_compat"]
 
-# ── DO NOT add [vars] here — use the Cloudflare Dashboard instead ──
-# Pages → Settings → Environment Variables → Add:
-#
-#   CORS_ALLOW_ORIGIN         = https://rigways.pages.dev
-#   DISABLE_HASH_ENDPOINT     = false   (set true after creating users)
-#   SUPABASE_URL              = https://xxxx.supabase.co
-#   SUPABASE_SERVICE_ROLE_KEY = eyJ...
-#   SUPABASE_ANON_KEY         = eyJ...
-#   JWT_SECRET                = (random 64-char string)
-#   JWT_EXPIRES_SEC           = 3600
+[vars]
+CORS_ALLOW_ORIGIN     = "https://rigways.pages.dev"
+DISABLE_HASH_ENDPOINT = "false"
+JWT_EXPIRES_SEC       = "86400"
+
+# SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY, JWT_SECRET
+# are set as encrypted secrets via Cloudflare Dashboard
+# Pages → Settings → Environment Variables → Add as "Secret" type
