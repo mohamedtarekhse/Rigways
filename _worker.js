@@ -68,9 +68,10 @@ const compact = (obj)       => Object.fromEntries(Object.entries(obj).filter(([,
 // Thin Supabase REST wrapper — service key never leaves the Worker
 
 function createSupabase(env) {
-  const base = env.SUPABASE_URL;
-  const key  = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!base || !key) throw new Error('Missing Supabase env vars');
+  // Falls back to hardcoded values if env vars not set
+  const base = env.SUPABASE_URL              || 'https://rsrwcimpeeulwvweupla.supabase.co';
+  const key  = env.SUPABASE_SERVICE_ROLE_KEY || 'REPLACE_SERVICE_ROLE_KEY';
+  if (base === 'REPLACE_SUPABASE_URL') throw new Error('SUPABASE_URL not configured — edit _worker.js fallback values');
 
   async function _fetch(path, options = {}) {
     const prefer = options._prefer || 'return=representation';
@@ -269,6 +270,7 @@ async function handleAuth(request, env, path) {
     db.update('users', { last_login_at: new Date().toISOString() }, { filters: { 'id.eq': user.id }, select: 'id' }).catch(() => {});
 
     const expiresIn = parseInt(env.JWT_EXPIRES_SEC || '86400', 10);
+    const jwtSecret = env.JWT_SECRET || 'REPLACE_JWT_SECRET';
     const token = await signJwt({
       sub:        user.id,
       username:   user.username,
@@ -276,7 +278,7 @@ async function handleAuth(request, env, path) {
       name:       user.name,
       nameAr:     user.name_ar || '',
       customerId: user.customer_id || null,
-    }, env.JWT_SECRET, expiresIn);
+    }, jwtSecret, expiresIn);
 
     return ok({
       token,
