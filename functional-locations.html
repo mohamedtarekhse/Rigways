@@ -591,19 +591,22 @@ async function massDelete(){
   if(!confirm(`Delete ${ids.length} location${ids.length>1?'s':''}? This cannot be undone.`))return;
   try {
     const results = await Promise.all(
-      ids.map(id => apiFetch('/api/functional-locations/' + id, { method:'DELETE' }).then(r=>r.json()))
+      ids.map(id => apiFetch('/api/functional-locations/' + id, { method:'DELETE' }).then(r => r.json()))
     );
-    const failed = results.filter(r => !r.success).length;
-    _locsCache = null;
-    const locs = await loadLocs();
-    window._locsData = locs;
-    if (failed) {
-      showToast('warning','Partial Delete',`${ids.length-failed} deleted, ${failed} failed.`);
+    const failed = results.filter(r => !r.success);
+    if (failed.length) {
+      showToast('warning','Partial Delete',`${ids.length - failed.length} deleted, ${failed.length} failed.`);
     } else {
       showToast('success','Deleted',`${ids.length} location${ids.length>1?'s':''} deleted.`);
     }
-    clearSelection(); render();
-  } catch(e) { showToast('error','Network Error','Could not delete locations.'); }
+    _locsCache = null;
+    const locs = await loadLocs();
+    window._locsData = locs;
+    clearSelection();
+    render();
+  } catch(e) {
+    showToast('error','Network Error','Could not delete locations. Please try again.');
+  }
 }
 
 /* ── Modal ── */
@@ -624,8 +627,8 @@ function openEditModal(id){
   document.getElementById('editLocId').value=id;
   document.getElementById('f_loc_name').value=loc.name;
   document.getElementById('f_loc_type').value=loc.type;
-  document.getElementById('f_loc_client').value=loc.client||'';
-  document.getElementById('f_loc_desc').value=loc.desc||'';
+  document.getElementById('f_loc_client').value=loc.client||loc.client_id||'';
+  document.getElementById('f_loc_desc').value=loc.desc||loc.notes||'';
   document.getElementById('modalTitle').textContent='Edit Functional Location';
   document.getElementById('saveBtnLabel').textContent='Save Changes';
   document.getElementById('locModal').classList.add('open');
@@ -664,7 +667,7 @@ async function saveLocation() {
 function openDeleteModal(id){
   if(!canEdit)return;
   deleteTargetId=id;
-  const loc=loadLocs().find(l=>l.id===id);
+  const loc=(window._locsData||[]).find(l=>l.id===id);
   document.getElementById('deleteMsg').textContent=`Delete "${loc?.name||id}"? This cannot be undone.`;
   document.getElementById('deleteModal').classList.add('open');
 }
@@ -676,8 +679,7 @@ async function confirmDelete() {
     const data = await res.json();
     if (!data.success) { showToast('error','Failed',(data.data||data).error||'Could not delete.'); return; }
     _locsCache = null;
-    const locs = await loadLocs();
-    window._locsData = locs;
+    window._locsData = (window._locsData||[]).filter(l => l.id !== deleteTargetId);
     showToast('success','Deleted','"' + (loc?.name||deleteTargetId) + '" deleted.');
     if (typeof render === 'function') render();
   } catch(e) { showToast('error','Network Error','Could not delete.'); }

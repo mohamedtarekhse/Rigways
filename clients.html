@@ -899,7 +899,7 @@ async function saveClient() {
   const editId = document.getElementById('editClientId')?.value || '';
   const name   = document.getElementById('f_name')?.value?.trim() || '';
   if (!name) { showToast('error','Required','Client name is required.'); return; }
-  const clientId = nextCustomerId();
+  const clientId = document.getElementById('f_customerId')?.value?.trim().toUpperCase() || ('C' + Date.now().toString().slice(-4));
   const payload = {
     name,
     client_id:      editId ? undefined : clientId,
@@ -1156,7 +1156,8 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  renderClients();
+  renderClients();   // shows empty state immediately while data loads
+  loadClients();     // fetches from API and re-renders with real data
 });
 </script>
 </body>

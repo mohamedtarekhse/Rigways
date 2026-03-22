@@ -777,7 +777,7 @@ function renderNotifs() {
   if (currentTab === 'expiry')   data = data.filter(n => n.type === 'expiry');
   if (currentTab === 'approval') data = data.filter(n => n.type === 'approval');
   if (currentTab === 'system')   data = data.filter(n => n.type === 'system');
-  if (currentTab === 'unread')   data = data.filter(n => !n.read);
+  if (currentTab === 'unread')   data = data.filter(n => !n.read && !n.is_read && !n.isRead);
 
   /* Search */
   if (search) data = data.filter(n =>
@@ -791,7 +791,7 @@ function renderNotifs() {
 
   /* KPI */
   document.getElementById('kpiAll').textContent   = allActive.length;
-  document.getElementById('kpiUnread').textContent= allActive.filter(n=>!n.read).length;
+  document.getElementById('kpiUnread').textContent= allActive.filter(n=>!n.read && !n.is_read && !n.isRead).length;
   document.getElementById('kpiCrit').textContent  = allActive.filter(n=>n.priority==='critical').length;
   document.getElementById('kpiWarn').textContent  = allActive.filter(n=>n.priority==='high').length;
   document.getElementById('kpiInfo').textContent  = allActive.filter(n=>n.type==='system'||n.type==='approval').length;
@@ -801,8 +801,8 @@ function renderNotifs() {
   document.getElementById('tabExpiry').textContent  = allActive.filter(n=>n.type==='expiry').length;
   document.getElementById('tabApproval').textContent= allActive.filter(n=>n.type==='approval').length;
   document.getElementById('tabSystem').textContent  = allActive.filter(n=>n.type==='system').length;
-  document.getElementById('tabUnread').textContent  = allActive.filter(n=>!n.read).length;
-  document.getElementById('sidebarBadge').textContent = allActive.filter(n=>!n.read).length;
+  document.getElementById('tabUnread').textContent  = allActive.filter(n=>!n.read && !n.is_read && !n.isRead).length;
+  document.getElementById('sidebarBadge').textContent = allActive.filter(n=>!n.read && !n.is_read && !n.isRead).length;
 
   const list = document.getElementById('notifList');
 
@@ -859,13 +859,13 @@ function renderNotifItem(n, role) {
   const canApprove = (role==='admin'||role==='manager') && n.type==='approval' && n.titleEn.includes('pending');
 
   return `
-    <div class="notif-item ${n.read?'':'unread'}" id="notif-${n.id}" onclick="markRead('${n.id}')">
+    <div class="notif-item ${(n.read||n.is_read||n.isRead)?'':'unread'}" id="notif-${n.id}" onclick="markRead('${n.id}')">
       <div class="notif-icon ${ic.cls}">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${ic.path}</svg>
       </div>
       <div class="notif-body">
         <div class="notif-title">
-          ${!n.read ? '<span class="unread-dot"></span>' : ''}
+          ${!(n.read||n.is_read||n.isRead) ? '<span class="unread-dot"></span>' : ''}
           ${h(title)}
         </div>
         <div class="notif-desc">${h(desc)}</div>
@@ -895,7 +895,7 @@ function renderNotifItem(n, role) {
         <button class="notif-dismiss" onclick="dismissNotif('${n.id}',event)" title="Dismiss">
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
-        ${!n.read ? `<button class="notif-dismiss" onclick="markRead('${n.id}');event.stopPropagation();" style="color:var(--sap-brand);" title="Mark as read">
+        ${!(n.read||n.is_read||n.isRead) ? `<button class="notif-dismiss" onclick="markRead('${n.id}');event.stopPropagation();" style="color:var(--sap-brand);" title="Mark as read">
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
         </button>` : ''}
       </div>
@@ -905,33 +905,42 @@ function renderNotifItem(n, role) {
 /* ═══════════════════════════════════════════════════════
    ACTIONS
 ═══════════════════════════════════════════════════════ */
+/* Helper: synthetic IDs (exp-*, expired-*) are derived from cert data, not stored in notifications table */
+function isSyntheticId(id) {
+  return typeof id === 'string' && (id.startsWith('exp-') || id.startsWith('expired-'));
+}
+
 async function markRead(id) {
-  try {
-    await apiFetch('/api/notifications/' + id, { method:'PATCH', body: JSON.stringify({ is_read: true }) });
-    const n = NOTIFICATIONS.find(x => x.id === id);
-    if (n) { n.is_read = true; n.isRead = true; }
-    renderNotifs();
-    updateBadge();
-  } catch(e) {}
+  const n = NOTIFICATIONS.find(x => x.id === id);
+  if (n) { n.is_read = true; n.isRead = true; n.read = true; }
+  renderNotifs();
+  updateBadge();
+  // Only call API for real DB notifications
+  if (!isSyntheticId(id)) {
+    try { await apiFetch('/api/notifications/' + id, { method:'PATCH', body: JSON.stringify({ is_read: true }) }); }
+    catch(e) {}
+  }
 }
 
 async function dismissNotif(id, e) {
   if (e) e.stopPropagation();
-  try {
-    await apiFetch('/api/notifications/' + id, { method:'DELETE' });
-    NOTIFICATIONS = NOTIFICATIONS.filter(x => x.id !== id);
-    renderNotifs();
-    updateBadge();
-  } catch(err) {}
+  NOTIFICATIONS = NOTIFICATIONS.filter(x => x.id !== id);
+  renderNotifs();
+  updateBadge();
+  // Only call API for real DB notifications
+  if (!isSyntheticId(id)) {
+    try { await apiFetch('/api/notifications/' + id, { method:'DELETE' }); }
+    catch(err) {}
+  }
 }
 
 async function markAllRead() {
-  try {
-    await apiFetch('/api/notifications/mark-all-read', { method:'POST' });
-    NOTIFICATIONS.forEach(n => { n.is_read = true; n.isRead = true; });
-    renderNotifs();
-    updateBadge();
-  } catch(e) {}
+  NOTIFICATIONS.forEach(n => { n.is_read = true; n.isRead = true; n.read = true; });
+  renderNotifs();
+  updateBadge();
+  // Mark real DB notifications via API
+  try { await apiFetch('/api/notifications/mark-all-read', { method:'POST' }); }
+  catch(e) {}
 }
 
 function dismissAll() {
@@ -1036,7 +1045,7 @@ function buildEmailBody() {
   const crit = data.filter(n => n.priority === 'critical').length;
   const high = data.filter(n => n.priority === 'high').length;
   const med  = data.filter(n => n.priority === 'medium').length;
-  const unrd = data.filter(n => !n.read).length;
+  const unrd = data.filter(n => !n.read && !n.is_read && !n.isRead).length;
 
   let body = '';
   body += `Dear ${recipientName || 'Team'},\n\n`;
@@ -1061,7 +1070,7 @@ function buildEmailBody() {
 
     alerts.forEach((n, i) => {
       const priority = PRIORITY_LABEL[n.priority] || n.priority.toUpperCase();
-      const status   = n.read ? 'Read' : '● UNREAD';
+      const status   = (n.read||n.is_read||n.isRead) ? 'Read' : '● UNREAD';
       body += `  ${String(i + 1).padStart(2, '0')}. ${priority}  [${status}]\n`;
       body += `      ${n.titleEn}\n`;
       body += `      ${n.descEn}\n`;
@@ -1162,22 +1171,126 @@ function showToast(type, title, msg) {
 
 async function loadNotifications() {
   try {
-    const res  = await apiFetch('/api/notifications?limit=100');
-    const data = await res.json();
-    const d    = data.data || data;
-    NOTIFICATIONS = (d.notifications || d || []).map(n => ({
-      ...n,
-      isRead: n.is_read,
-      msg:    n.body || '',
-      time:   new Date(n.created_at).toLocaleString(),
-    }));
-  } catch(e) { NOTIFICATIONS = []; }
+    // Load DB notifications + expiring certs + expired certs in parallel
+    const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
+
+    const [notifRes, expiringRes, expiredRes] = await Promise.all([
+      apiFetch('/api/notifications?limit=200'),
+      apiFetch('/api/certificates/expiring?days=30'),
+      apiFetch('/api/certificates?approval_status=approved&limit=200'),
+    ]);
+
+    const nd = (await notifRes.json());
+    const ed = (await expiringRes.json());
+    const ad = (await expiredRes.json());
+
+    const dbNotifs  = ((nd.data || nd).notifications || nd.data || []);
+    const expiring  = ((ed.data || ed).certificates  || []);
+    const allCerts  = ((ad.data || ad).certificates  || []);
+
+    // Today for expiry math
+    const todayMs = new Date().setHours(0,0,0,0);
+
+    // ── Derive expiry notifications from certificate data ──────────────
+    const expiryNotifs = [];
+
+    // Certs expiring within 30 days
+    expiring.forEach(cert => {
+      const expiryMs = new Date(cert.expiry_date).setHours(0,0,0,0);
+      const days     = Math.ceil((expiryMs - todayMs) / 86400000);
+      const priority = days <= 7 ? 'critical' : days <= 14 ? 'high' : 'medium';
+      expiryNotifs.push({
+        id:        'exp-' + cert.id,
+        type:      'expiry',
+        titleEn:   `Certificate Expiring: ${cert.name || cert.cert_number || cert.id}`,
+        descEn:    `Expires on ${cert.expiry_date} — ${days} day${days !== 1 ? 's' : ''} remaining. Asset: ${cert.asset_id || '—'}`,
+        priority,
+        daysLeft:  days,
+        client:    cert.client_id,
+        certId:    cert.cert_number || cert.id,
+        jobNumber: cert.notes || '',
+        read:      false,
+        is_read:   false,
+        isRead:    false,
+        dismissed: false,
+        time:      cert.expiry_date,
+        link:      'certificates.html',
+      });
+    });
+
+    // Certs already expired (approved but past expiry date)
+    allCerts.forEach(cert => {
+      const expiryMs = new Date(cert.expiry_date).setHours(0,0,0,0);
+      const days     = Math.ceil((expiryMs - todayMs) / 86400000);
+      if (days < 0) {
+        expiryNotifs.push({
+          id:        'expired-' + cert.id,
+          type:      'expiry',
+          titleEn:   `Certificate EXPIRED: ${cert.name || cert.cert_number || cert.id}`,
+          descEn:    `Expired on ${cert.expiry_date} — ${Math.abs(days)} day${Math.abs(days) !== 1 ? 's' : ''} overdue. Immediate renewal required.`,
+          priority:  'critical',
+          daysLeft:  days,
+          client:    cert.client_id,
+          certId:    cert.cert_number || cert.id,
+          jobNumber: cert.notes || '',
+          read:      false,
+          is_read:   false,
+          isRead:    false,
+          dismissed: false,
+          time:      cert.expiry_date,
+          link:      'certificates.html',
+        });
+      }
+    });
+
+    // ── Map DB notifications (approval events, system messages) ────────
+    const mappedDbNotifs = dbNotifs.map(n => {
+      // Derive display type from DB type field
+      let type     = 'system';
+      let priority = 'info';
+      if (n.type === 'cert_uploaded')  { type = 'approval'; priority = 'info'; }
+      if (n.type === 'cert_reviewed')  {
+        type = 'approval';
+        priority = (n.body || '').toLowerCase().includes('approved') ? 'success' : 'critical';
+      }
+      if (n.type === 'expiry' || n.type === 'cert_expiry') { type = 'expiry'; priority = 'high'; }
+
+      return {
+        ...n,
+        type,
+        titleEn:   n.title || 'Notification',
+        descEn:    n.body  || '',
+        priority,
+        daysLeft:  null,
+        client:    n.client_id || null,
+        certId:    n.ref_type === 'certificate' ? n.ref_id : null,
+        jobNumber: '',
+        read:      n.is_read,
+        isRead:    n.is_read,
+        dismissed: false,
+        time:      n.created_at ? new Date(n.created_at).toLocaleString() : '',
+        link:      n.ref_type === 'certificate' ? 'certificates.html' : 'dashboard.html',
+      };
+    });
+
+    // Merge: expiry alerts first, then DB notifications; deduplicate by id
+    const seen = new Set();
+    NOTIFICATIONS = [...expiryNotifs, ...mappedDbNotifs].filter(n => {
+      if (seen.has(n.id)) return false;
+      seen.add(n.id);
+      return true;
+    });
+
+  } catch(e) {
+    console.error('loadNotifications error:', e);
+    NOTIFICATIONS = [];
+  }
   renderNotifs();
   updateBadge();
 }
 
 function updateBadge() {
-  const count = NOTIFICATIONS.filter(n => !n.is_read && !n.isRead).length;
+  const count = NOTIFICATIONS.filter(n => !n.dismissed && !n.is_read && !n.isRead && !n.read).length;
   const badge = document.getElementById('notifBadge');
   if (badge) {
     badge.textContent = count > 9 ? '9+' : (count || '');
