@@ -2464,7 +2464,11 @@ async function loadAssets() {
       client:    a.client_id     || '',
       notes:     a.notes         || '',
     }));
-  } catch(e) { ASSETS = []; }
+  } catch(e) {
+    console.error('loadAssets error:', e);
+    ASSETS = [];
+    showToast('error', 'Load Failed', 'Could not load assets: ' + (e?.message || String(e)));
+  }
   renderTable();
 }
 
@@ -2572,6 +2576,32 @@ document.addEventListener('DOMContentLoaded', () => {
   cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.4);" title="Debug">🔧</button>
 
 <script>
+/* ── API error interceptor — remove before final delivery ──
+   Shows a toast for any API call that fails so nothing is silent */
+const _origFetch = window.fetch;
+window.fetch = async function(...args) {
+  try {
+    const res = await _origFetch(...args);
+    const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+    if (!res.ok && url.includes('/api/')) {
+      console.error('API call failed:', url, res.status);
+      if (typeof showToast === 'function') {
+        showToast('error', 'API Error ' + res.status, url.replace('/api',''));
+      }
+    }
+    return res;
+  } catch(e) {
+    const url = typeof args[0] === 'string' ? args[0] : '';
+    console.error('Fetch threw:', url, e.message);
+    if (url.includes('/api/') && typeof showToast === 'function') {
+      showToast('error', 'Network Error', url.replace('/api','') + ': ' + e.message);
+    }
+    throw e;
+  }
+};
+/* ── End interceptor ── */
+
+
 function debugLog(msg, color) {
   const out = document.getElementById('debugOut');
   const line = document.createElement('div');

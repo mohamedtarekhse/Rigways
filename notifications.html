@@ -576,6 +576,32 @@
 
 <!-- ═══════════════════════ SCRIPTS ═══════════════════════ -->
 <script>
+/* ── API error interceptor — remove before final delivery ──
+   Shows a toast for any API call that fails so nothing is silent */
+const _origFetch = window.fetch;
+window.fetch = async function(...args) {
+  try {
+    const res = await _origFetch(...args);
+    const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+    if (!res.ok && url.includes('/api/')) {
+      console.error('API call failed:', url, res.status);
+      if (typeof showToast === 'function') {
+        showToast('error', 'API Error ' + res.status, url.replace('/api',''));
+      }
+    }
+    return res;
+  } catch(e) {
+    const url = typeof args[0] === 'string' ? args[0] : '';
+    console.error('Fetch threw:', url, e.message);
+    if (url.includes('/api/') && typeof showToast === 'function') {
+      showToast('error', 'Network Error', url.replace('/api','') + ': ' + e.message);
+    }
+    throw e;
+  }
+};
+/* ── End interceptor ── */
+
+
 /* ═══════════════════════════════════════════════════════
    SECURITY UTILITIES
 ═══════════════════════════════════════════════════════ */
@@ -884,7 +910,7 @@ async function markRead(id) {
     await apiFetch('/api/notifications/' + id, { method:'PATCH', body: JSON.stringify({ is_read: true }) });
     const n = NOTIFICATIONS.find(x => x.id === id);
     if (n) { n.is_read = true; n.isRead = true; }
-    if (typeof renderNotifications === 'function') renderNotifications();
+    renderNotifs();
     updateBadge();
   } catch(e) {}
 }
@@ -894,7 +920,7 @@ async function dismissNotif(id, e) {
   try {
     await apiFetch('/api/notifications/' + id, { method:'DELETE' });
     NOTIFICATIONS = NOTIFICATIONS.filter(x => x.id !== id);
-    if (typeof renderNotifications === 'function') renderNotifications();
+    renderNotifs();
     updateBadge();
   } catch(err) {}
 }
@@ -903,7 +929,7 @@ async function markAllRead() {
   try {
     await apiFetch('/api/notifications/mark-all-read', { method:'POST' });
     NOTIFICATIONS.forEach(n => { n.is_read = true; n.isRead = true; });
-    if (typeof renderNotifications === 'function') renderNotifications();
+    renderNotifs();
     updateBadge();
   } catch(e) {}
 }
@@ -1146,7 +1172,7 @@ async function loadNotifications() {
       time:   new Date(n.created_at).toLocaleString(),
     }));
   } catch(e) { NOTIFICATIONS = []; }
-  if (typeof renderNotifications === 'function') renderNotifications();
+  renderNotifs();
   updateBadge();
 }
 
@@ -1204,14 +1230,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Refresh preview when subject changes */
   document.getElementById('emailSubject').addEventListener('input', refreshEmailPreview);
 
-  /* Welcome toast for unread */
-  const unread = NOTIFICATIONS.filter(n=>!n.read&&!n.dismissed).length;
-  if (unread > 0) {
-    setTimeout(() => showToast('warning',
-      `${unread} Unread Notifications`,
-      'You have alerts requiring your attention.'
-    ), 500);
-  }
+  /* unread toast shown by loadNotifications after data loads */
 });
 </script>
 </body>

@@ -592,6 +592,32 @@
 
 <!-- ═══════════════════════ SCRIPTS ═══════════════════════ -->
 <script>
+/* ── API error interceptor — remove before final delivery ──
+   Shows a toast for any API call that fails so nothing is silent */
+const _origFetch = window.fetch;
+window.fetch = async function(...args) {
+  try {
+    const res = await _origFetch(...args);
+    const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+    if (!res.ok && url.includes('/api/')) {
+      console.error('API call failed:', url, res.status);
+      if (typeof showToast === 'function') {
+        showToast('error', 'API Error ' + res.status, url.replace('/api',''));
+      }
+    }
+    return res;
+  } catch(e) {
+    const url = typeof args[0] === 'string' ? args[0] : '';
+    console.error('Fetch threw:', url, e.message);
+    if (url.includes('/api/') && typeof showToast === 'function') {
+      showToast('error', 'Network Error', url.replace('/api','') + ': ' + e.message);
+    }
+    throw e;
+  }
+};
+/* ── End interceptor ── */
+
+
 /* ═══════════════════════════════════════════════════════
    SECURITY UTILITIES
 ═══════════════════════════════════════════════════════ */
@@ -962,41 +988,60 @@ function showToast(type, title, msg) {
 
 /* ── Dashboard API loading ── */
 async function loadDashboardData(role) {
-  try {
-    const [assetRes, certRes, expiringRes, pendingRes, notifRes] = await Promise.all([
-      apiFetch('/api/assets/stats').then(r => r.json()),
-      apiFetch('/api/certificates/stats').then(r => r.json()),
-      apiFetch('/api/certificates/expiring?days=30').then(r => r.json()),
-      apiFetch('/api/certificates?approval_status=pending&limit=10').then(r => r.json()),
-      apiFetch('/api/notifications/unread-count').then(r => r.json()),
-    ]);
-    const as       = assetRes.data  || assetRes  || {};
-    const cs       = certRes.data   || certRes   || {};
-    const expiring = (expiringRes.data || expiringRes).certificates || [];
-    const pending  = (pendingRes.data  || pendingRes).certificates  || [];
-    const unread   = (notifRes.data    || notifRes).count           || 0;
-
-    renderKPIs(as, cs, role);
-    renderExpiryList(expiring);
-    renderApprovalQueue(pending, role);
-
-    const badge = document.getElementById('notifBadge');
-    if (badge && unread > 0) { badge.style.display = 'block'; badge.textContent = unread > 9 ? '9+' : unread; }
-
-    const alertText = document.getElementById('alertText');
-    if (alertText) {
-      const n = cs.expiring || 0;
-      alertText.textContent = n > 0
-        ? n + ' certificate' + (n > 1 ? 's are' : ' is') + ' expiring within 30 days — action required.'
-        : 'All certificates are currently up to date.';
+  // Each call is independent — a failure in one does not blank the others
+  async function safeFetch(url) {
+    try {
+      const res = await apiFetch(url);
+      if (!res.ok) { console.warn('API error:', url, res.status); return {}; }
+      const j = await res.json();
+      return j.data || j || {};
+    } catch(e) {
+      console.error('Fetch failed:', url, e.message);
+      return {};
     }
-  } catch(err) {
-    console.error('Dashboard load error:', err);
-    renderKPIs({}, {}, role);
-    renderExpiryList([]);
-    renderApprovalQueue([], role);
+  }
+
+  // Run all in parallel but each is independently safe
+  const [as, cs, expiringData, pendingData, notifData] = await Promise.all([
+    safeFetch('/api/assets/stats'),
+    safeFetch('/api/certificates/stats'),
+    safeFetch('/api/certificates/expiring?days=30'),
+    safeFetch('/api/certificates?approval_status=pending&limit=10'),
+    safeFetch('/api/notifications/unread-count'),
+  ]);
+
+  const expiring = expiringData.certificates || [];
+  const pending  = pendingData.certificates  || [];
+  const unread   = notifData.count           || 0;
+
+  renderKPIs(as, cs, role);
+  renderExpiryList(expiring);
+  renderApprovalQueue(pending, role);
+
+  // Notification badge
+  const badge = document.getElementById('notifBadge');
+  if (badge) {
+    badge.style.display = unread > 0 ? 'block' : 'none';
+    badge.textContent   = unread > 9 ? '9+' : (unread || '');
+  }
+
+  // Alert strip
+  const alertText = document.getElementById('alertText');
+  if (alertText) {
+    const n = cs.expiring || 0;
+    alertText.textContent = n > 0
+      ? n + ' certificate' + (n > 1 ? 's are' : ' is') + ' expiring within 30 days.'
+      : 'All certificates are currently up to date.';
+  }
+
+  // Approval count badge
+  const approvalCount = document.getElementById('approvalCount');
+  if (approvalCount) {
+    const c = cs.pending || 0;
+    approvalCount.textContent = c + ' Pending';
   }
 }
+
 
 function renderKPIs(as, cs, role) {
   const grid = document.getElementById('kpiGrid');
