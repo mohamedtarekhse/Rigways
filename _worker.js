@@ -36,7 +36,7 @@ const unauth    = (env)             => json({ success: false, error: 'Unauthoriz
 const forbidden = (env)             => json({ success: false, error: 'Forbidden',      code: 'FORBIDDEN'}, 403, env);
 const notFound  = (res, env)        => json({ success: false, error: `${res} not found`, code: 'NOT_FOUND'}, 404, env);
 const conflict  = (error, env)      => json({ success: false, error, code: 'CONFLICT' },              409, env);
-const serverErr = (env)             => json({ success: false, error: 'Internal server error', code: 'SERVER_ERROR' }, 500, env);
+const serverErr = (env, msg)         => json({ success: false, error: msg ? 'Server error: '+msg : 'Internal server error', code: 'SERVER_ERROR' }, 500, env);
 
 // ── validate.js ──
 // worker/src/utils/validate.js
@@ -240,6 +240,14 @@ async function handleAuth(request, env, path) {
     });
     if (!valid) return badReq(errors.join('; '), 'VALIDATION', env);
 
+    // Check env vars explicitly before trying Supabase
+    if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+      return json({ success: false, error: 'Missing env vars: SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY not set in Cloudflare Pages environment variables', code: 'MISSING_ENV' }, 500, env);
+    }
+    if (!env.JWT_SECRET) {
+      return json({ success: false, error: 'Missing env var: JWT_SECRET not set in Cloudflare Pages environment variables', code: 'MISSING_ENV' }, 500, env);
+    }
+
     const db = createSupabase(env);
     const { data: rows, error } = await db.from('users', {
       filters: { 'username.ilike': body.username.toLowerCase() },
@@ -247,9 +255,7 @@ async function handleAuth(request, env, path) {
       limit:   1,
     });
     if (error) {
-      console.error('Supabase error:', JSON.stringify(error));
-      // Return detail in error message to help diagnose
-      return json({ success: false, error: 'Database error: ' + (error.message || error.hint || JSON.stringify(error)), code: 'DB_ERROR' }, 500, env);
+      return json({ success: false, error: 'Supabase error: ' + (error.message || error.hint || error.code || JSON.stringify(error)), code: 'DB_ERROR' }, 500, env);
     }
 
     const user = Array.isArray(rows) ? rows[0] : rows;
@@ -1201,7 +1207,7 @@ export default {
       return json({ success: false, error: 'Route not found' }, 404, env);
     } catch (err) {
       console.error('Worker error:', err);
-      return json({ success: false, error: 'Internal server error' }, 500, env);
+      return json({ success: false, error: 'Error: ' + (err?.message || String(err)), code: 'SERVER_ERROR' }, 500, env);
     }
   }
 };
