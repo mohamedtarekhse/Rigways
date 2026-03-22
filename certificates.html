@@ -701,7 +701,17 @@
           <!-- Linked Asset -->
           <div class="sap-field">
             <label class="sap-label">Linked Asset ID</label>
-            <select id="f_assetId" class="sap-select"><option value="">Select asset…</option></select>
+            <select id="f_assetId" class="sap-select">
+              <option value="">Select asset…</option>
+              <option value="AST-0001">AST-0001 – Server Rack #01</option>
+              <option value="AST-0002">AST-0002 – HVAC Unit #01</option>
+              <option value="AST-0003">AST-0003 – Generator #01</option>
+              <option value="AST-0004">AST-0004 – Forklift #03</option>
+              <option value="AST-0005">AST-0005 – Fire Panel #01</option>
+              <option value="AST-0006">AST-0006 – Pump Station #2</option>
+              <option value="AST-0007">AST-0007 – UPS System #01</option>
+              <option value="AST-0008">AST-0008 – Crane #01</option>
+            </select>
           </div>
 
           <!-- Client -->
@@ -838,7 +848,7 @@ let deleteTargetId = null;
 let rejectTargetId = null;
 
 /* ── Helpers ── */
-/* Session helpers — delegate to SapSession from app.js */
+/* Session helpers */
 function getSession() {
   if (typeof SapSession !== 'undefined') return SapSession.get();
   try {
@@ -972,7 +982,7 @@ function getEditWindowBadge(cert) {
 /* ── Sync CERTS to localStorage so assets.html can read them ── */
 
 function syncCerts() {
-  }
+}
 
 function renderTable() {
   const role     = session.role;
@@ -1269,23 +1279,23 @@ async function massApprove() {
   const ids = getSelectedIds();
   if (!ids.length) { showToast('warning','Nothing Selected','Select at least one certificate.'); return; }
   const pending = ids.filter(id => {
-    const cert = CERTS.find(x => (x.id||x.certId) === id);
+    const cert = CERTS.find(x => x.certId === id);
     return cert && cert.approvalStatus === 'pending';
   });
-  if (!pending.length) { showToast('info','No Pending','Selected certificates are not pending approval.'); return; }
-
+  if (!pending.length) { showToast('info','None Pending','No pending certificates selected.'); return; }
   try {
     const results = await Promise.all(
-      pending.map(id => apiFetch(`/api/certificates/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ approval_status: 'approved' })
-      }).then(r => r.json()))
+      pending.map(id => {
+        const cert = CERTS.find(x => x.certId === id);
+        return apiFetch('/api/certificates/' + (cert?.id || id), {
+          method: 'PATCH', body: JSON.stringify({ approval_status: 'approved' })
+        }).then(r => r.json());
+      })
     );
     const failed = results.filter(r => !r.success);
-    // Update local array
     results.forEach((r, i) => {
       if (r.success) {
-        const idx = CERTS.findIndex(x => (x.id||x.certId) === pending[i]);
+        const idx = CERTS.findIndex(x => x.certId === pending[i]);
         if (idx > -1) { CERTS[idx].approvalStatus = 'approved'; CERTS[idx].approval_status = 'approved'; }
       }
     });
@@ -1294,11 +1304,8 @@ async function massApprove() {
     } else {
       showToast('success','Approved',`${pending.length} certificate${pending.length > 1 ? 's' : ''} approved.`);
     }
-    clearSelection();
-    renderTable();
-  } catch(e) {
-    showToast('error','Network Error','Could not approve certificates. Please try again.');
-  }
+    clearSelection(); renderTable();
+  } catch(e) { showToast('error','Network Error','Could not approve. Please try again.'); }
 }
 
 async function massDelete() {
@@ -1307,7 +1314,10 @@ async function massDelete() {
   if (!confirm(`Delete ${ids.length} certificate${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
   try {
     const results = await Promise.all(
-      ids.map(id => apiFetch(`/api/certificates/${id}`, { method:'DELETE' }).then(r => r.json()))
+      ids.map(id => {
+        const cert = CERTS.find(x => x.certId === id);
+        return apiFetch('/api/certificates/' + (cert?.id || id), { method: 'DELETE' }).then(r => r.json());
+      })
     );
     const failed = results.filter(r => !r.success);
     if (failed.length) {
@@ -1315,35 +1325,14 @@ async function massDelete() {
     } else {
       showToast('success','Deleted',`${ids.length} certificate${ids.length > 1 ? 's' : ''} deleted.`);
     }
-    CERTS = CERTS.filter(x => !ids.includes(x.id||x.certId));
-    clearSelection();
-    renderTable();
-  } catch(e) {
-    showToast('error','Network Error','Could not delete certificates. Please try again.');
-  }
+    CERTS = CERTS.filter(x => !ids.includes(x.certId));
+    clearSelection(); renderTable();
+  } catch(e) { showToast('error','Network Error','Could not delete. Please try again.'); }
 }
 
 /* ═══════════════════════════════════════════════════════
    UPLOAD / EDIT MODAL
 ═══════════════════════════════════════════════════════ */
-async function loadAssetDropdown() {
-  const sel = document.getElementById('f_assetId');
-  if (!sel) return;
-  try {
-    const res  = await apiFetch('/api/assets?limit=500');
-    const data = await res.json();
-    const d    = data.data || data;
-    const assets = d.assets || d || [];
-    sel.innerHTML = '<option value="">Select asset…</option>' +
-      assets.map(a => {
-        const displayId = a.asset_number || a.id;
-        return `<option value="${displayId}">${displayId} — ${a.name}</option>`;
-      }).join('');
-  } catch(e) {
-    sel.innerHTML = '<option value="">Could not load assets</option>';
-  }
-}
-
 function openUploadModal() {
   document.getElementById('editCertId').value = '';
   document.getElementById('certForm').reset();
@@ -1369,7 +1358,7 @@ function openUploadModal() {
   loadAssetDropdown();
 }
 
-async function openEditModal(id) {
+function openEditModal(id) {
   const c = CERTS.find(x => x.certId === id);
   if (!c) return;
 
@@ -1414,7 +1403,6 @@ async function openEditModal(id) {
   document.getElementById('techUploadNote').style.display = session.role === 'technician' ? 'block' : 'none';
   if (session.customerId) document.getElementById('f_client_wrap').style.display = 'none';
   document.getElementById('certModal').classList.add('open');
-  await loadAssetDropdown();
 }
 
 function closeModal() {
@@ -1468,16 +1456,16 @@ zone.addEventListener('drop', e => {
 
 /* ── Save ── */
 async function saveCert() {
-  const jobNumber   = document.getElementById('f_jobNumber')?.value?.trim() || '';
-  const name        = document.getElementById('f_name')?.value?.trim() || '';
-  const certType    = document.getElementById('f_certType')?.value || '';
+  const jobNumber     = document.getElementById('f_jobNumber')?.value?.trim() || '';
+  const name          = document.getElementById('f_name')?.value?.trim() || '';
+  const certType      = document.getElementById('f_certType')?.value || '';
   const liftingSubtype = certType === 'LIFTING' ? (document.getElementById('f_liftingSubtype')?.value || '') : '';
-  const issuedBy    = document.getElementById('f_issuedBy')?.value?.trim() || '';
-  const issueDate   = document.getElementById('f_issueDate')?.value || '';
-  const expiryDate  = document.getElementById('f_expiryDate')?.value || '';
-  const client      = document.getElementById('f_client')?.value || session?.customerId || '';
-  const assetId     = document.getElementById('f_assetId')?.value || '';
-  const editId      = document.getElementById('editCertId')?.value || '';
+  const issuedBy      = document.getElementById('f_issuedBy')?.value?.trim() || '';
+  const issueDate     = document.getElementById('f_issueDate')?.value || '';
+  const expiryDate    = document.getElementById('f_expiryDate')?.value || '';
+  const client        = document.getElementById('f_client')?.value || session?.customerId || '';
+  const assetId       = document.getElementById('f_assetId')?.value || '';
+  const editId        = document.getElementById('editCertId')?.value || '';
 
   if (!name || !certType || !issuedBy || !issueDate || !expiryDate) {
     showToast('error','Required Fields','Please fill all required fields.'); return;
@@ -1496,8 +1484,6 @@ async function saveCert() {
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Uploading…'; }
 
   let fileName = null, fileKey = null;
-
-  // Step 1: Upload file to R2
   if (selectedFile) {
     try {
       const fd    = new FormData();
@@ -1508,7 +1494,7 @@ async function saveCert() {
         headers: token ? { 'Authorization': 'Bearer ' + token } : {},
         body: fd,
       });
-      const ud = await uploadRes.json();
+      const ud  = await uploadRes.json();
       const udd = ud.data || ud;
       if (!ud.success) {
         showToast('error','Upload Failed', udd.error || 'Could not upload file.');
@@ -1518,31 +1504,31 @@ async function saveCert() {
       fileName = udd.file_name;
       fileKey  = udd.file_url;
     } catch(e) {
-      showToast('error','Upload Error','File upload failed. Please try again.');
+      showToast('error','Upload Error','File upload failed.');
       if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
       return;
     }
   }
 
-  // Step 2: Save cert metadata
   if (saveBtn) saveBtn.textContent = 'Saving…';
   const payload = {
     name,
-    cert_type:    certType + (liftingSubtype ? ' — ' + liftingSubtype : ''),
-    asset_id:     assetId   || undefined,
-    client_id:    client    || undefined,
-    issued_by:    issuedBy,
-    issue_date:   issueDate,
-    expiry_date:  expiryDate,
-    notes:        jobNumber || null,
+    cert_type:   certType + (liftingSubtype ? ' — ' + liftingSubtype : ''),
+    asset_id:    assetId   || undefined,
+    client_id:   client    || undefined,
+    issued_by:   issuedBy,
+    issue_date:  issueDate,
+    expiry_date: expiryDate,
+    notes:       jobNumber || null,
     ...(fileName ? { file_name: fileName, file_url: fileKey } : {}),
   };
 
   try {
-    const url    = editId ? `/api/certificates/${editId}` : '/api/certificates';
-    const method = editId ? 'PATCH' : 'POST';
-    const res    = await apiFetch(url, { method, body: JSON.stringify(payload) });
-    const data   = await res.json();
+    const editCert = editId ? CERTS.find(x => x.certId === editId) : null;
+    const url      = editId ? '/api/certificates/' + (editCert?.id || editId) : '/api/certificates';
+    const method   = editId ? 'PATCH' : 'POST';
+    const res      = await apiFetch(url, { method, body: JSON.stringify(payload) });
+    const data     = await res.json();
     if (!data.success) {
       showToast('error','Save Failed',(data.data||data).error || 'Could not save.');
       if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
@@ -1551,11 +1537,11 @@ async function saveCert() {
     selectedFile = null;
     showToast('success', editId ? 'Updated' : 'Uploaded',
       '"' + name + '" ' + (editId ? 'updated.' : 'uploaded & sent for approval.'));
-    document.getElementById('uploadModal')?.classList.remove('open');
+    document.getElementById('uploadModal').classList.remove('open');
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
     await loadCerts();
   } catch(e) {
-    showToast('error','Network Error','Could not save certificate. Please try again.');
+    showToast('error','Network Error','Could not save certificate.');
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
   }
 }
@@ -1564,11 +1550,14 @@ async function saveCert() {
    APPROVAL
 ═══════════════════════════════════════════════════════ */
 async function approveCert(id) {
+  const cert = CERTS.find(x => x.certId === id);
   try {
-    const res  = await apiFetch(`/api/certificates/${id}`, { method:'PATCH', body: JSON.stringify({ approval_status:'approved' }) });
+    const res  = await apiFetch('/api/certificates/' + (cert?.id || id), {
+      method: 'PATCH', body: JSON.stringify({ approval_status: 'approved' })
+    });
     const data = await res.json();
     if (!data.success) { showToast('error','Failed',(data.data||data).error||'Could not approve.'); return; }
-    const idx  = CERTS.findIndex(x => (x.id||x.certId) === id);
+    const idx = CERTS.findIndex(x => x.certId === id);
     if (idx > -1) { CERTS[idx].approvalStatus = 'approved'; CERTS[idx].approval_status = 'approved'; }
     showToast('success','Approved','Certificate approved.');
     renderTable();
@@ -1585,17 +1574,20 @@ function openRejectModal(id) {
 }
 function closeRejectModal() { document.getElementById('rejectModal').classList.remove('open'); }
 async function confirmReject() {
-  const reason = document.getElementById('rejectReason')?.value?.trim() || '';
+  const reason = document.getElementById('rejectReason').value.trim();
   if (!reason) { showToast('error','Required','Please enter a rejection reason.'); return; }
+  const cert = CERTS.find(x => x.certId === rejectTargetId);
   try {
-    const res  = await apiFetch(`/api/certificates/${rejectTargetId}`, { method:'PATCH', body: JSON.stringify({ approval_status:'rejected', rejection_reason: reason }) });
+    const res  = await apiFetch('/api/certificates/' + (cert?.id || rejectTargetId), {
+      method: 'PATCH', body: JSON.stringify({ approval_status: 'rejected', rejection_reason: reason })
+    });
     const data = await res.json();
-    if (!data.success) { closeRejectModal?.(); showToast('error','Failed',(data.data||data).error||'Could not reject.'); return; }
-    const idx  = CERTS.findIndex(x => (x.id||x.certId) === rejectTargetId);
+    if (!data.success) { closeRejectModal(); showToast('error','Failed',(data.data||data).error||'Could not reject.'); return; }
+    const idx = CERTS.findIndex(x => x.certId === rejectTargetId);
     if (idx > -1) { CERTS[idx].approvalStatus = 'rejected'; CERTS[idx].rejectionReason = reason; }
     showToast('warning','Rejected','Certificate rejected.');
   } catch(e) { showToast('error','Network Error','Could not reject.'); }
-  if (typeof closeRejectModal === 'function') closeRejectModal();
+  closeRejectModal();
   renderTable();
 }
 
@@ -1844,13 +1836,14 @@ document.getElementById('drawerOverlay').addEventListener('click', function(e) {
 
 /* ── Certificate file link opener ── */
 async function openCertLink(certId) {
+  const cert = CERTS.find(x => x.certId === certId);
   try {
-    const res  = await apiFetch(`/api/certificates/file/${certId}`);
+    const res  = await apiFetch('/api/certificates/file/' + (cert?.id || certId));
     const data = await res.json();
     const d    = data.data || data;
     if (!data.success) { showToast('info','No File', d.error || 'No file attached.'); return; }
     window.open(d.url, '_blank', 'noopener,noreferrer');
-  } catch(e) { showToast('error','Error','Could not open file. Please try again.'); }
+  } catch(e) { showToast('error','Error','Could not open file.'); }
 }
 
 /* ── File preview ── */
@@ -1870,14 +1863,14 @@ function openDeleteModal(id) {
   document.getElementById('deleteModal').classList.add('open');
 }
 async function confirmDelete() {
-  const cert = CERTS.find(x => (x.id||x.certId) === deleteTargetId);
-  document.getElementById('deleteModal')?.classList.remove('open');
+  const cert = CERTS.find(x => x.certId === deleteTargetId);
+  document.getElementById('deleteModal').classList.remove('open');
   try {
-    const res  = await apiFetch(`/api/certificates/${deleteTargetId}`, { method:'DELETE' });
+    const res  = await apiFetch('/api/certificates/' + (cert?.id || deleteTargetId), { method: 'DELETE' });
     const data = await res.json();
     if (!data.success) { showToast('error','Failed',(data.data||data).error||'Could not delete.'); return; }
-    CERTS = CERTS.filter(x => (x.id||x.certId) !== deleteTargetId);
-    showToast('success','Deleted','"' + (cert?.name||deleteTargetId) + '" deleted.');
+    CERTS = CERTS.filter(x => x.certId !== deleteTargetId);
+    showToast('success','Deleted',`"${cert?.name || deleteTargetId}" deleted.`);
     renderTable();
   } catch(e) { showToast('error','Network Error','Could not delete.'); }
 }
@@ -2135,23 +2128,29 @@ function showToast(type, title, msg) {
    INIT
 ═══════════════════════════════════════════════════════ */
 
+async function loadAssetDropdown() {
+  const sel = document.getElementById('f_assetId');
+  if (!sel) return;
+  try {
+    const res    = await apiFetch('/api/assets?limit=500');
+    const data   = await res.json();
+    const assets = (data.data?.assets || data.data || []);
+    sel.innerHTML = '<option value="">Select asset…</option>' +
+      assets.map(a => `<option value="${a.asset_number || a.id}">${a.asset_number || a.id} — ${a.name}</option>`).join('');
+  } catch(e) { sel.innerHTML = '<option value="">Could not load assets</option>'; }
+}
+
 async function loadCerts() {
   try {
-    // Load certs and assets in parallel
     const [certRes, assetRes] = await Promise.all([
       apiFetch('/api/certificates?limit=200').then(r => r.json()),
       apiFetch('/api/assets?limit=500').then(r => r.json()),
     ]);
-    const cd = certRes.data || certRes;
+    const cd = certRes.data  || certRes;
     const ad = assetRes.data || assetRes;
-
-    // Build UUID → asset_number lookup map
     const assetMap = {};
-    (ad.assets || ad || []).forEach(a => {
-      if (a.id) assetMap[a.id] = a.asset_number || a.id;
-    });
+    (ad.assets || ad || []).forEach(a => { if (a.id) assetMap[a.id] = a.asset_number || a.id; });
     window._assetMap = assetMap;
-
     CERTS = (cd.certificates || cd || []).map(cert => ({
       ...cert,
       certId:          cert.cert_number || cert.id,
@@ -2160,7 +2159,6 @@ async function loadCerts() {
       expiryDate:      cert.expiry_date,
       issueDate:       cert.issue_date,
       issuedBy:        cert.issued_by,
-      // Show AST-0001 format — resolve UUID to asset_number
       assetId:         assetMap[cert.asset_id] || cert.asset_id || '—',
       client:          cert.client_id,
       fileName:        cert.file_name || '',

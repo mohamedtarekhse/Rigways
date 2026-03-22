@@ -610,7 +610,7 @@ function applyLang(lang) {
 function toggleLang() {}
 let session = null;
 
-/* Session helpers — delegate to SapSession from app.js */
+/* Session helpers */
 function getSession() {
   if (typeof SapSession !== 'undefined') return SapSession.get();
   try {
@@ -960,7 +960,7 @@ function showToast(type, title, msg) {
    INIT
 ═══════════════════════════════════════════════════════ */
 
-/* ── Dashboard API data loading ── */
+/* ── Dashboard API loading ── */
 async function loadDashboardData(role) {
   try {
     const [assetRes, certRes, expiringRes, pendingRes, notifRes] = await Promise.all([
@@ -970,38 +970,26 @@ async function loadDashboardData(role) {
       apiFetch('/api/certificates?approval_status=pending&limit=10').then(r => r.json()),
       apiFetch('/api/notifications/unread-count').then(r => r.json()),
     ]);
+    const as       = assetRes.data  || assetRes  || {};
+    const cs       = certRes.data   || certRes   || {};
+    const expiring = (expiringRes.data || expiringRes).certificates || [];
+    const pending  = (pendingRes.data  || pendingRes).certificates  || [];
+    const unread   = (notifRes.data    || notifRes).count           || 0;
 
-    const as = (assetRes.data || assetRes) || {};
-    const cs = (certRes.data || certRes) || {};
-    const expiring = ((expiringRes.data || expiringRes).certificates) || [];
-    const pending  = ((pendingRes.data  || pendingRes).certificates)  || [];
-    const unread   = ((notifRes.data    || notifRes).count)            || 0;
-
-    // Render KPIs
     renderKPIs(as, cs, role);
-
-    // Render expiry list
     renderExpiryList(expiring);
-
-    // Render approval queue
     renderApprovalQueue(pending, role);
 
-    // Update notification badge
     const badge = document.getElementById('notifBadge');
-    if (badge && unread > 0) {
-      badge.style.display = 'block';
-      badge.textContent = unread > 9 ? '9+' : unread;
-    }
+    if (badge && unread > 0) { badge.style.display = 'block'; badge.textContent = unread > 9 ? '9+' : unread; }
 
-    // Alert strip
     const alertText = document.getElementById('alertText');
     if (alertText) {
-      const expCount = cs.expiring || 0;
-      alertText.textContent = expCount > 0
-        ? expCount + ' certificate' + (expCount > 1 ? 's are' : ' is') + ' expiring within 30 days.'
+      const n = cs.expiring || 0;
+      alertText.textContent = n > 0
+        ? n + ' certificate' + (n > 1 ? 's are' : ' is') + ' expiring within 30 days — action required.'
         : 'All certificates are currently up to date.';
     }
-
   } catch(err) {
     console.error('Dashboard load error:', err);
     renderKPIs({}, {}, role);
@@ -1014,6 +1002,13 @@ function renderKPIs(as, cs, role) {
   const grid = document.getElementById('kpiGrid');
   if (!grid) return;
   const colorMap = { blue:'#0070f2', green:'#188918', orange:'#e76500', red:'#bb0000', gray:'#6a6d70' };
+  const icons = {
+    asset: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    cert:  '<path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>',
+    warn:  '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    err:   '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  };
   const sets = {
     admin: [
       { label:'Total Assets',       value: as.total    ?? '—', color:'blue',   icon:'asset' },
@@ -1043,13 +1038,6 @@ function renderKPIs(as, cs, role) {
     ],
   };
   const set = sets[role] || sets.user;
-  const icons = {
-    asset:'<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
-    cert:'<path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>',
-    warn:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
-    err:'<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
-    clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
-  };
   grid.innerHTML = set.map(k => `
     <div class="kpi-card">
       <div class="kpi-card__icon" style="background:${colorMap[k.color]}15;color:${colorMap[k.color]}">
@@ -1076,7 +1064,7 @@ function renderExpiryList(certs) {
     return `<div class="expiry-item" onclick="window.location.href='certificates.html'" style="cursor:pointer">
       <div class="expiry-dot expiry-dot--${cls}"></div>
       <div class="expiry-item__info">
-        <div class="expiry-item__name">${cert.name || cert.cert_number || ''}</div>
+        <div class="expiry-item__name">${cert.name || ''}</div>
         <div class="expiry-item__sub">${cert.cert_type || ''} · ${cert.cert_number || ''}</div>
       </div>
       <div class="expiry-item__days expiry-item__days--${cls}">${days}d left</div>
@@ -1111,18 +1099,55 @@ function renderApprovalQueue(certs, role) {
 async function dashApproveCert(id, btn) {
   btn.disabled = true;
   try {
-    await apiFetch('/api/certificates/' + id, { method:'PATCH', body: JSON.stringify({ approval_status:'approved' }) });
-    btn.closest('.approval-item').querySelector('.approval-actions').innerHTML = '<span class="sap-badge sap-badge--success">Approved</span>';
-    showToast('success','Approved','Certificate approved.');
+    const res = await apiFetch('/api/certificates/' + id, { method:'PATCH', body: JSON.stringify({ approval_status:'approved' }) });
+    const data = await res.json();
+    if (data.success) {
+      btn.closest('.approval-item').querySelector('.approval-actions').innerHTML = '<span class="sap-badge sap-badge--success">Approved</span>';
+      showToast('success','Approved','Certificate approved.');
+    } else { btn.disabled = false; }
   } catch(e) { btn.disabled = false; }
 }
+
 async function dashRejectCert(id, btn) {
   btn.disabled = true;
   try {
-    await apiFetch('/api/certificates/' + id, { method:'PATCH', body: JSON.stringify({ approval_status:'rejected', rejection_reason:'Rejected from dashboard' }) });
-    btn.closest('.approval-item').querySelector('.approval-actions').innerHTML = '<span class="sap-badge sap-badge--error">Rejected</span>';
-    showToast('warning','Rejected','Certificate rejected.');
+    const res = await apiFetch('/api/certificates/' + id, { method:'PATCH', body: JSON.stringify({ approval_status:'rejected', rejection_reason:'Rejected from dashboard' }) });
+    const data = await res.json();
+    if (data.success) {
+      btn.closest('.approval-item').querySelector('.approval-actions').innerHTML = '<span class="sap-badge sap-badge--error">Rejected</span>';
+      showToast('warning','Rejected','Certificate rejected.');
+    } else { btn.disabled = false; }
   } catch(e) { btn.disabled = false; }
+}
+
+function renderQuickActions(role) {
+  const container = document.getElementById('quickActions');
+  if (!container) return;
+  const actions = {
+    admin:      [{ label:'Add Asset', href:'assets.html', bg:'#e8f3ff', color:'#0070f2' },
+                 { label:'Upload Cert', href:'certificates.html', bg:'#f0faf0', color:'#188918' },
+                 { label:'Add Client', href:'clients.html', bg:'#fff3e0', color:'#e76500' }],
+    manager:    [{ label:'View Assets', href:'assets.html', bg:'#e8f3ff', color:'#0070f2' },
+                 { label:'View Certs', href:'certificates.html', bg:'#f0faf0', color:'#188918' },
+                 { label:'Notifications', href:'notifications.html', bg:'#fce4e4', color:'#bb0000' }],
+    technician: [{ label:'Upload Cert', href:'certificates.html', bg:'#f0faf0', color:'#188918' },
+                 { label:'Update Asset', href:'assets.html', bg:'#fff3e0', color:'#e76500' },
+                 { label:'Notifications', href:'notifications.html', bg:'#fce4e4', color:'#bb0000' }],
+    user:       [{ label:'My Assets', href:'assets.html', bg:'#e8f3ff', color:'#0070f2' },
+                 { label:'My Certs', href:'certificates.html', bg:'#f0faf0', color:'#188918' },
+                 { label:'Notifications', href:'notifications.html', bg:'#fff3e0', color:'#e76500' }],
+  };
+  const list = actions[role] || actions.user;
+  container.innerHTML = list.map(a =>
+    `<a href="${a.href}" class="quick-action">
+      <div class="quick-action__icon" style="background:${a.bg};color:${a.color};">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+        </svg>
+      </div>
+      <div class="quick-action__label">${a.label}</div>
+    </a>`
+  ).join('');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
