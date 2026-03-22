@@ -899,7 +899,7 @@ async function saveClient() {
   const editId = document.getElementById('editClientId')?.value || '';
   const name   = document.getElementById('f_name')?.value?.trim() || '';
   if (!name) { showToast('error','Required','Client name is required.'); return; }
-  const clientId = document.getElementById('f_customerId')?.value?.trim().toUpperCase() || ('C' + Date.now().toString().slice(-4));
+  const clientId = nextCustomerId();
   const payload = {
     name,
     client_id:      editId ? undefined : clientId,
@@ -1131,8 +1131,7 @@ async function loadClients() {
     const d    = data.data || data;
     CLIENTS = d.clients || d || [];
   } catch(e) { CLIENTS = []; }
-  if (typeof renderCards === 'function') renderCards();
-  else if (typeof render === 'function') render();
+  renderClients();
 }
 
 document.addEventListener('DOMContentLoaded', () => {

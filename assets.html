@@ -1061,17 +1061,11 @@ async function saveTransfer() {
       showToast('error','Transfer Failed',(data.data||data).error || 'Could not transfer asset.');
       return;
     }
-    // Update local array
-    const idx = ASSETS.findIndex(a => (a.id || a.assetId) === assetId);
-    if (idx > -1) {
-      ASSETS[idx].location          = to;
-      ASSETS[idx].functional_location = to;
-    }
     // Log transfer in local history for the drawer
     logTransfer(assetId, from, to, session?.name || 'Unknown', notes, date);
     showToast('success','Transferred',`Asset moved to "${to}" successfully.`);
     closeTransferModal?.();
-    renderTable();
+    await loadAssets();
   } catch(e) {
     showToast('error','Network Error','Could not transfer asset. Please try again.');
   }
@@ -1486,20 +1480,13 @@ async function massChangeStatus(newStatus) {
       }).then(r => r.json()))
     );
     const failed = results.filter(r => !r.success);
-    // Update local array with successful changes
-    results.forEach((r, i) => {
-      if (r.success) {
-        const idx = ASSETS.findIndex(a => (a.id || a.assetId) === ids[i]);
-        if (idx > -1) { ASSETS[idx].status = newStatus; }
-      }
-    });
     if (failed.length) {
       showToast('warning','Partial Update',`${ids.length - failed.length} updated, ${failed.length} failed.`);
     } else {
       showToast('success','Status Updated',`${ids.length} asset${ids.length > 1 ? 's' : ''} set to "${newStatus}".`);
     }
     clearSelection();
-    renderTable();
+    await loadAssets();
   } catch(e) {
     showToast('error','Network Error','Could not update status. Please try again.');
   }
@@ -1519,9 +1506,8 @@ async function massDelete() {
     } else {
       showToast('success','Deleted',`${ids.length} asset${ids.length > 1 ? 's' : ''} deleted.`);
     }
-    ASSETS = ASSETS.filter(a => !ids.includes(a.id || a.assetId));
     clearSelection();
-    renderTable();
+    await loadAssets();
   } catch(e) {
     showToast('error','Network Error','Could not delete assets. Please try again.');
   }
@@ -1583,7 +1569,7 @@ function openEditModal(id) {
 
 function closeModal() { document.getElementById('assetModal').classList.remove('open'); }
 
-function saveAsset(e) {
+async function saveAsset(e) {
   if (e && e.preventDefault) e.preventDefault();
   const name     = document.getElementById('f_name').value.trim();
   const type     = document.getElementById('f_type').value;
@@ -1592,9 +1578,7 @@ function saveAsset(e) {
   const appliedStandard = document.getElementById('f_appliedStandard').value.trim();
   const client   = document.getElementById('f_client').value || session.customerId;
   if (!name || !type || !status || !location || !client) {
-    showToast('error',
-      'Required Fields',
-      'Please fill all required fields.');
+    showToast('error', 'Required Fields', 'Please fill all required fields.');
     return;
   }
 
@@ -1613,59 +1597,44 @@ function saveAsset(e) {
   }
 
   const editId = document.getElementById('editAssetId').value;
-  // Duplicate serial check — serial must be unique across all assets
-  const duplicate = ASSETS.find(a => a.serial === serial && a.assetId !== editId);
-  if (duplicate) {
-    showToast('error', 'Duplicate Serial', `Serial "${serial}" is already used by "${duplicate.name}" (${duplicate.assetId}).`);
-    document.getElementById('f_serial').focus();
-    return;
-  }
+  const saveBtn = document.getElementById('saveBtn');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
 
-  const isTech = session.role === 'technician';
+  try {
+    const payload = {
+      name,
+      asset_type:          type,
+      serial_number:       serial,
+      status,
+      functional_location: location,
+      client_id:           client,
+      description:         document.getElementById('f_notes').value || null,
+    };
 
-  if (editId) {
-    const idx = ASSETS.findIndex(a => a.assetId === editId);
-    if (idx > -1) {
-      const old = ASSETS[idx];
-      if (isTech && old.status !== status) {
-        ASSETS[idx]._pendingStatus = status;
-        showToast('info',
-          'Request Sent',
-          'Status change request sent to Admin for approval.');
-      } else {
-        const oldLocation = old.location;
-        ASSETS[idx] = { ...old, name, type,
-          serial, status, location, appliedStandard,
-          zoneEquipment,
-          zone: zoneEquipment,
-          client,
-          notes: document.getElementById('f_notes').value };
-        // Auto-log transfer if location changed
-        if (oldLocation && oldLocation !== location) {
-          logTransfer(old.assetId, oldLocation, location, session.name, 'Updated via edit modal', new Date().toISOString().split('T')[0]);
-        }
-        showToast('success',
-          'Updated',
-          `${name} updated successfully.`);
-      }
+    const url    = editId ? `/api/assets/${editId}` : '/api/assets';
+    const method = editId ? 'PATCH' : 'POST';
+
+    if (!editId) {
+      // Generate asset_number for new assets
+      payload.asset_number = 'AST-' + String(Date.now()).slice(-6);
     }
-  } else {
-    const newId = 'AST-' + String(ASSETS.length + 1).padStart(4,'0');
-    ASSETS.push({
-      assetId: newId, name, type,
-      serial, status, location, appliedStandard,
-      zoneEquipment,
-      zone: zoneEquipment,
-      client,
-      notes:    document.getElementById('f_notes').value
-    });
-    showToast('success',
-      'Added',
-      `${name} (${newId}) added successfully.`);
-  }
 
-  closeModal();
-  renderTable();
+    const res  = await apiFetch(url, { method, body: JSON.stringify(payload) });
+    const data = await res.json();
+
+    if (!data.success) {
+      showToast('error', 'Save Failed', (data.data || data).error || 'Could not save asset.');
+      return;
+    }
+
+    showToast('success', editId ? 'Updated' : 'Added', `"${name}" saved successfully.`);
+    closeModal();
+    await loadAssets();
+  } catch(e) {
+    showToast('error', 'Network Error', 'Could not save asset. Please try again.');
+  } finally {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Asset'; }
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1711,15 +1680,13 @@ async function submitStatusRequest() {
       });
       const data = await res.json();
       if (data.success) {
-        const idx = ASSETS.findIndex(a => (a.id || a.assetId) === statusTargetId);
-        if (idx > -1) ASSETS[idx].status = newStatus;
         showToast('success','Status Updated','Status change applied.');
+        await loadAssets();
       } else {
         showToast('info','Request Sent','Status change request submitted for approval.');
       }
     }
     closeStatusModal?.();
-    renderTable();
   } catch(e) {
     showToast('error','Network Error','Could not submit status request. Please try again.');
   }
@@ -1987,14 +1954,21 @@ function openDeleteModal(id) {
   document.getElementById('deleteModal').classList.add('open');
 }
 function closeDeleteModal() { document.getElementById('deleteModal').classList.remove('open'); }
-function confirmDelete() {
+async function confirmDelete() {
   const a = ASSETS.find(x => x.assetId === deleteTargetId);
-  ASSETS = ASSETS.filter(x => x.assetId !== deleteTargetId);
   closeDeleteModal();
-  showToast('success',
-    'Deleted',
-    `"${a?.name||deleteTargetId}" deleted successfully.`);
-  renderTable();
+  try {
+    const res  = await apiFetch(`/api/assets/${deleteTargetId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('error', 'Delete Failed', (data.data || data).error || 'Could not delete asset.');
+      return;
+    }
+    showToast('success', 'Deleted', `"${a?.name || deleteTargetId}" deleted successfully.`);
+    await loadAssets();
+  } catch(e) {
+    showToast('error', 'Network Error', 'Could not delete asset. Please try again.');
+  }
 }
 
 /* ═══════════════════════════════════════════════════════

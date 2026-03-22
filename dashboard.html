@@ -734,126 +734,26 @@ function getIcon(name) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   RENDER KPIs
-═══════════════════════════════════════════════════════ */
-function renderKPIs(role) {
-  const grid = document.getElementById('kpiGrid');
-  const set  = KPI_SETS[role] || KPI_SETS.user;
-  grid.innerHTML = set.map(k => `
-    <div class="sap-kpi sap-kpi--${k.color}">
-      <div class="sap-kpi__accent"></div>
-      <div class="sap-kpi__icon">${getIcon(k.icon)}</div>
-      <div class="sap-kpi__value">${k.value}</div>
-      <div class="sap-kpi__label">${k.label}</div>
-      <div class="sap-kpi__change">${k.change}</div>
-    </div>
-  `).join('');
-}
-
-/* ═══════════════════════════════════════════════════════
-   RENDER EXPIRY LIST
-═══════════════════════════════════════════════════════ */
-function renderExpiryList(customerId) {
-  const list = document.getElementById('expiryList');
-  let items = ALL_EXPIRING;
-  if (customerId === 'C001') items = items.filter(i => i.client === 'Acme Corp');
-
-  if (!items.length) {
-    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--sap-text-secondary);font-size:13px;">No expiring certificates</div>';
-    return;
-  }
-
-  list.innerHTML = items.map(i => {
-    const cls = i.days <= 7 ? 'red' : i.days <= 14 ? 'orange' : 'yellow';
-    const dLabel = `${i.days}d left`;
-    return `
-      <div class="expiry-item" onclick="window.location.href='certificates.html'">
-        <div class="expiry-dot expiry-dot--${cls}"></div>
-        <div class="expiry-item__info">
-          <div class="expiry-item__name">${i.name}</div>
-          <div class="expiry-item__sub">${i.type} · ${i.client} · ${i.id}</div>
-        </div>
-        <div class="expiry-item__days expiry-item__days--${cls}">${dLabel}</div>
-      </div>`;
-  }).join('');
-}
-
-/* ═══════════════════════════════════════════════════════
-   RENDER ACTIVITY
-═══════════════════════════════════════════════════════ */
-function renderActivity() {
-  const feed = document.getElementById('activityFeed');
-  const badgeClass = {info:'sap-badge--info', success:'sap-badge--success', warning:'sap-badge--warning', neutral:'sap-badge--neutral'};
-  feed.innerHTML = ALL_ACTIVITY.map(a => `
-    <div class="activity-item">
-      <div class="activity-avatar" style="background:${a.color};">${a.user.slice(0,2).toUpperCase()}</div>
-      <div class="activity-item__body">
-        <div class="activity-item__text"><strong>${a.user}</strong> ${a.action} <strong>${a.target}</strong></div>
-        <div class="activity-item__time">${a.time}</div>
-      </div>
-      <div class="activity-item__badge"><span class="sap-badge ${badgeClass[a.badge]||'sap-badge--neutral'}">${a.badgeText}</span></div>
-    </div>`
-  ).join('');
-}
-
-/* ═══════════════════════════════════════════════════════
-   RENDER APPROVAL QUEUE
-═══════════════════════════════════════════════════════ */
-function renderApprovalQueue(role) {
-  const card = document.getElementById('approvalCard');
-  if (role === 'user') { card.style.display='none'; return; }
-
-  const list = document.getElementById('approvalList');
-  const isReadOnly = (role === 'technician');
-
-  list.innerHTML = APPROVAL_QUEUE.map(q => `
-    <div class="approval-item">
-      <div class="approval-item__info">
-        <div class="approval-item__name">${q.name}</div>
-        <div class="approval-item__meta">${q.id} · ${q.client} · Uploaded by ${q.by} · ${q.time}</div>
-      </div>
-      ${isReadOnly ? `<span class="sap-badge sap-badge--pending">Pending</span>` : `
-      <div class="approval-actions">
-        <button class="btn btn-success btn-sm" onclick="approveItem('${q.id}', this)" title="Approve">✓</button>
-        <button class="btn btn-danger btn-sm" onclick="rejectItem('${q.id}', this)" title="Reject">✗</button>
-      </div>`}
-    </div>`
-  ).join('');
-}
-
-function approveItem(id, btn) {
-  const row = btn.closest('.approval-item');
-  row.style.opacity='0.5';
-  row.querySelector('.approval-actions').innerHTML = `<span class="sap-badge sap-badge--success">Approved</span>`;
-  showToast('success','Approved', `${id} has been approved.`);
-}
-function rejectItem(id, btn) {
-  const row = btn.closest('.approval-item');
-  row.style.opacity='0.5';
-  row.querySelector('.approval-actions').innerHTML = `<span class="sap-badge sap-badge--error">Rejected</span>`;
-  showToast('warning','Rejected', `${id} has been rejected.`);
-}
-
-/* ═══════════════════════════════════════════════════════
-   RENDER QUICK ACTIONS
-═══════════════════════════════════════════════════════ */
-function renderQuickActions(role) {
-  const container = document.getElementById('quickActions');
-  const actions = QUICK_ACTIONS[role] || QUICK_ACTIONS.user;
-  container.innerHTML = actions.map(a => `
-    <a href="${a.href}" class="quick-action">
-      <div class="quick-action__icon" style="background:${a.bg};color:${a.color};">${getIcon(a.icon)}</div>
-      <div class="quick-action__label">${a.label}</div>
-    </a>`
-  ).join('');
-}
-
-/* ═══════════════════════════════════════════════════════
    CHARTS
 ═══════════════════════════════════════════════════════ */
-function initCharts() {
+function initCharts(as, cs) {
   Chart.defaults.font.family = "'Inter', sans-serif";
   Chart.defaults.font.size   = 12;
+
+  const asActive      = as?.active      ?? 0;
+  const asMaintenance = as?.maintenance ?? 0;
+  const asInactive    = (as?.total ?? 0) - asActive - asMaintenance;
+
+  const csValid    = cs?.valid    ?? 0;
+  const csExpiring = cs?.expiring ?? 0;
+  const csExpired  = cs?.expired  ?? 0;
+  const csPending  = cs?.pending  ?? 0;
+
+  /* Update stat counters below charts */
+  const el = id => document.getElementById(id);
+  if (el('activeCount'))      el('activeCount').textContent      = asActive;
+  if (el('maintenanceCount')) el('maintenanceCount').textContent  = asMaintenance;
+  if (el('inactiveCount'))    el('inactiveCount').textContent     = asInactive > 0 ? asInactive : 0;
 
   /* Asset Status Doughnut */
   new Chart(document.getElementById('assetStatusChart'), {
@@ -861,7 +761,7 @@ function initCharts() {
     data: {
       labels: ['Active', 'Under Maintenance', 'Inactive'],
       datasets: [{
-        data: [142, 18, 14],
+        data: [asActive, asMaintenance, asInactive > 0 ? asInactive : 0],
         backgroundColor: ['#188918', '#e76500', '#9ea3a8'],
         borderWidth: 3,
         borderColor: '#fff',
@@ -884,7 +784,7 @@ function initCharts() {
     data: {
       labels: ['Valid', 'Expiring Soon', 'Expired', 'Pending Approval'],
       datasets: [{
-        data: [89, 14, 6, 5],
+        data: [csValid, csExpiring, csExpired, csPending],
         backgroundColor: ['#188918', '#e76500', '#bb0000', '#f57f17'],
         borderWidth: 3,
         borderColor: '#fff',
@@ -1017,6 +917,7 @@ async function loadDashboardData(role) {
   renderKPIs(as, cs, role);
   renderExpiryList(expiring);
   renderApprovalQueue(pending, role);
+  initCharts(as, cs);
 
   // Notification badge
   const badge = document.getElementById('notifBadge');
@@ -1260,7 +1161,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* Init charts and clock */
-  if (typeof initCharts === 'function') initCharts();
   if (typeof startClock === 'function') startClock();
   if (typeof renderQuickActions === 'function') renderQuickActions(role);
 

@@ -1197,26 +1197,62 @@ async function saveInspector() {
   const editId = document.getElementById('editInspectorId')?.value || '';
   const name   = document.getElementById('f_name')?.value?.trim() || '';
   if (!name) { showToast('error','Required','Name is required.'); return; }
+
+  // Collect education rows
+  const education = [...document.querySelectorAll('#educationContainer .dynamic-row')].map(row => ({
+    degree:      row.querySelector('.edu-degree')?.value?.trim() || '',
+    institution: row.querySelector('.edu-institution')?.value?.trim() || '',
+    year:        row.querySelector('.edu-year')?.value?.trim() || '',
+  })).filter(e => e.degree);
+
+  // Collect training rows
+  const trainings = [...document.querySelectorAll('#trainingContainer .dynamic-row')].map(row => ({
+    name:     row.querySelector('.tr-name')?.value?.trim() || '',
+    provider: row.querySelector('.tr-provider')?.value?.trim() || '',
+    year:     row.querySelector('.tr-year')?.value?.trim() || '',
+  })).filter(t => t.name);
+
+  // Collect training certs rows
+  const training_certs = [...document.querySelectorAll('#trainingCertsContainer .dynamic-row')].map(row => ({
+    name: row.querySelector('.tc-name')?.value?.trim() || '',
+    file: row.querySelector('.tc-file')?.dataset?.existing || (row.querySelector('.tc-file')?.files?.[0]?.name) || '',
+    url:  row.querySelector('.tc-url')?.value?.trim() || '',
+  })).filter(t => t.name);
+
+  // CV
+  const cvMode = document.querySelector('.file-url-btn[data-mode="url"].active') ? 'url' : 'file';
+  const cvFile = cvMode === 'file' ? (document.getElementById('cvFileInput')?.dataset?.existing || '') : '';
+  const cvUrl  = cvMode === 'url'  ? (document.getElementById('cvUrlInput')?.value?.trim() || '') : '';
+
   const payload = {
     name,
-    title:            document.getElementById('f_title')?.value || null,
-    email:            document.getElementById('f_email')?.value || null,
-    phone:            document.getElementById('f_phone')?.value || null,
+    title:            document.getElementById('f_title')?.value?.trim() || null,
+    email:            document.getElementById('f_email')?.value?.trim() || null,
+    phone:            document.getElementById('f_phone')?.value?.trim() || null,
     status:           document.getElementById('f_status')?.value || 'active',
-    experience_years: parseInt(document.getElementById('f_experienceYears')?.value) || null,
-    experience_desc:  document.getElementById('f_experienceDesc')?.value || null,
-    color:            document.getElementById('f_color')?.value || '#0070f2',
+    experience_years: parseInt(document.getElementById('f_expYears')?.value) || null,
+    experience_desc:  document.getElementById('f_expDesc')?.value?.trim() || null,
+    cv_file:          cvFile || null,
+    cv_url:           cvUrl  || null,
+    education,
+    trainings,
+    training_certs,
   };
+
+  const saveBtn = document.getElementById('saveBtn') || document.querySelector('#inspectorModal .btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+
   try {
     const url    = editId ? '/api/inspectors/' + editId : '/api/inspectors';
     const method = editId ? 'PATCH' : 'POST';
     const res    = await apiFetch(url, { method, body: JSON.stringify(payload) });
     const data   = await res.json();
     if (!data.success) { showToast('error','Save Failed',(data.data||data).error||'Could not save.'); return; }
-    showToast('success', editId ? 'Updated' : 'Added', '"' + name + '" saved.');
+    showToast('success', editId ? 'Updated' : 'Added', '"' + name + '" saved successfully.');
     document.getElementById('inspectorModal')?.classList.remove('open');
     await loadInspectors();
-  } catch(e) { showToast('error','Network Error','Could not save.'); }
+  } catch(e) { showToast('error','Network Error','Could not save inspector. Please try again.'); }
+  finally { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Inspector'; } }
 }
 
 /* ═══════════════════════════════════════════════════════

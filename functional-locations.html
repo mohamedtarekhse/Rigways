@@ -585,13 +585,25 @@ function updateMassBar(){
   document.getElementById('massCount').textContent=`${ids.length} selected`;
 }
 function clearSelection(){document.querySelectorAll('#locTableBody input[type="checkbox"]').forEach(c=>c.checked=false);const sc=document.getElementById('selectAllChk');if(sc)sc.checked=false;updateMassBar();}
-function massDelete(){
+async function massDelete(){
   if(!canEdit)return;
   const ids=getSelectedIds();if(!ids.length)return;
   if(!confirm(`Delete ${ids.length} location${ids.length>1?'s':''}? This cannot be undone.`))return;
-  saveLocs(loadLocs().filter(l=>!ids.includes(l.id)));
-  showToast('success','Deleted',`${ids.length} location${ids.length>1?'s':''} deleted.`);
-  clearSelection();render();
+  try {
+    const results = await Promise.all(
+      ids.map(id => apiFetch('/api/functional-locations/' + id, { method:'DELETE' }).then(r=>r.json()))
+    );
+    const failed = results.filter(r => !r.success).length;
+    _locsCache = null;
+    const locs = await loadLocs();
+    window._locsData = locs;
+    if (failed) {
+      showToast('warning','Partial Delete',`${ids.length-failed} deleted, ${failed} failed.`);
+    } else {
+      showToast('success','Deleted',`${ids.length} location${ids.length>1?'s':''} deleted.`);
+    }
+    clearSelection(); render();
+  } catch(e) { showToast('error','Network Error','Could not delete locations.'); }
 }
 
 /* ── Modal ── */
@@ -608,7 +620,7 @@ function openAddModal(){
 }
 function openEditModal(id){
   if(!canEdit)return;
-  const loc=loadLocs().find(l=>l.id===id);if(!loc)return;
+  const loc=(window._locsData||[]).find(l=>l.id===id);if(!loc)return;
   document.getElementById('editLocId').value=id;
   document.getElementById('f_loc_name').value=loc.name;
   document.getElementById('f_loc_type').value=loc.type;
@@ -664,7 +676,8 @@ async function confirmDelete() {
     const data = await res.json();
     if (!data.success) { showToast('error','Failed',(data.data||data).error||'Could not delete.'); return; }
     _locsCache = null;
-    window._locsData = (window._locsData||[]).filter(l => l.id !== deleteTargetId);
+    const locs = await loadLocs();
+    window._locsData = locs;
     showToast('success','Deleted','"' + (loc?.name||deleteTargetId) + '" deleted.');
     if (typeof render === 'function') render();
   } catch(e) { showToast('error','Network Error','Could not delete.'); }
@@ -672,7 +685,7 @@ async function confirmDelete() {
 
 /* ── Export CSV ── */
 function exportCSV(){
-  const data=filteredData.length?filteredData:loadLocs();
+  const data=filteredData.length?filteredData:(window._locsData||[]);
   const headers=['Location ID','Name','Type','Client ID','Client Name','Description'];
   const rows=data.map(l=>[l.id,l.name,l.type,l.client||'',CLIENTS_MAP[l.client]||'',l.desc||''].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','));
   const csv=[headers.join(','),...rows].join('\n');
@@ -742,9 +755,6 @@ document.addEventListener('DOMContentLoaded',()=>{
     document.getElementById('pageSubtitle').textContent=
       `Your fleet locations — ${CLIENTS_MAP[session.customerId]||session.customerId}`;
   }
-
-  /* Init default data if empty */
-  if(!) saveLocs([...DEFAULT_FUNC_LOCS]);
 
   loadLocs().then(locs => { window._locsData = locs; render(); });
 
