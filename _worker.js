@@ -71,7 +71,6 @@ function createSupabase(env) {
   // Falls back to hardcoded values if env vars not set
   const base = env.SUPABASE_URL || 'https://rsrwcimpeeulwvweupla.supabase.co';
   const key = env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzcndjaW1wZWV1bHd2d2V1cGxhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDA3MjY2NCwiZXhwIjoyMDg5NjQ4NjY0fQ.hgIrf05XlM4soC97Imw7Wg7fYeW84ldHOw3Daanf_Ek';
-  // URL and key are hardcoded above — no check needed
 
   async function _fetch(path, options = {}) {
     const prefer = options._prefer || 'return=representation';
