@@ -584,10 +584,8 @@ function safeOpen(url){const safe=safeUrl(url);if(!safe){showToast('error','Inva
 /* ── API base URL — update before deploying ── */
 const API_BASE = (function () {
   const h = window.location.hostname, p = window.location.port;
-  if (h === 'localhost' || h === '127.0.0.1') {
-    return p === '8788' ? '' : 'http://localhost:8787';
-  }
-  return ''; // production: same-origin — Cloudflare Pages serves /api/* via _worker.js
+  if (h === 'localhost' || h === '127.0.0.1') return p === '8788' ? '' : 'http://localhost:8787';
+  return '';
 }());
 
 /* ── Language (EN only — Arabic removed) ── */
@@ -630,12 +628,11 @@ async function handleLogin(e) {
 
   try {
     const res = await fetch(`${API_BASE}/api/auth/login`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method:      'POST',
+      headers:     { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ username, password }),
     });
 
-    /* Safely parse JSON — empty or HTML error pages won't crash */
     let data = {};
     try {
       const text = await res.text();
@@ -658,7 +655,6 @@ async function handleLogin(e) {
       return;
     }
 
-    /* Store token + all fields needed by inner pages */
     sessionStorage.setItem('sap_session', JSON.stringify({
       token:      data.token,
       userId:     data.user.id,
