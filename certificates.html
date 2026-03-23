@@ -2020,14 +2020,15 @@ function closeCertDeleteModal() {
 }
 
 async function confirmCertDelete() {
-  const cert = CERTS.find(x => x.certId === deleteTargetId);
+  const targetId = deleteTargetId;                            // capture before closeCertDeleteModal nulls it
+  const cert = CERTS.find(x => x.certId === targetId);
   closeCertDeleteModal();
 
   const btn = document.getElementById('certDeleteConfirmBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
 
   try {
-    const res  = await apiFetch('/api/certificates/' + (cert?.id || deleteTargetId), { method: 'DELETE' });
+    const res  = await apiFetch('/api/certificates/' + (cert?.id || targetId), { method: 'DELETE' });
     const data = await res.json();
 
     if (!data.success) {
@@ -2040,8 +2041,8 @@ async function confirmCertDelete() {
       return;
     }
 
-    CERTS = CERTS.filter(x => x.certId !== deleteTargetId);
-    showToast('success', 'Deleted', `"${cert?.name || deleteTargetId}" permanently deleted.`);
+    CERTS = CERTS.filter(x => x.certId !== targetId);
+    showToast('success', 'Deleted', `"${cert?.name || targetId}" permanently deleted.`);
     renderTable();
   } catch(e) {
     showToast('error', 'Network Error', 'Could not delete. Please try again.');
