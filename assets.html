@@ -15,6 +15,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Assets – Rigways Group</title>
   <script src="app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="styles.css"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
   <style>
@@ -252,6 +253,137 @@
       .sap-drawer { width: 100%; }
       .hide-mobile { display: none; }
     }
+
+    /* ── Import Modal ── */
+    .import-drop-zone {
+      border: 2px dashed var(--sap-input-border);
+      border-radius: 8px;
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .2s;
+      background: #fafbfc;
+      position: relative;
+    }
+    .import-drop-zone.drag-over { border-color: var(--sap-brand); background: var(--sap-brand-light); }
+    .import-drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .import-drop-zone__icon { font-size: 36px; margin-bottom: 8px; }
+    .import-drop-zone__title { font-size: 14px; font-weight: 600; color: var(--sap-text-primary); }
+    .import-drop-zone__title span { color: var(--sap-brand); }
+    .import-drop-zone__hint { font-size: 11px; color: var(--sap-text-secondary); margin-top: 4px; }
+
+    .import-steps { display: flex; align-items: center; gap: 0; margin-bottom: 20px; }
+    .import-step {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 600; color: var(--sap-text-disabled);
+      flex: 1;
+    }
+    .import-step__num {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #e8eaed; color: var(--sap-text-disabled);
+      font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .import-step.active .import-step__num { background: var(--sap-brand); color: #fff; }
+    .import-step.active { color: var(--sap-brand); }
+    .import-step.done .import-step__num { background: var(--sap-success); color: #fff; }
+    .import-step.done { color: var(--sap-success); }
+    .import-step-sep { flex: 1; height: 2px; background: #e8eaed; margin: 0 4px; max-width: 40px; }
+
+    .import-summary-bar {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+      padding: 8px 12px;
+      background: var(--sap-page-bg);
+      border: 1px solid var(--sap-table-border);
+      border-radius: 6px;
+    }
+    .import-stat {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 700;
+      padding: 3px 8px; border-radius: 10px;
+    }
+    .import-stat--total   { background: #e8f3ff; color: #0070f2; }
+    .import-stat--ok      { background: var(--sap-success-bg); color: var(--sap-success); }
+    .import-stat--error   { background: var(--sap-error-bg); color: var(--sap-error); }
+    .import-stat--dup     { background: #fff8e1; color: #f9a825; }
+    .import-stat--skipped { background: var(--sap-neutral-bg); color: var(--sap-neutral); }
+
+    .import-preview-wrap {
+      max-height: 340px;
+      overflow: auto;
+      border: 1px solid var(--sap-table-border);
+      border-radius: 6px;
+      font-size: 11px;
+    }
+    .import-preview-wrap table { width: 100%; border-collapse: collapse; min-width: 900px; }
+    .import-preview-wrap thead th {
+      background: var(--sap-table-header-bg);
+      padding: 6px 8px;
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .4px;
+      color: var(--sap-text-secondary);
+      border-bottom: 1px solid var(--sap-table-border);
+      white-space: nowrap;
+      position: sticky; top: 0; z-index: 2;
+    }
+    .import-preview-wrap thead th.col-req::after {
+      content: ' *'; color: var(--sap-error); font-size: 9px;
+    }
+    .import-preview-wrap tbody td {
+      padding: 5px 8px;
+      border-bottom: 1px solid var(--sap-table-border);
+      vertical-align: middle;
+      max-width: 140px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .import-row--ok    { background: #fff; }
+    .import-row--ok:hover { background: #f8fffa; }
+    .import-row--error { background: #fff8f8; }
+    .import-row--error:hover { background: #fff0f0; }
+    .import-row--dup   { background: #fffdf0; }
+    .import-row--dup:hover { background: #fff8d6; }
+    .import-row--skipped { background: #f5f6f7; opacity: .6; }
+
+    .row-status {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 8px; white-space: nowrap;
+    }
+    .row-status--ok      { background: var(--sap-success-bg); color: var(--sap-success); }
+    .row-status--error   { background: var(--sap-error-bg); color: var(--sap-error); }
+    .row-status--dup     { background: #fff8e1; color: #e65100; }
+    .row-status--skipped { background: var(--sap-neutral-bg); color: var(--sap-neutral); }
+
+    .dup-action-select {
+      font-size: 10px; font-weight: 600;
+      border: 1px solid var(--sap-warning-border);
+      border-radius: 3px; padding: 2px 4px;
+      background: #fff; color: var(--sap-text-primary); cursor: pointer;
+    }
+    .skip-row-chk { width: 14px; height: 14px; accent-color: var(--sap-neutral); cursor: pointer; }
+    .cell-error { color: var(--sap-error); font-size: 10px; max-width: 160px; white-space: normal; line-height: 1.3; }
+
+    .import-progress-wrap { margin: 12px 0; }
+    .import-progress-bar { height: 6px; background: #e8eaed; border-radius: 3px; overflow: hidden; }
+    .import-progress-fill { height: 100%; background: var(--sap-brand); border-radius: 3px; transition: width .2s ease; width: 0%; }
+    .import-progress-label { font-size: 12px; color: var(--sap-text-secondary); margin-top: 5px; text-align: center; }
+
+    .import-template-strip {
+      display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+      background: #f0faf0; border: 1px solid var(--sap-success-border); border-radius: 6px;
+      margin-bottom: 14px; font-size: 12px;
+    }
+    .import-template-strip svg { width: 15px; height: 15px; color: var(--sap-success); flex-shrink: 0; }
+    .import-template-strip a { color: var(--sap-success); font-weight: 700; cursor: pointer; }
+    .import-template-strip a:hover { text-decoration: underline; }
+
+    .import-dup-bar {
+      display: none; align-items: center; gap: 8px; padding: 6px 12px;
+      background: #fff8e1; border: 1px solid #ffe082; border-radius: 6px;
+      margin-bottom: 8px; font-size: 12px; font-weight: 600; color: #e65100; flex-wrap: wrap;
+    }
+    .import-dup-bar.visible { display: flex; }
+    .import-dup-bar svg { width: 14px; height: 14px; flex-shrink: 0; }
   
   /* ── Rigways Logo ── */
   .rigways-shell-logo {
@@ -463,11 +595,11 @@
       </button>
 
       <!-- Import -->
-      <button class="btn btn-ghost btn-sm" id="importBtn" onclick="document.getElementById('importInput').click()" style="height:28px;">
+      <button class="btn btn-ghost btn-sm" id="importBtn" onclick="openImportModal()" style="height:28px;">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
         <span>Import</span>
       </button>
-      <input type="file" id="importInput" accept=".csv" style="display:none;" onchange="importCSV(this)"/>
+      <input type="file" id="importInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="handleImportFile(this)"/>
     </div>
 
     <!-- Mass action bar — shown only when rows are selected -->
@@ -833,6 +965,150 @@
     </div>
     <div class="sap-modal__footer">
       <button class="btn btn-ghost" onclick="closeTransferModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ MASS IMPORT MODAL ═══════════════════════ -->
+<div class="sap-modal-overlay" id="importModal">
+  <div class="sap-modal sap-modal--lg" style="max-width:1000px;">
+    <div class="sap-modal__header" style="background:linear-gradient(135deg,#0057c2,#0070f2);">
+      <div class="sap-modal__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        <span id="importModalTitle">Import Assets</span>
+      </div>
+      <button class="sap-modal__close" onclick="closeImportModal()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="sap-modal__body" style="padding:var(--sp-lg);">
+
+      <!-- Step indicator -->
+      <div class="import-steps">
+        <div class="import-step active" id="importStep1">
+          <div class="import-step__num">1</div>
+          <span>Upload File</span>
+        </div>
+        <div class="import-step-sep"></div>
+        <div class="import-step" id="importStep2">
+          <div class="import-step__num">2</div>
+          <span>Review &amp; Resolve</span>
+        </div>
+        <div class="import-step-sep"></div>
+        <div class="import-step" id="importStep3">
+          <div class="import-step__num">3</div>
+          <span>Import</span>
+        </div>
+      </div>
+
+      <!-- PANEL 1: Upload -->
+      <div id="importPanel1">
+        <!-- Template download -->
+        <div class="import-template-strip">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          <span>First time? Download the&nbsp;</span>
+          <a onclick="downloadTemplate('csv')">CSV template</a>
+          <span>&nbsp;or&nbsp;</span>
+          <a onclick="downloadTemplate('xlsx')">Excel template</a>
+          <span>&nbsp;to ensure your file matches the expected format.</span>
+        </div>
+
+        <!-- Drop zone -->
+        <div class="import-drop-zone" id="importDropZone"
+          ondragover="event.preventDefault();this.classList.add('drag-over')"
+          ondragleave="this.classList.remove('drag-over')"
+          ondrop="handleImportDrop(event)">
+          <input type="file" accept=".csv,.xlsx,.xls" onchange="handleImportFile(this)" id="importFileInput2"/>
+          <div class="import-drop-zone__icon">📂</div>
+          <div class="import-drop-zone__title"><span>Click to browse</span> or drag & drop</div>
+          <div class="import-drop-zone__hint">Accepts CSV (.csv) or Excel (.xlsx, .xls) — max 5 MB</div>
+        </div>
+
+        <!-- Field reference -->
+        <div style="margin-top:16px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--sap-text-secondary);margin-bottom:8px;">Expected Columns</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <span style="background:var(--sap-error-bg);color:var(--sap-error);border:1px solid var(--sap-error-border);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;">asset_number *</span>
+            <span style="background:var(--sap-error-bg);color:var(--sap-error);border:1px solid var(--sap-error-border);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;">name *</span>
+            <span style="background:var(--sap-error-bg);color:var(--sap-error);border:1px solid var(--sap-error-border);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;">asset_type *</span>
+            <span style="background:var(--sap-error-bg);color:var(--sap-error);border:1px solid var(--sap-error-border);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;">status *</span>
+            <span style="background:var(--sap-error-bg);color:var(--sap-error);border:1px solid var(--sap-error-border);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;">client_id *</span>
+            <span style="background:var(--sap-error-bg);color:var(--sap-error);border:1px solid var(--sap-error-border);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;">functional_location *</span>
+            <span style="background:var(--sap-error-bg);color:var(--sap-error);border:1px solid var(--sap-error-border);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;">serial_number *</span>
+            <span style="background:var(--sap-page-bg);color:var(--sap-text-secondary);border:1px solid var(--sap-table-border);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;">manufacturer</span>
+            <span style="background:var(--sap-page-bg);color:var(--sap-text-secondary);border:1px solid var(--sap-table-border);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;">model</span>
+            <span style="background:var(--sap-page-bg);color:var(--sap-text-secondary);border:1px solid var(--sap-table-border);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;">description</span>
+            <span style="background:var(--sap-page-bg);color:var(--sap-text-secondary);border:1px solid var(--sap-table-border);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;">notes</span>
+          </div>
+          <div style="font-size:11px;color:var(--sap-text-disabled);margin-top:6px;"><span style="color:var(--sap-error);">*</span> Required fields — rows missing these will fail validation.</div>
+        </div>
+      </div>
+
+      <!-- PANEL 2: Review -->
+      <div id="importPanel2" style="display:none;">
+
+        <!-- Summary bar -->
+        <div class="import-summary-bar" id="importSummaryBar"></div>
+
+        <!-- Duplicate mass action -->
+        <div class="import-dup-bar" id="importDupBar">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg>
+          <span id="importDupCount">0 duplicates detected.</span>
+          <span style="margin-left:4px;">Set all duplicates to:</span>
+          <button class="btn btn-warning btn-sm" onclick="massSetDupAction('overwrite')" style="height:24px;font-size:11px;">Overwrite All</button>
+          <button class="btn btn-ghost btn-sm" onclick="massSetDupAction('skip')" style="height:24px;font-size:11px;">Skip All</button>
+        </div>
+
+        <!-- Preview table -->
+        <div class="import-preview-wrap">
+          <table id="importPreviewTable">
+            <thead>
+              <tr>
+                <th style="width:32px;text-align:center;">
+                  <input type="checkbox" class="sap-checkbox" id="importSelectAllChk" title="Toggle all" onchange="importToggleSelectAll(this)" style="width:12px;height:12px;"/>
+                </th>
+                <th>Row</th>
+                <th>Status</th>
+                <th class="col-req">asset_number</th>
+                <th class="col-req">name</th>
+                <th class="col-req">asset_type</th>
+                <th class="col-req">status</th>
+                <th class="col-req">client_id</th>
+                <th class="col-req">functional_location</th>
+                <th class="col-req">serial_number</th>
+                <th>manufacturer</th>
+                <th>model</th>
+                <th>description</th>
+                <th>notes</th>
+                <th>Errors / Action</th>
+              </tr>
+            </thead>
+            <tbody id="importPreviewBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PANEL 3: Progress / Result -->
+      <div id="importPanel3" style="display:none;text-align:center;padding:20px 0;">
+        <div class="import-progress-wrap">
+          <div class="import-progress-bar"><div class="import-progress-fill" id="importProgressFill"></div></div>
+          <div class="import-progress-label" id="importProgressLabel">Starting import…</div>
+        </div>
+        <div id="importResultMsg" style="margin-top:16px;font-size:14px;"></div>
+      </div>
+
+    </div><!-- /modal-body -->
+
+    <div class="sap-modal__footer" id="importModalFooter">
+      <button class="btn btn-ghost" onclick="closeImportModal()">Cancel</button>
+      <!-- step 2 footer -->
+      <button class="btn btn-secondary" id="importBackBtn" onclick="importGoStep(1)" style="display:none;">← Back</button>
+      <button class="btn btn-primary" id="importNextBtn" onclick="importGoStep(2)" disabled>
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        Preview File
+      </button>
+      <button class="btn btn-primary" id="importConfirmBtn" onclick="runImport()" style="display:none;">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        <span id="importConfirmLabel">Import 0 rows</span>
+      </button>
     </div>
   </div>
 </div>
@@ -2195,13 +2471,508 @@ function exportPDF() {
     'Print window opened. Click "Print / Save as PDF".');
 }
 
-function importCSV(input) {
+/* ═══════════════════════════════════════════════════════
+   MASS IMPORT
+═══════════════════════════════════════════════════════ */
+
+/* ── Constants ── */
+const IMPORT_REQUIRED = ['asset_number','name','asset_type','status','client_id','functional_location','serial_number'];
+const IMPORT_ALL_COLS = ['asset_number','name','asset_type','status','client_id','functional_location','serial_number','manufacturer','model','description','notes'];
+const VALID_TYPES     = ['Hoisting Equipment','Drilling Equipment','Mud System Low Pressure','Mud System High Pressure','Wirelines','Structure','Well Control','Tubular'];
+const VALID_STATUSES  = ['operation','stacked'];
+
+let _importRows = [];   /* parsed + validated rows */
+let _importStep = 1;
+let _importFile = null;
+
+/* ── Open / close ── */
+function openImportModal() {
+  _importRows = [];
+  _importStep = 1;
+  _importFile = null;
+  document.getElementById('importModal').classList.add('open');
+  importGoStep(1);
+}
+function closeImportModal() {
+  document.getElementById('importModal').classList.remove('open');
+  /* Reset file inputs */
+  const fi = document.getElementById('importInput');
+  if (fi) fi.value = '';
+  const fi2 = document.getElementById('importFileInput2');
+  if (fi2) fi2.value = '';
+}
+
+/* ── Step navigation ── */
+function importGoStep(n) {
+  _importStep = n;
+  ['importPanel1','importPanel2','importPanel3'].forEach((id,i) => {
+    document.getElementById(id).style.display = (i === n-1) ? 'block' : 'none';
+  });
+  [1,2,3].forEach(i => {
+    const el = document.getElementById('importStep'+i);
+    el.classList.remove('active','done');
+    if (i < n) el.classList.add('done');
+    else if (i === n) el.classList.add('active');
+  });
+  /* Footer buttons */
+  document.getElementById('importNextBtn').style.display    = (n === 1) ? 'inline-flex' : 'none';
+  document.getElementById('importBackBtn').style.display    = (n === 2) ? 'inline-flex' : 'none';
+  document.getElementById('importConfirmBtn').style.display = (n === 2) ? 'inline-flex' : 'none';
+  document.querySelector('#importModalFooter .btn-ghost').style.display = (n < 3) ? 'inline-flex' : 'none';
+
+  if (n === 2) {
+    buildPreviewTable();
+    updateImportFooter();
+  }
+}
+
+/* ── Template download ── */
+function downloadTemplate(fmt) {
+  const headers = IMPORT_ALL_COLS;
+  const sample  = [
+    ['AST-0100','Rig Crane #05','Hoisting Equipment','operation','C001','Rig 7','SN-2025-001','National Oilwell','NC5-90','5-line crown block',''],
+    ['AST-0101','Drawworks #03','Drilling Equipment','stacked','C002','Rig 12','SN-2025-002','','','','Pending maintenance'],
+  ];
+  if (fmt === 'csv') {
+    const csv = [headers.join(','), ...sample.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
+    const blob = new Blob(['\uFEFF'+csv], { type:'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a'); a.href=url; a.download='asset_import_template.csv'; a.click(); URL.revokeObjectURL(url);
+  } else {
+    /* Build xlsx with SheetJS */
+    if (typeof XLSX === 'undefined') { showToast('error','Library Missing','SheetJS not loaded.'); return; }
+    const wsData = [headers, ...sample];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Assets');
+    XLSX.writeFile(wb, 'asset_import_template.xlsx');
+  }
+  showToast('success','Template Downloaded','Fill it in and import it back here.');
+}
+
+/* ── File handling ── */
+function handleImportFile(input) {
   const file = input.files[0];
   if (!file) return;
-  showToast('info',
-    'Importing',
-    `Processing ${file.name}…`);
-  input.value = '';
+  _importFile = file;
+  const nextBtn = document.getElementById('importNextBtn');
+  if (nextBtn) { nextBtn.disabled = false; }
+  const zone = document.getElementById('importDropZone');
+  if (zone) {
+    const name = document.createElement('div');
+    name.style.cssText = 'margin-top:10px;font-size:12px;font-weight:600;color:var(--sap-brand);';
+    name.textContent = '📎 ' + file.name + ' (' + (file.size/1024).toFixed(1) + ' KB)';
+    const existing = zone.querySelector('.file-selected-label');
+    if (existing) existing.remove();
+    name.className = 'file-selected-label';
+    zone.appendChild(name);
+  }
+}
+function handleImportDrop(e) {
+  e.preventDefault();
+  document.getElementById('importDropZone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const dt = new DataTransfer(); dt.items.add(file);
+  document.getElementById('importFileInput2').files = dt.files;
+  handleImportFile(document.getElementById('importFileInput2'));
+}
+
+/* ── Parse file → rows ── */
+async function parseImportFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    const ext = file.name.split('.').pop().toLowerCase();
+    reader.onerror = () => reject(new Error('Could not read file'));
+    reader.onload = e => {
+      try {
+        let rows = [];
+        if (ext === 'csv') {
+          rows = parseCSVContent(e.target.result);
+        } else {
+          if (typeof XLSX === 'undefined') { reject(new Error('SheetJS not loaded')); return; }
+          const wb   = XLSX.read(e.target.result, { type: 'binary' });
+          const ws   = wb.Sheets[wb.SheetNames[0]];
+          const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+          if (!data.length) { resolve([]); return; }
+          const headers = data[0].map(h => String(h).trim().toLowerCase().replace(/\s+/g,'_'));
+          rows = data.slice(1).map(row => {
+            const obj = {};
+            headers.forEach((h,i) => { obj[h] = String(row[i]||'').trim(); });
+            return obj;
+          }).filter(r => Object.values(r).some(v => v !== ''));
+        }
+        resolve(rows);
+      } catch(err) { reject(err); }
+    };
+    if (ext === 'csv') reader.readAsText(file, 'UTF-8');
+    else               reader.readAsBinaryString(file);
+  });
+}
+
+function parseCSVContent(text) {
+  const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const headers = parseCsvRow(lines[0]).map(h => h.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,''));
+  return lines.slice(1).map(line => {
+    const vals = parseCsvRow(line);
+    const obj = {};
+    headers.forEach((h,i) => { obj[h] = (vals[i]||'').trim(); });
+    return obj;
+  }).filter(r => Object.values(r).some(v => v !== ''));
+}
+
+function parseCsvRow(line) {
+  const result = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (ch === ',' && !inQ) { result.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  result.push(cur);
+  return result;
+}
+
+/* ── Validate rows ── */
+function validateImportRows(rawRows) {
+  const existingNums = new Set(ASSETS.map(a => (a.assetId||a.asset_number||'').toLowerCase()));
+  const seenInBatch  = new Set();
+
+  return rawRows.map((row, i) => {
+    const r = { rowNum: i+2, raw: row, errors: [], status: 'ok', dupAction: 'overwrite', skip: false };
+    /* Normalize column names — flexible matching */
+    const get = (...keys) => {
+      for (const k of keys) {
+        if (row[k] !== undefined) return String(row[k]).trim();
+      }
+      return '';
+    };
+    r.asset_number       = get('asset_number','asset number','assetno','asset_no').toUpperCase();
+    r.name               = get('name','asset_name','assetname');
+    r.asset_type         = get('asset_type','asset type','type','category');
+    r.status             = get('status').toLowerCase();
+    r.client_id          = get('client_id','client','customer_id','customerid').toUpperCase();
+    r.functional_location= get('functional_location','functional location','location','func_location');
+    r.serial_number      = get('serial_number','serial number','serial','sn');
+    r.manufacturer       = get('manufacturer','make');
+    r.model              = get('model');
+    r.description        = get('description','desc');
+    r.notes              = get('notes','note','comments');
+
+    /* Required field checks */
+    if (!r.asset_number)        r.errors.push('asset_number is required');
+    if (!r.name)                r.errors.push('name is required');
+    if (!r.asset_type)          r.errors.push('asset_type is required');
+    if (!r.status)              r.errors.push('status is required');
+    if (!r.client_id)           r.errors.push('client_id is required');
+    if (!r.functional_location) r.errors.push('functional_location is required');
+    if (!r.serial_number)       r.errors.push('serial_number is required');
+
+    /* Value checks */
+    if (r.asset_type && !VALID_TYPES.includes(r.asset_type))
+      r.errors.push(`asset_type "${r.asset_type}" not valid. Use: ${VALID_TYPES.join(', ')}`);
+    if (r.status && !VALID_STATUSES.includes(r.status))
+      r.errors.push(`status must be "operation" or "stacked"`);
+
+    if (r.errors.length) { r.status = 'error'; return r; }
+
+    /* Duplicate detection */
+    const key = r.asset_number.toLowerCase();
+    if (existingNums.has(key)) { r.status = 'dup'; r.dupAction = 'overwrite'; }
+    else if (seenInBatch.has(key)) { r.status = 'dup'; r.dupAction = 'overwrite'; r.errors.push('Duplicate asset_number within this file'); }
+    else seenInBatch.add(key);
+
+    return r;
+  });
+}
+
+/* ── Build preview table ── */
+function buildPreviewTable() {
+  const tbody = document.getElementById('importPreviewBody');
+  if (!tbody) return;
+
+  const dupRows = _importRows.filter(r => r.status === 'dup');
+  const dupBar  = document.getElementById('importDupBar');
+  if (dupRows.length) {
+    dupBar.classList.add('visible');
+    document.getElementById('importDupCount').textContent = `${dupRows.length} duplicate asset number${dupRows.length>1?'s':''} already exist in the system.`;
+  } else {
+    dupBar.classList.remove('visible');
+  }
+
+  tbody.innerHTML = _importRows.map((r,i) => {
+    const cls = r.skip ? 'import-row--skipped' : `import-row--${r.status}`;
+    const statusHtml = r.skip
+      ? `<span class="row-status row-status--skipped">Skipped</span>`
+      : r.status === 'ok'
+        ? `<span class="row-status row-status--ok">✓ OK</span>`
+        : r.status === 'dup'
+          ? `<span class="row-status row-status--dup">⚠ Duplicate</span>`
+          : `<span class="row-status row-status--error">✗ Error</span>`;
+
+    const actionCell = r.status === 'dup'
+      ? `<select class="dup-action-select" onchange="setDupAction(${i},this.value)" title="What to do with this duplicate">
+          <option value="overwrite" ${r.dupAction==='overwrite'?'selected':''}>Overwrite</option>
+          <option value="skip" ${r.dupAction==='skip'?'selected':''}>Skip</option>
+        </select>`
+      : r.status === 'error'
+        ? `<div class="cell-error">${r.errors.map(e => h(e)).join('<br/>')}</div>`
+        : '';
+
+    const cols = ['asset_number','name','asset_type','status','client_id','functional_location','serial_number','manufacturer','model','description','notes'];
+    const cells = cols.map(c => `<td title="${h(r[c]||'')}">${h(r[c]||'')}</td>`).join('');
+
+    return `<tr class="${cls}" data-idx="${i}">
+      <td style="text-align:center;"><input type="checkbox" class="skip-row-chk" title="Skip this row" onchange="toggleSkipRow(${i},this.checked)" ${r.skip?'checked':''}></td>
+      <td style="text-align:center;color:var(--sap-text-secondary);font-size:11px;">${r.rowNum}</td>
+      <td>${statusHtml}</td>
+      ${cells}
+      <td>${actionCell}</td>
+    </tr>`;
+  }).join('');
+
+  /* Summary */
+  updateImportSummary();
+}
+
+function updateImportSummary() {
+  const total   = _importRows.length;
+  const errors  = _importRows.filter(r => r.status==='error').length;
+  const dups    = _importRows.filter(r => r.status==='dup').length;
+  const skipped = _importRows.filter(r => r.skip).length;
+  const ok      = total - errors - skipped;
+
+  document.getElementById('importSummaryBar').innerHTML = `
+    <div class="import-stat import-stat--total">📊 ${total} rows total</div>
+    <div class="import-stat import-stat--ok">✓ ${ok} will import</div>
+    ${errors ? `<div class="import-stat import-stat--error">✗ ${errors} invalid</div>` : ''}
+    ${dups   ? `<div class="import-stat import-stat--dup">⚠ ${dups} duplicates</div>` : ''}
+    ${skipped? `<div class="import-stat import-stat--skipped">— ${skipped} skipped</div>` : ''}
+  `;
+  updateImportFooter();
+}
+
+function updateImportFooter() {
+  const importable = _importRows.filter(r => !r.skip && r.status !== 'error').length;
+  const btn = document.getElementById('importConfirmBtn');
+  const lbl = document.getElementById('importConfirmLabel');
+  if (btn && lbl) {
+    lbl.textContent = `Import ${importable} row${importable!==1?'s':''}`;
+    btn.disabled = importable === 0;
+  }
+}
+
+function setDupAction(idx, val) {
+  _importRows[idx].dupAction = val;
+  updateImportSummary();
+}
+
+function toggleSkipRow(idx, checked) {
+  _importRows[idx].skip = checked;
+  /* Update row styling live */
+  const rows = document.querySelectorAll('#importPreviewBody tr[data-idx]');
+  rows.forEach(tr => {
+    if (parseInt(tr.dataset.idx) === idx) {
+      tr.className = checked ? 'import-row--skipped' : `import-row--${_importRows[idx].status}`;
+    }
+  });
+  updateImportSummary();
+}
+
+function importToggleSelectAll(cb) {
+  _importRows.forEach((r, i) => { if (r.status !== 'error') r.skip = cb.checked; });
+  buildPreviewTable();
+  document.getElementById('importSelectAllChk').checked = cb.checked;
+}
+
+function massSetDupAction(action) {
+  _importRows.forEach(r => { if (r.status === 'dup') r.dupAction = action; });
+  buildPreviewTable();
+}
+
+/* ── Step 1 → Step 2: parse file ── */
+const _origImportGoStep = importGoStep;
+async function importGoStep(n) {
+  if (n === 2) {
+    if (!_importFile) { showToast('error','No File','Please select a file first.'); return; }
+    /* Show spinner */
+    document.getElementById('importNextBtn').disabled = true;
+    document.getElementById('importNextBtn').innerHTML = '<div class="sap-spinner" style="width:14px;height:14px;border-width:2px;"></div> Parsing…';
+    try {
+      const rawRows = await parseImportFile(_importFile);
+      if (!rawRows.length) { showToast('error','Empty File','No data rows found in the file.'); document.getElementById('importNextBtn').disabled=false; document.getElementById('importNextBtn').innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview File'; return; }
+      _importRows = validateImportRows(rawRows);
+    } catch(err) {
+      showToast('error','Parse Error', err.message || 'Could not read file.');
+      document.getElementById('importNextBtn').disabled=false;
+      document.getElementById('importNextBtn').innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview File';
+      return;
+    }
+    document.getElementById('importNextBtn').disabled=false;
+    document.getElementById('importNextBtn').innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview File';
+  }
+
+  /* Run original step logic */
+  _importStep = n;
+  ['importPanel1','importPanel2','importPanel3'].forEach((id,i) => {
+    document.getElementById(id).style.display = (i === n-1) ? 'block' : 'none';
+  });
+  [1,2,3].forEach(i => {
+    const el = document.getElementById('importStep'+i);
+    el.classList.remove('active','done');
+    if (i < n) el.classList.add('done');
+    else if (i === n) el.classList.add('active');
+  });
+  document.getElementById('importNextBtn').style.display    = (n === 1) ? 'inline-flex' : 'none';
+  document.getElementById('importBackBtn').style.display    = (n === 2) ? 'inline-flex' : 'none';
+  document.getElementById('importConfirmBtn').style.display = (n === 2) ? 'inline-flex' : 'none';
+  document.querySelector('#importModalFooter .btn-ghost').style.display = (n < 3) ? 'inline-flex' : 'none';
+
+  if (n === 2) {
+    buildPreviewTable();
+    updateImportFooter();
+  }
+}
+
+/* ── Run import ── */
+async function runImport() {
+  const toImport = _importRows.filter(r => !r.skip && r.status !== 'error');
+  if (!toImport.length) { showToast('warning','Nothing to Import','All rows are either invalid or skipped.'); return; }
+
+  /* Go to step 3 */
+  _importStep = 3;
+  ['importPanel1','importPanel2','importPanel3'].forEach((id,i) => {
+    document.getElementById(id).style.display = (i === 2) ? 'block' : 'none';
+  });
+  [1,2,3].forEach(i => {
+    const el = document.getElementById('importStep'+i);
+    el.classList.remove('active','done');
+    if (i < 3) el.classList.add('done');
+    else el.classList.add('active');
+  });
+  document.getElementById('importNextBtn').style.display    = 'none';
+  document.getElementById('importBackBtn').style.display    = 'none';
+  document.getElementById('importConfirmBtn').style.display = 'none';
+  document.querySelector('#importModalFooter .btn-ghost').style.display = 'none';
+
+  const fill  = document.getElementById('importProgressFill');
+  const label = document.getElementById('importProgressLabel');
+  const resultMsg = document.getElementById('importResultMsg');
+
+  /* Build payload */
+  const overwrite = toImport.filter(r => r.status==='dup' && r.dupAction==='overwrite');
+  const inserts   = toImport.filter(r => r.status!=='dup' || r.dupAction==='overwrite');
+
+  let done = 0; let succeeded = 0; let failed = 0; const failedNums = [];
+
+  const total = inserts.length;
+  label.textContent = `Importing ${total} row${total!==1?'s':''}…`;
+
+  /* Build bulk payload */
+  const payloads = inserts.map(r => ({
+    asset_number:        r.asset_number,
+    name:                r.name,
+    asset_type:          r.asset_type,
+    status:              r.status,
+    client_id:           r.client_id || null,
+    functional_location: r.functional_location || null,
+    serial_number:       r.serial_number || null,
+    manufacturer:        r.manufacturer || null,
+    model:               r.model || null,
+    description:         r.description || null,
+    notes:               r.notes || null,
+    _overwrite:          (r.status === 'dup' && r.dupAction === 'overwrite'),
+  }));
+
+  /* Send in batches of 50 */
+  const BATCH = 50;
+  for (let i = 0; i < payloads.length; i += BATCH) {
+    const batch = payloads.slice(i, i + BATCH);
+
+    /* For each item in batch, POST or PATCH as appropriate */
+    const results = await Promise.allSettled(
+      batch.map(p => {
+        const { _overwrite, ...body } = p;
+        if (_overwrite) {
+          /* PATCH existing */
+          return apiFetch('/api/assets/' + encodeURIComponent(p.asset_number), {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+          }).then(r => r.json());
+        } else {
+          return apiFetch('/api/assets', {
+            method: 'POST',
+            body: JSON.stringify(body),
+          }).then(r => r.json());
+        }
+      })
+    );
+
+    results.forEach((res, j) => {
+      done++;
+      const pct = Math.round((done / total) * 100);
+      fill.style.width = pct + '%';
+      label.textContent = `Importing… ${done} / ${total}`;
+      if (res.status === 'fulfilled' && res.value?.success) {
+        succeeded++;
+        /* Update local ASSETS array */
+        const body = batch[j];
+        const existIdx = ASSETS.findIndex(a => (a.assetId||a.asset_number||'').toUpperCase() === body.asset_number.toUpperCase());
+        const localRow = {
+          assetId: body.asset_number,
+          asset_number: body.asset_number,
+          name: body.name,
+          type: body.asset_type,
+          asset_type: body.asset_type,
+          status: body.status,
+          client: body.client_id,
+          client_id: body.client_id,
+          location: body.functional_location || '',
+          functional_location: body.functional_location || '',
+          serial: body.serial_number || '',
+          serial_number: body.serial_number || '',
+          manufacturer: body.manufacturer || '',
+          model: body.model || '',
+          description: body.description || '',
+          notes: body.notes || '',
+        };
+        if (existIdx > -1) ASSETS[existIdx] = { ...ASSETS[existIdx], ...localRow };
+        else ASSETS.push(localRow);
+      } else {
+        failed++;
+        failedNums.push(batch[j].asset_number);
+      }
+    });
+  }
+
+  fill.style.width = '100%';
+
+  /* Result message */
+  let msg = '';
+  if (succeeded > 0) msg += `<div style="color:var(--sap-success);font-weight:700;font-size:16px;margin-bottom:8px;">✓ ${succeeded} asset${succeeded!==1?'s':''} imported successfully.</div>`;
+  if (failed > 0)    msg += `<div style="color:var(--sap-error);font-weight:600;font-size:13px;">✗ ${failed} row${failed!==1?'s':''} failed: ${failedNums.slice(0,8).join(', ')}${failedNums.length>8?'…':''}</div>`;
+  msg += `<div style="margin-top:16px;display:flex;gap:8px;justify-content:center;">
+    ${succeeded?`<button class="btn btn-success" onclick="closeImportModal();renderTable();">View Updated Assets</button>`:''}
+    <button class="btn btn-ghost" onclick="closeImportModal()">Close</button>
+  </div>`;
+  resultMsg.innerHTML = msg;
+  label.textContent = 'Done!';
+
+  if (succeeded > 0) {
+    renderTable();
+    showToast('success','Import Complete',`${succeeded} asset${succeeded!==1?'s':''} imported.`);
+  }
+}
+
+/* Legacy stub — now opens modal instead */
+function importCSV(input) {
+  if (!input.files[0]) return;
+  _importFile = input.files[0];
+  document.getElementById('importNextBtn').disabled = false;
+  openImportModal();
 }
 
 /* ═══════════════════════════════════════════════════════
