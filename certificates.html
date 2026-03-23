@@ -1554,9 +1554,11 @@ async function saveCert() {
   };
 
   let savedCert = null;
+  let certUUID  = null;   // the real DB UUID we'll use for Step 3
   try {
     const editCert = editId ? CERTS.find(x => x.certId === editId) : null;
-    const url      = editId ? '/api/certificates/' + (editCert?.id || editId) : '/api/certificates';
+    certUUID       = editCert?.id || editId || null;
+    const url      = editId ? '/api/certificates/' + certUUID : '/api/certificates';
     const method   = editId ? 'PATCH' : 'POST';
     const res      = await apiFetch(url, { method, body: JSON.stringify(payload) });
     const data     = await res.json();
@@ -1566,6 +1568,8 @@ async function saveCert() {
       return;
     }
     savedCert = data.data || data;
+    // For new records the UUID comes back from the server
+    if (!certUUID) certUUID = savedCert.id || savedCert.cert_number;
   } catch(e) {
     showToast('error','Network Error','Could not save certificate.');
     if (saveBtn) { saveBtn.disabled = false; const _lbl3 = document.getElementById('saveBtnLabel'); if (_lbl3) _lbl3.textContent = 'Save Certificate'; }
@@ -1578,7 +1582,7 @@ async function saveCert() {
     try {
       // Build structured metadata for the R2 key
       // Key pattern: clients/{CLIENT_ID}/jobs/{JOB_NUMBER}/{JOB_NUMBER}_{CERT_NUMBER}_{originalname}.{ext}
-      const certNumber  = savedCert.cert_number || savedCert.id;
+      const certNumber  = savedCert.cert_number || savedCert.id || certUUID;
       const jobNum      = jobNumber || savedCert.notes || 'NO-JOB';
       const clientId    = client || savedCert.client_id || session?.customerId || 'GENERAL';
 
@@ -1604,7 +1608,7 @@ async function saveCert() {
           '. Edit the certificate to try again.');
       } else {
         // Step 3: PATCH the cert record with the structured file_url + file_name
-        await apiFetch('/api/certificates/' + savedCert.id, {
+        await apiFetch('/api/certificates/' + certUUID, {
           method: 'PATCH',
           body: JSON.stringify({ file_name: udd.file_name, file_url: udd.file_url }),
         });

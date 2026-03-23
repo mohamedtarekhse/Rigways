@@ -378,10 +378,6 @@
       <!-- Client filter (admin/manager) -->
       <select class="sap-select" id="clientFilter" style="height:28px;font-size:12px;max-width:150px;display:none;" onchange="applyFilters()">
         <option value="all">All Clients</option>
-        <option value="C001">Acme Corp (C001)</option>
-        <option value="C002">Gulf Holdings (C002)</option>
-        <option value="C003">Delta Industries (C003)</option>
-        <option value="C004">Nile Ventures (C004)</option>
       </select>
 
       <!-- Type filter -->
@@ -672,10 +668,6 @@
             <label class="sap-label">Assigned Client <span class="required">*</span></label>
             <select id="f_client" class="sap-select" required>
               <option value="">Select client…</option>
-              <option value="C001">Acme Corp (C001)</option>
-              <option value="C002">Gulf Holdings (C002)</option>
-              <option value="C003">Delta Industries (C003)</option>
-              <option value="C004">Nile Ventures (C004)</option>
             </select>
           </div>
 
@@ -692,7 +684,7 @@
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveAsset(event)" id="saveBtn">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        <span>Save Asset</span>
+        <span id="saveBtnLabel">Save Asset</span>
       </button>
     </div>
   </div>
@@ -1037,39 +1029,51 @@ function renderTransferLog(assetId) {
     </tr>`).join('');
 }
 
-function saveTransfer() {
+async function saveTransfer() {
   const to    = document.getElementById('t_to').value;
   const date  = document.getElementById('t_date').value;
   const notes = document.getElementById('t_notes').value.trim();
   const from  = document.getElementById('t_from').value;
 
-  if (!to)   { showToast('error','Required','Please select a destination location.'); return; }
-  if (!date) { showToast('error','Required','Please enter a transfer date.'); return; }
-  if (to === from) { showToast('error','Same Location','Destination must differ from current location.'); return; }
+  if (!to)        { showToast('error','Required','Please select a destination location.'); return; }
+  if (!date)      { showToast('error','Required','Please enter a transfer date.'); return; }
+  if (to === from){ showToast('error','Same Location','Destination must differ from current location.'); return; }
 
-  // Move the asset
-  const idx = ASSETS.findIndex(a => a.assetId === transferTargetId);
-  if (idx > -1) {
-    ASSETS[idx].location = to;
+  const asset = ASSETS.find(a => a.assetId === transferTargetId);
+  const uuid  = asset?.id || transferTargetId;
+  try {
+    const res  = await apiFetch(`/api/assets/${uuid}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ functional_location: to })
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('error', 'Transfer Failed', (data.data || data).error || 'Could not transfer asset.');
+      return;
+    }
+
     logTransfer(transferTargetId, from, to, session.name, notes, date);
-    // Update the From field to the new location
     document.getElementById('t_from').value = to;
-    // Remove the selected destination from the dropdown
-    const locs = loadFuncLocs();
-    const a = ASSETS[idx];
+
+    // Refresh destination dropdown
+    const locs   = loadFuncLocs();
+    const a      = asset;
     let filteredR = locs.filter(l => l.name !== to);
-    const clientFilteredR = filteredR.filter(l => !l.client || l.client === a.client);
-    filteredR = clientFilteredR.length ? clientFilteredR : filteredR;
+    const cf      = filteredR.filter(l => !l.client || l.client === a?.client);
+    filteredR     = cf.length ? cf : filteredR;
     document.getElementById('t_to').innerHTML =
       '<option value="">Select destination…</option>' +
       filteredR.map(l => `<option value="${l.name}">${l.name} (${l.type})</option>`).join('');
     document.getElementById('t_notes').value = '';
 
     renderTransferLog(transferTargetId);
-    renderTable();
-    showToast('success', 'Transfer Logged', `"${a.name}" moved to ${to}.`);
+    showToast('success', 'Transfer Logged', `"${asset?.name}" moved to ${to}.`);
+    await loadAssets();
+  } catch(err) {
+    showToast('error', 'Network Error', 'Could not transfer asset. Please try again.');
   }
 }
+
 
 function closeTransferModal() {
   document.getElementById('transferModal').classList.remove('open');
@@ -1137,21 +1141,37 @@ const DEFAULT_FUNC_LOCS = [
   { id:'FL-004', name:'Workshop B', type:'Workshop', desc:'Heavy equipment workshop' },
 ];
 function loadFuncLocs() {
-  try { const s=localStorage.getItem(FL_KEY); return s?JSON.parse(s):DEFAULT_FUNC_LOCS; }
-  catch(e) { return DEFAULT_FUNC_LOCS; }
+  // Synchronous fallback — returns cached data populated by loadFuncLocsFromAPI()
+  return window._funcLocsCache || [];
 }
-function saveFuncLocs(locs) { localStorage.setItem(FL_KEY,JSON.stringify(locs)); }
-function nextFuncLocId() {
-  const nums=loadFuncLocs().map(l=>parseInt(l.id.replace('FL-',''))).filter(n=>!isNaN(n));
-  return 'FL-'+String(Math.max(0,...nums)+1).padStart(3,'0');
+function saveFuncLocs() {} // no-op — managed via API now
+function nextFuncLocId() { return 'FL-' + Date.now().toString().slice(-4); }
+
+async function loadFuncLocsFromAPI() {
+  try {
+    const res  = await apiFetch('/api/functional-locations?status=active&limit=200');
+    const data = await res.json();
+    window._funcLocsCache = (data.data?.functional_locations || data.data || []).map(l => ({
+      ...l,
+      id:     l.fl_id || l.id,
+      name:   l.name,
+      type:   l.type,
+      client: l.client_id || '',
+      desc:   l.notes || '',
+    }));
+  } catch(e) {
+    console.warn('loadFuncLocsFromAPI failed:', e);
+    window._funcLocsCache = window._funcLocsCache || [];
+  }
 }
+
 function populateFuncLocDropdown(selectedValue, filterClient) {
-  const sel=document.getElementById('f_location'); if(!sel) return;
-  let locs=loadFuncLocs();
-  // Filter by client if known (admin/manager see all, others see their client's)
-  if(filterClient) locs=locs.filter(l=>!l.client||l.client===filterClient);
-  sel.innerHTML='<option value="">Select functional location…</option>'+
-    locs.map(l=>`<option value="${l.name}" ${l.name===selectedValue?'selected':''}>${l.name} (${l.type})</option>`).join('');
+  const sel = document.getElementById('f_location');
+  if (!sel) return;
+  let locs = loadFuncLocs();
+  if (filterClient) locs = locs.filter(l => !l.client || l.client === filterClient);
+  sel.innerHTML = '<option value="">Select functional location…</option>' +
+    locs.map(l => `<option value="${l.name}" ${l.name === selectedValue ? 'selected' : ''}>${l.name} (${l.type})</option>`).join('');
 }
 function openInlineAddFuncLoc() {
   document.getElementById('inlineFuncLocForm').style.display='block';
@@ -1165,27 +1185,46 @@ function closeInlineAddFuncLoc() {
   document.getElementById('inlineFuncLocForm').style.display='none';
   document.getElementById('addFuncLocBtn').style.display='inline-flex';
 }
-function saveInlineFuncLoc() {
-  const name=document.getElementById('inline_loc_name').value.trim();
-  const type=document.getElementById('inline_loc_type').value;
-  const desc=document.getElementById('inline_loc_desc').value.trim();
-  if(!name){showToast('error','Required','Please enter a location name.');return;}
-  const locs=loadFuncLocs();
-  if(locs.find(l=>l.name.toLowerCase()===name.toLowerCase())){
-    showToast('error','Duplicate',`"${name}" already exists.`);return;
+async function saveInlineFuncLoc() {
+  const name = document.getElementById('inline_loc_name').value.trim();
+  const type = document.getElementById('inline_loc_type').value;
+  const desc = document.getElementById('inline_loc_desc').value.trim();
+  if (!name) { showToast('error','Required','Please enter a location name.'); return; }
+
+  const locs = loadFuncLocs();
+  if (locs.find(l => l.name.toLowerCase() === name.toLowerCase())) {
+    showToast('error','Duplicate',`"${name}" already exists.`); return;
   }
-  const clientVal=document.getElementById('f_client')?.value||session?.customerId||'';
-  const newLoc={id:nextFuncLocId(),name,type,client:clientVal,desc};
-  locs.push(newLoc); saveFuncLocs(locs);
-  const filterC=clientVal||null;
-  populateFuncLocDropdown(name,filterC);
-  closeInlineAddFuncLoc();
-  showToast('success','Location Added',`"${name}" added and selected.`);
+
+  const clientVal = document.getElementById('f_client')?.value || session?.customerId || '';
+  try {
+    const res  = await apiFetch('/api/functional-locations', {
+      method: 'POST',
+      body: JSON.stringify({
+        fl_id:     nextFuncLocId(),
+        name,
+        type,
+        status:    'active',
+        client_id: clientVal || null,
+        notes:     desc || null,
+      })
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('error','Failed',(data.data||data).error||'Could not create location.'); return;
+    }
+    await loadFuncLocsFromAPI();
+    populateFuncLocDropdown(name, clientVal || null);
+    closeInlineAddFuncLoc();
+    showToast('success','Location Added',`"${name}" added and selected.`);
+  } catch(e) {
+    showToast('error','Network Error','Could not save location. Please try again.');
+  }
 }
 /* ═══════════════════════════════════════════════════════
    DEMO DATA
 ═══════════════════════════════════════════════════════ */
-const CLIENTS_MAP = { C001:'Acme Corp', C002:'Gulf Holdings', C003:'Delta Industries', C004:'Nile Ventures' };
+const CLIENTS_MAP = {}; // populated from API by loadClients()
 const TYPE_COLORS = {
   'Hoisting Equipment':       {'bg':'#e8f3ff','color':'#0070f2'},
   'Drilling Equipment':       {'bg':'#fff3e0','color':'#e76500'},
@@ -1197,26 +1236,8 @@ const TYPE_COLORS = {
   'Tubular':                  {'bg':'#fbe9e7','color':'#bf360c'},
 };
 
-let ASSETS = [
-  {assetId:'AST-0001',name:'Top Drive #01',         type:'Hoisting Equipment',      serial:'TD-2023-001',location:'Rig 7',      zone:'Drill Floor',   status:'operation', client:'C001',notes:'Top drive system 650T capacity'},
-  {assetId:'AST-0002',name:'Rotary Table #01',       type:'Drilling Equipment',      serial:'RT-2022-045',location:'Rig 7',      zone:'Drill Floor',   status:'operation', client:'C001',notes:'27.5 inch rotary table'},
-  {assetId:'AST-0003',name:'Mud Pump #01',           type:'Mud System Low Pressure', serial:'MP-2021-099',location:'Rig 7',      zone:'Pump Room',     status:'operation', client:'C001',notes:'National 12-P-160 triplex mud pump'},
-  {assetId:'AST-0004',name:'High Pressure Manifold', type:'Mud System High Pressure',serial:'HP-2023-011',location:'Rig 12',     zone:'Pump Room',     status:'operation', client:'C002',notes:'High pressure manifold 10,000 PSI'},
-  {assetId:'AST-0005',name:'Wireline Unit #01',      type:'Wirelines',               serial:'WL-2020-007',location:'Rig 12',     zone:'Wireline Area', status:'stacked',   client:'C002',notes:'Electric line logging unit'},
-  {assetId:'AST-0006',name:'Derrick Structure #01',  type:'Structure',               serial:'DS-2022-033',location:'Workshop B', zone:'Bay 1',         status:'stacked',   client:'C002',notes:'Pending structural inspection'},
-  {assetId:'AST-0007',name:'BOP Stack #01',          type:'Well Control',            serial:'BOP-2023-004',location:'Rig 7',     zone:'BOP Deck',      status:'operation', client:'C003',notes:'13-5/8 inch 10K BOP stack'},
-  {assetId:'AST-0008',name:'Drill Pipe (Range 2)',   type:'Tubular',                 serial:'DP-2019-021',location:'Rig 12',     zone:'Pipe Rack',     status:'operation', client:'C003',notes:'5 inch Grade E drill pipe'},
-  {assetId:'AST-0009',name:'Crown Block #01',        type:'Hoisting Equipment',      serial:'CB-2022-017',location:'Rig 7',      zone:'Crown',         status:'operation', client:'C003',notes:'Crown block 750T static hook load'},
-  {assetId:'AST-0010',name:'Mud Gas Separator',      type:'Mud System Low Pressure', serial:'MGS-2022-046',location:'Rig 12',    zone:'Mud Pits',      status:'operation', client:'C004',notes:'Poor boy degasser'},
-  {assetId:'AST-0011',name:'Traveling Block #02',    type:'Hoisting Equipment',      serial:'TB-2023-002',location:'Workshop A', zone:'Maintenance Bay',status:'stacked',  client:'C001',notes:'750T traveling block under overhaul'},
-  {assetId:'AST-0012',name:'Casing String 9-5/8',   type:'Tubular',                 serial:'CS-2021-055',location:'Rig 7',      zone:'Pipe Rack',     status:'operation', client:'C001',notes:'9-5/8 inch 47 ppf N80 casing'},
-  {assetId:'AST-0013',name:'Choke Manifold #01',    type:'Well Control',            serial:'CM-2022-008',location:'Rig 12',     zone:'BOP Deck',      status:'operation', client:'C002',notes:'10K choke & kill manifold'},
-  {assetId:'AST-0014',name:'Drill Collar (8 inch)', type:'Tubular',                 serial:'DC-2023-041',location:'Rig 7',      zone:'Pipe Rack',     status:'operation', client:'C003',notes:'8 inch drill collar string'},
-  {assetId:'AST-0015',name:'Draw Works #01',        type:'Hoisting Equipment',      serial:'DW-2020-012',location:'Workshop B', zone:'Bay 2',         status:'stacked',   client:'C004',notes:'National 1320 UE draw works'},
-  {assetId:'AST-0016',name:'Shale Shaker #02',      type:'Mud System Low Pressure', serial:'SS-2018-003',location:'Rig 12',     zone:'Shaker House',  status:'operation', client:'C004',notes:'Linear motion shale shaker'},
-  {assetId:'AST-0017',name:'Accumulator Unit #01',  type:'Well Control',            serial:'AC-2023-019',location:'Rig 7',      zone:'BOP Deck',      status:'operation', client:'C001',notes:'120 gallon hydraulic accumulator'},
-  {assetId:'AST-0018',name:'Wireline Unit #02',      type:'Wirelines',               serial:'WL-2022-028',location:'Workshop A', zone:'Storage',       status:'stacked',   client:'C002',notes:'Slickline unit pending maintenance'},
-];
+let ASSETS = []; // populated from API by loadAssets()
+
 
 /* ═══════════════════════════════════════════════════════
    RENDER TABLE
@@ -1482,53 +1503,72 @@ document.addEventListener('click', e => {
     document.getElementById('massStatusDrop')?.classList.remove('open');
 });
 
-function massChangeStatus(newStatus) {
+async function massChangeStatus(newStatus) {
   const ids = getSelectedIds();
   if (!ids.length) return;
-  const role = session?.role;
-  ids.forEach(id => {
-    const idx = ASSETS.findIndex(a => a.assetId === id);
-    if (idx === -1) return;
-    if (role === 'technician') {
-      ASSETS[idx]._pendingStatus = newStatus;
-    } else {
-      ASSETS[idx].status = newStatus;
-    }
-  });
   document.getElementById('massStatusDrop').classList.remove('open');
-  showToast('success',
-    'Status Updated',
-    `${ids.length} asset${ids.length > 1 ? 's' : ''} updated.`
-  );
-  clearSelection();
-  renderTable();
+  try {
+    const results = await Promise.all(
+      ids.map(id => {
+        const asset = ASSETS.find(a => a.assetId === id);
+        const uuid  = asset?.id || id;
+        return apiFetch(`/api/assets/${uuid}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: newStatus })
+        }).then(r => r.json());
+      })
+    );
+    const failed = results.filter(r => !r.success).length;
+    if (failed) {
+      showToast('warning', 'Partial Update', `${ids.length - failed} updated, ${failed} failed.`);
+    } else {
+      showToast('success', 'Status Updated', `${ids.length} asset${ids.length > 1 ? 's' : ''} set to "${newStatus}".`);
+    }
+    clearSelection();
+    await loadAssets();
+  } catch(err) {
+    showToast('error', 'Network Error', 'Could not update status. Please try again.');
+  }
 }
 
-function massDelete() {
+async function massDelete() {
   const ids = getSelectedIds();
   if (!ids.length) return;
   if (!confirm(`Delete ${ids.length} selected asset${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
-  ASSETS = ASSETS.filter(a => !ids.includes(a.assetId));
-  showToast('success',
-    'Deleted',
-    `${ids.length} asset${ids.length > 1 ? 's' : ''} deleted.`
-  );
-  clearSelection();
-  renderTable();
+  try {
+    const results = await Promise.all(
+      ids.map(id => {
+        const asset = ASSETS.find(a => a.assetId === id);
+        const uuid  = asset?.id || id;
+        return apiFetch(`/api/assets/${uuid}`, { method: 'DELETE' }).then(r => r.json());
+      })
+    );
+    const failed = results.filter(r => !r.success).length;
+    if (failed) {
+      showToast('warning', 'Partial Delete', `${ids.length - failed} deleted, ${failed} failed.`);
+    } else {
+      showToast('success', 'Deleted', `${ids.length} asset${ids.length > 1 ? 's' : ''} deleted.`);
+    }
+    clearSelection();
+    await loadAssets();
+  } catch(err) {
+    showToast('error', 'Network Error', 'Could not delete assets. Please try again.');
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
    ADD / EDIT MODAL
 ═══════════════════════════════════════════════════════ */
-function openAddModal() {
+async function openAddModal() {
   document.getElementById('editAssetId').value = '';
   document.getElementById('assetForm').reset();
   onTypeChange(); // hides Applied Standard until type selected
-  const fc=document.getElementById('f_client')?.value||session?.customerId||null;
-  populateFuncLocDropdown('',fc);
   closeInlineAddFuncLoc();
   document.getElementById('modalTitle').setAttribute('data-en','Add New Asset');
   document.getElementById('modalTitle').textContent = 'Add New Asset';
+
+  /* Refresh clients and functional locations so dropdowns are always current */
+  await Promise.all([loadClients(), loadFuncLocsFromAPI()]);
 
   /* Technician approval note */
   document.getElementById('statusApprovalNote').style.display =
@@ -1547,7 +1587,7 @@ function openAddModal() {
   document.getElementById('assetModal').classList.add('open');
 }
 
-function openEditModal(id) {
+async function openEditModal(id) {
   const a = ASSETS.find(x => x.assetId === id);
   if (!a) return;
   document.getElementById('editAssetId').value = id;
@@ -1561,8 +1601,10 @@ function openEditModal(id) {
   populateFuncLocDropdown(a.location, a.client||session?.customerId||null);
   closeInlineAddFuncLoc();
 
-  document.getElementById('f_client').value  = a.client;
-  document.getElementById('f_notes').value   = a.notes;
+  /* Refresh clients and functional locations so dropdowns are always current, then set selected value */
+  await Promise.all([loadClients(), loadFuncLocsFromAPI()]);
+  document.getElementById('f_client').value = a.client;
+  document.getElementById('f_notes').value  = a.notes;
 
   document.getElementById('modalTitle').textContent = 'Edit Asset';
   document.getElementById('statusApprovalNote').style.display = 'none';
@@ -1573,7 +1615,7 @@ function openEditModal(id) {
 
 function closeModal() { document.getElementById('assetModal').classList.remove('open'); }
 
-function saveAsset(e) {
+async function saveAsset(e) {
   if (e && e.preventDefault) e.preventDefault();
   const name     = document.getElementById('f_name').value.trim();
   const type     = document.getElementById('f_type').value;
@@ -1582,15 +1624,12 @@ function saveAsset(e) {
   const appliedStandard = document.getElementById('f_appliedStandard').value.trim();
   const client   = document.getElementById('f_client').value || session.customerId;
   if (!name || !type || !status || !location || !client) {
-    showToast('error',
-      'Required Fields',
-      'Please fill all required fields.');
+    showToast('error', 'Required Fields', 'Please fill all required fields.');
     return;
   }
 
   const serial = document.getElementById('f_serial').value.trim();
   const zoneEquipment = document.getElementById('f_zone_equipment').value.trim();
-
   if (!serial) {
     showToast('error', 'Required', 'Serial Number is required.');
     document.getElementById('f_serial').focus();
@@ -1602,60 +1641,42 @@ function saveAsset(e) {
     return;
   }
 
-  const editId = document.getElementById('editAssetId').value;
-  // Duplicate serial check — serial must be unique across all assets
-  const duplicate = ASSETS.find(a => a.serial === serial && a.assetId !== editId);
-  if (duplicate) {
-    showToast('error', 'Duplicate Serial', `Serial "${serial}" is already used by "${duplicate.name}" (${duplicate.assetId}).`);
-    document.getElementById('f_serial').focus();
-    return;
-  }
+  const editId  = document.getElementById('editAssetId').value;
+  const saveBtn = document.getElementById('saveBtn');
+  if (saveBtn) { saveBtn.disabled = true; const lbl = document.getElementById('saveBtnLabel'); if (lbl) lbl.textContent = 'Saving…'; }
 
-  const isTech = session.role === 'technician';
+  try {
+    const payload = {
+      name,
+      asset_type:          type,
+      serial_number:       serial,
+      status,
+      functional_location: location,
+      client_id:           client,
+      description:         document.getElementById('f_notes').value || null,
+    };
 
-  if (editId) {
-    const idx = ASSETS.findIndex(a => a.assetId === editId);
-    if (idx > -1) {
-      const old = ASSETS[idx];
-      if (isTech && old.status !== status) {
-        ASSETS[idx]._pendingStatus = status;
-        showToast('info',
-          'Request Sent',
-          'Status change request sent to Admin for approval.');
-      } else {
-        const oldLocation = old.location;
-        ASSETS[idx] = { ...old, name, type,
-          serial, status, location, appliedStandard,
-          zoneEquipment,
-          zone: zoneEquipment,
-          client,
-          notes: document.getElementById('f_notes').value };
-        // Auto-log transfer if location changed
-        if (oldLocation && oldLocation !== location) {
-          logTransfer(old.assetId, oldLocation, location, session.name, 'Updated via edit modal', new Date().toISOString().split('T')[0]);
-        }
-        showToast('success',
-          'Updated',
-          `${name} updated successfully.`);
-      }
+    const editAsset = editId ? ASSETS.find(a => a.assetId === editId) : null;
+    const uuid      = editAsset?.id || editId;
+    const url       = editId ? `/api/assets/${uuid}` : '/api/assets';
+    const method    = editId ? 'PATCH' : 'POST';
+
+    const res  = await apiFetch(url, { method, body: JSON.stringify(payload) });
+    const data = await res.json();
+
+    if (!data.success) {
+      showToast('error', 'Save Failed', (data.data || data).error || 'Could not save asset.');
+      return;
     }
-  } else {
-    const newId = 'AST-' + String(ASSETS.length + 1).padStart(4,'0');
-    ASSETS.push({
-      assetId: newId, name, type,
-      serial, status, location, appliedStandard,
-      zoneEquipment,
-      zone: zoneEquipment,
-      client,
-      notes:    document.getElementById('f_notes').value
-    });
-    showToast('success',
-      'Added',
-      `${name} (${newId}) added successfully.`);
-  }
 
-  closeModal();
-  renderTable();
+    showToast('success', editId ? 'Updated' : 'Added', `"${name}" saved successfully.`);
+    closeModal();
+    await loadAssets();
+  } catch(err) {
+    showToast('error', 'Network Error', 'Could not save asset. Please try again.');
+  } finally {
+    if (saveBtn) { saveBtn.disabled = false; const lbl = document.getElementById('saveBtnLabel'); if (lbl) lbl.textContent = 'Save Asset'; }
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1675,21 +1696,33 @@ function openStatusModal(id) {
 }
 function closeStatusModal() { document.getElementById('statusModal').classList.remove('open'); }
 
-function submitStatusRequest() {
-  const reason = document.getElementById('statusReason').value.trim();
+async function submitStatusRequest() {
+  const reason    = document.getElementById('statusReason').value.trim();
+  const newStatus = document.getElementById('statusNewVal').value;
   if (!reason) {
-    showToast('error',
-      'Reason Required',
-      'Please enter a reason for the status change.');
+    showToast('error', 'Reason Required', 'Please enter a reason for the status change.');
     return;
   }
-  const idx = ASSETS.findIndex(a => a.assetId === statusTargetId);
-  if (idx > -1) ASSETS[idx]._pendingStatus = document.getElementById('statusNewVal').value;
-  closeStatusModal();
-  showToast('success',
-    'Request Submitted',
-    'Status change request submitted to Admin.');
-  renderTable();
+  const asset = ASSETS.find(a => a.assetId === statusTargetId);
+  const uuid  = asset?.id || statusTargetId;
+  try {
+    const res  = await apiFetch(`/api/assets/${uuid}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: newStatus, notes: reason })
+    });
+    const data = await res.json();
+    if (data.success) {
+      closeStatusModal();
+      showToast('success', 'Status Updated', `Asset status changed to "${newStatus}".`);
+      await loadAssets();
+    } else {
+      // Technician: worker may reject — treat as pending request
+      closeStatusModal();
+      showToast('info', 'Request Submitted', 'Status change request submitted to Admin for approval.');
+    }
+  } catch(err) {
+    showToast('error', 'Network Error', 'Could not submit status request. Please try again.');
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1954,14 +1987,22 @@ function openDeleteModal(id) {
   document.getElementById('deleteModal').classList.add('open');
 }
 function closeDeleteModal() { document.getElementById('deleteModal').classList.remove('open'); }
-function confirmDelete() {
-  const a = ASSETS.find(x => x.assetId === deleteTargetId);
-  ASSETS = ASSETS.filter(x => x.assetId !== deleteTargetId);
+async function confirmDelete() {
+  const a    = ASSETS.find(x => x.assetId === deleteTargetId);
+  const uuid = a?.id || deleteTargetId;
   closeDeleteModal();
-  showToast('success',
-    'Deleted',
-    `"${a?.name||deleteTargetId}" deleted successfully.`);
-  renderTable();
+  try {
+    const res  = await apiFetch(`/api/assets/${uuid}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('error', 'Delete Failed', (data.data || data).error || 'Could not delete asset.');
+      return;
+    }
+    showToast('success', 'Deleted', `"${a?.name || deleteTargetId}" deleted successfully.`);
+    await loadAssets();
+  } catch(err) {
+    showToast('error', 'Network Error', 'Could not delete asset. Please try again.');
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2189,64 +2230,66 @@ function showToast(type, title, msg) {
 ═══════════════════════════════════════════════════════ */
 
 /* Load from localStorage so changes on functional-locations.html reflect here */
-function loadFuncLocs() {
+
+/* ═══════════════════════════════════════════════════════
+   API LOADERS
+═══════════════════════════════════════════════════════ */
+
+async function loadClients() {
   try {
-    const saved = localStorage.getItem('sap_func_locations');
-    if (saved) return JSON.parse(saved);
-  } catch(e) {}
-  /* Default seed data */
-  return [
-    { id:'FL-001', name:'Rig 7',      type:'Rig',       status:'active', notes:'Offshore drilling rig' },
-    { id:'FL-002', name:'Rig 12',     type:'Rig',       status:'active', notes:'Land rig' },
-    { id:'FL-003', name:'Workshop A', type:'Workshop',  status:'active', notes:'Main maintenance workshop' },
-    { id:'FL-004', name:'Workshop B', type:'Workshop',  status:'active', notes:'Heavy equipment workshop' },
-    { id:'FL-005', name:'Yard 1',     type:'Yard',      status:'active', notes:'Equipment storage yard' },
-    { id:'FL-006', name:'Warehouse C',type:'Warehouse', status:'active', notes:'Spare parts warehouse' },
-  ];
-}
+    const res  = await apiFetch('/api/clients?status=active&limit=200');
+    const data = await res.json();
+    const list = (data.data?.clients || data.data || []);
 
-function saveFuncLocs(locs) {
-  localStorage.setItem('sap_func_locations', JSON.stringify(locs));
-}
+    // Rebuild CLIENTS_MAP — keyed by short code (C001, C002…)
+    Object.keys(CLIENTS_MAP).forEach(k => delete CLIENTS_MAP[k]);
+    list.forEach(c => { CLIENTS_MAP[c.client_id] = c.name; });
 
-function populateFuncLocDropdown(selectedValue) {
-  const sel = document.getElementById('f_location');
-  if (!sel) return;
-  const locs = loadFuncLocs().filter(l => l.status === 'active');
-  sel.innerHTML = '<option value="">Select functional location…</option>' +
-    locs.map(l => `<option value="${l.name}" ${l.name === selectedValue ? 'selected' : ''}>${l.name} (${l.type})</option>`).join('');
-}
+    const toOption = c => `<option value="${c.client_id}">${c.name} (${c.client_id})</option>`;
 
-function openInlineAddLocation() {
-  document.getElementById('inlineAddLocationWrap').style.display = 'block';
-  document.getElementById('inlineLocName').value = '';
-  document.getElementById('inlineLocType').value = '';
-  document.getElementById('inlineLocName').focus();
-}
+    // Populate toolbar filter
+    const toolbarSel = document.getElementById('clientFilter');
+    if (toolbarSel) {
+      const cur = toolbarSel.value;
+      toolbarSel.innerHTML = '<option value="all">All Clients</option>' + list.map(toOption).join('');
+      if (cur) toolbarSel.value = cur;
+    }
 
-function cancelInlineAddLocation() {
-  document.getElementById('inlineAddLocationWrap').style.display = 'none';
-}
-
-function confirmInlineAddLocation() {
-  const name = document.getElementById('inlineLocName').value.trim();
-  const type = document.getElementById('inlineLocType').value;
-  if (!name || !type) {
-    showToast('error', 'Required', 'Please enter a location name and type.');
-    return;
+    // Populate modal client select
+    const modalSel = document.getElementById('f_client');
+    if (modalSel) {
+      const cur2 = modalSel.value;
+      modalSel.innerHTML = '<option value="">Select client…</option>' + list.map(toOption).join('');
+      if (cur2) modalSel.value = cur2;
+    }
+  } catch(e) {
+    console.warn('loadClients failed:', e);
   }
-  const locs = loadFuncLocs();
-  /* Check duplicate */
-  if (locs.find(l => l.name.toLowerCase() === name.toLowerCase())) {
-    showToast('warning', 'Duplicate', `"${name}" already exists.`);
-    return;
+}
+
+async function loadAssets() {
+  try {
+    const params = new URLSearchParams({ limit: 500 });
+    const res  = await apiFetch('/api/assets?' + params);
+    const data = await res.json();
+    const d    = data.data || data;
+    ASSETS = (d.assets || d || []).map(a => ({
+      ...a,
+      assetId:       a.asset_number || a.id,
+      type:          a.asset_type        || '',
+      serial:        a.serial_number     || '',
+      location:      a.functional_location || '',
+      client:        a.client_id         || '',   // short code e.g. C001
+      zone:          a.description       || '',
+      zoneEquipment: a.description       || '',
+      notes:         a.notes             || '',
+    }));
+  } catch(e) {
+    console.warn('loadAssets failed:', e);
+    ASSETS = [];
   }
-  const newId = 'FL-' + String(locs.length + 1).padStart(3,'0');
-  locs.push({ id: newId, name, type, status:'active', notes:'' });
-  saveFuncLocs(locs);
-  cancelInlineAddLocation();
-  populateFuncLocDropdown(name);
-  showToast('success', 'Location Added', `"${name}" added and selected.`);
+  renderTable();
+  syncAssetsToStorage();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2313,8 +2356,9 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Notification badge */
   if (role !== 'user') document.getElementById('notifBadge').style.display = 'block';
 
-  renderTable();
   loadColState();
+  // Load clients and functional locations in parallel, then load assets
+  Promise.all([loadClients(), loadFuncLocsFromAPI()]).then(() => loadAssets());
 });
 </script>
 </body>
