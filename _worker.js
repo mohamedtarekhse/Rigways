@@ -680,14 +680,29 @@ async function handleCertUpload(request, env, path) {
 
     if (!cert.file_url) return json({ success: false, error: 'No file attached to this certificate', code: 'NO_FILE' }, 404, env);
 
-    // Generate a signed URL valid for 1 hour
+    // Proxy the file directly through the Worker — works on free plan, no signed URL needed.
+    // The browser opens /api/certificates/file/:id and the Worker streams the bytes back.
     try {
-      const signedUrl = await env.CERT_BUCKET.createSignedUrl(cert.file_url, { expiresIn: 3600 });
-      return ok({ url: signedUrl, file_name: cert.file_name }, env);
+      const obj = await env.CERT_BUCKET.get(cert.file_url);
+      if (!obj) return json({ success: false, error: 'File not found in storage', code: 'FILE_MISSING' }, 404, env);
+
+      const contentType = obj.httpMetadata?.contentType || 'application/octet-stream';
+      const disposition = contentType === 'application/pdf' || contentType.startsWith('image/')
+        ? 'inline'
+        : 'attachment';
+
+      return new Response(obj.body, {
+        status: 200,
+        headers: {
+          'Content-Type': contentType,
+          'Content-Disposition': `${disposition}; filename="${cert.file_name || 'certificate'}"`,
+          'Cache-Control': 'private, max-age=3600',
+          ...cors(env),
+        },
+      });
     } catch(e) {
-      // If R2 doesn't support signed URLs (free tier), return public URL fallback
-      const publicUrl = `https://pub-${env.R2_PUBLIC_BUCKET_ID || 'unknown'}.r2.dev/${cert.file_url}`;
-      return ok({ url: publicUrl, file_name: cert.file_name }, env);
+      console.error('R2 get error:', e);
+      return json({ success: false, error: 'Could not retrieve file: ' + e.message, code: 'STORAGE_ERROR' }, 500, env);
     }
   }
 

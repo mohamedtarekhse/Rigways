@@ -1355,7 +1355,10 @@ function openUploadModal() {
   /* Set today as default issue date */
   document.getElementById('f_issueDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('certModal').classList.add('open');
+  // Load all dropdowns from API
   loadAssetDropdown();
+  loadInspectorDropdown();
+  loadClientDropdown();
 }
 
 function openEditModal(id) {
@@ -1403,6 +1406,15 @@ function openEditModal(id) {
   document.getElementById('techUploadNote').style.display = session.role === 'technician' ? 'block' : 'none';
   if (session.customerId) document.getElementById('f_client_wrap').style.display = 'none';
   document.getElementById('certModal').classList.add('open');
+  // Load all dropdowns from API then restore selected values
+  const _assetVal = c.assetId || '';
+  const _inspVal  = c.issuedBy || '';
+  const _clientVal = c.client || '';
+  loadAssetDropdown().then(() => {
+    if (_assetVal) document.getElementById('f_assetId').value = _assetVal;
+  });
+  loadInspectorDropdown(_inspVal);
+  loadClientDropdown(_clientVal);
 }
 
 function closeModal() {
@@ -1837,13 +1849,38 @@ document.getElementById('drawerOverlay').addEventListener('click', function(e) {
 /* ── Certificate file link opener ── */
 async function openCertLink(certId) {
   const cert = CERTS.find(x => x.certId === certId);
+  if (!cert) { showToast('error','Not Found','Certificate not found.'); return; }
+  if (!cert.fileName && !cert.fileUrl) { showToast('info','No File','No file attached to this certificate.'); return; }
+  // The worker now streams the file directly — open the API endpoint as a URL.
+  // The Bearer token must be passed; we use a temporary anchor with the token as a query param
+  // is NOT safe. Instead we open the URL: the Worker checks the Authorization header.
+  // Since window.open can't set headers, we fetch the blob and open it as an object URL.
+  const uuid = cert.id || certId;
   try {
-    const res  = await apiFetch('/api/certificates/file/' + (cert?.id || certId));
-    const data = await res.json();
-    const d    = data.data || data;
-    if (!data.success) { showToast('info','No File', d.error || 'No file attached.'); return; }
-    window.open(d.url, '_blank', 'noopener,noreferrer');
-  } catch(e) { showToast('error','Error','Could not open file.'); }
+    const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
+    const res = await fetch('/api/certificates/file/' + uuid, {
+      headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast('info', 'No File', (err.data || err).error || 'Could not retrieve file.');
+      return;
+    }
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    // For PDFs open inline; for others trigger download
+    if (blob.type !== 'application/pdf') {
+      a.download = cert.fileName || 'certificate';
+    }
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+  } catch(e) { showToast('error','Error','Could not open file. Please try again.'); }
 }
 
 /* ── File preview ── */
@@ -2138,6 +2175,43 @@ async function loadAssetDropdown() {
     sel.innerHTML = '<option value="">Select asset…</option>' +
       assets.map(a => `<option value="${a.asset_number || a.id}">${a.asset_number || a.id} — ${a.name}</option>`).join('');
   } catch(e) { sel.innerHTML = '<option value="">Could not load assets</option>'; }
+}
+
+async function loadInspectorDropdown(selectedValue) {
+  const sel = document.getElementById('f_issuedBy');
+  if (!sel) return;
+  // Only admin/manager can call GET /api/inspectors; for others keep existing options
+  if (!['admin', 'manager'].includes(session?.role)) return;
+  try {
+    const res  = await apiFetch('/api/inspectors?status=active&limit=200');
+    const data = await res.json();
+    const list = (data.data?.inspectors || data.data || []);
+    sel.innerHTML = '<option value="">Select inspector…</option>' +
+      list.map(i => {
+        const name = i.name || '';
+        const sel2 = selectedValue && (name === selectedValue) ? ' selected' : '';
+        return `<option value="${name}"${sel2}>${name}${i.title ? ' — ' + i.title : ''}</option>`;
+      }).join('');
+  } catch(e) { /* keep existing hardcoded options as fallback */ }
+}
+
+async function loadClientDropdown(selectedValue) {
+  const sel = document.getElementById('f_client');
+  if (!sel) return;
+  // Non-admin/manager users are scoped to their own client; dropdown not needed
+  if (!['admin', 'manager'].includes(session?.role)) return;
+  try {
+    const res  = await apiFetch('/api/clients?status=active&limit=200');
+    const data = await res.json();
+    const list = (data.data?.clients || data.data || []);
+    sel.innerHTML = '<option value="">Select client…</option>' +
+      list.map(c => {
+        const val  = c.client_id || c.id;
+        const label = `${c.name} (${val})`;
+        const sel2 = selectedValue && (val === selectedValue) ? ' selected' : '';
+        return `<option value="${val}"${sel2}>${label}</option>`;
+      }).join('');
+  } catch(e) { /* keep existing hardcoded options as fallback */ }
 }
 
 async function loadCerts() {
