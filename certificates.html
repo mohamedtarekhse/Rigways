@@ -812,10 +812,50 @@
       <div class="sap-modal__title"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg><span>Delete Certificate</span></div>
       <button class="sap-modal__close" onclick="document.getElementById('deleteModal').classList.remove('open')"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
-    <div class="sap-modal__body"><p style="font-size:14px;" id="deleteMsg">Are you sure?</p></div>
+    <div class="sap-modal__body">
+      <div style="background:var(--sap-error-bg);border:1px solid var(--sap-error-border);border-left:4px solid var(--sap-error);border-radius:6px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#7f0000;">
+        <strong>⚠ This action cannot be undone.</strong><br/>
+        The certificate record and its attached file will be permanently deleted from the system and storage.
+      </div>
+      <p style="font-size:14px;color:var(--sap-text-primary);" id="deleteMsg">Are you sure?</p>
+      <p style="font-size:12px;color:var(--sap-text-secondary);margin-top:6px;" id="deleteMsgSub"></p>
+    </div>
     <div class="sap-modal__footer">
       <button class="btn btn-ghost" onclick="document.getElementById('deleteModal').classList.remove('open')">Cancel</button>
-      <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+        Delete Permanently
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ CONFIRM DELETE MODAL ═══════════════════════ -->
+<div class="sap-modal-overlay" id="certDeleteConfirmModal">
+  <div class="sap-modal sap-modal--sm">
+    <div class="sap-modal__header" style="background:var(--sap-error);">
+      <div class="sap-modal__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        <span>Delete Certificate</span>
+      </div>
+      <button class="sap-modal__close" onclick="closeCertDeleteModal()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="sap-modal__body">
+      <div style="background:var(--sap-error-bg);border:1px solid var(--sap-error-border);border-left:4px solid var(--sap-error);border-radius:6px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#7f0000;">
+        <strong>⚠ This action is permanent and cannot be undone.</strong><br/>
+        The certificate record and its attached file will be deleted from the database and storage.
+      </div>
+      <div id="certDeleteModalInfo" style="background:var(--sap-page-bg);border-radius:6px;padding:12px;font-size:13px;margin-bottom:4px;"></div>
+      <p id="certDeleteWindowNote" style="font-size:11px;color:var(--sap-text-secondary);margin-top:8px;"></p>
+    </div>
+    <div class="sap-modal__footer">
+      <button class="btn btn-ghost" onclick="closeCertDeleteModal()">Cancel</button>
+      <button class="btn btn-danger" id="certDeleteConfirmBtn" onclick="confirmCertDelete()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+        Delete Certificate
+      </button>
     </div>
   </div>
 </div>
@@ -963,6 +1003,19 @@ function canTechnicianEdit(cert) {
   return hours <= 24;
 }
 
+/* Can the current user delete this cert's file?
+   Admin: always. Technician: only within 24hrs and own upload. Manager/User: never. */
+function canDeleteFile(cert) {
+  const role = session?.role;
+  if (role === 'admin') return !!cert.fileName;
+  if (role === 'technician') {
+    if (!cert.fileName) return false;
+    if (cert.uploaded_by && cert.uploaded_by !== session?.userId) return false;
+    return canTechnicianEdit(cert); // reuse 24hr check
+  }
+  return false;
+}
+
 function getEditWindowBadge(cert) {
   if (!cert.uploadTime) return '';
   const uploaded = new Date(cert.uploadTime);
@@ -1056,7 +1109,7 @@ function renderTable() {
     `Showing ${start+1}–${end} of ${total}`;
 
   const canApprove  = role === 'admin' || role === 'manager';
-  const canDelete   = role === 'admin';
+  const canDelete   = role === 'admin';   // global — per-row also checks tech 24hr
   const isTech      = role === 'technician';
   const showClient  = role === 'admin' || role === 'manager';
   const tc = TYPE_COLORS;
@@ -1104,6 +1157,7 @@ function renderTable() {
     const tc2 = tc[c.certType] || tc['Other'];
     const editAllowed = isTech && canTechnicianEdit(c) && c.approvalStatus !== 'approved';
     const isEditableByAdmin = canApprove;
+    const techCanDelete = isTech && canDeleteFile(c);  // technician within 24hr window
 
     return `<tr class="cert-row" onmouseenter="showRowActions(this)" onmouseleave="hideRowActions(this)">
       <td class="cell-check"><input type="checkbox" class="sap-checkbox" data-id="${c.certId}" onchange="updateMassBar()"/></td>
@@ -1134,7 +1188,7 @@ function renderTable() {
               <button class="btn btn-danger btn-icon" onclick="openRejectModal('${c.certId}')" title="Reject" style="width:26px;height:26px;">
                 <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>` : ''}
-            ${canDelete ? `<button class="btn btn-danger btn-icon" onclick="openDeleteModal('${c.certId}')" title="Delete" style="width:26px;height:26px;">
+            ${(canDelete || techCanDelete) ? `<button class="btn btn-danger btn-icon" onclick="openDeleteModal('${c.certId}')" title="Delete certificate" style="width:26px;height:26px;">
               <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
             </button>` : ''}
           </div>
@@ -1828,7 +1882,7 @@ function openDrawer(id) {
   /* Drawer footer */
   const canApprove2  = role === 'admin' || role === 'manager';
   const editAllowed2 = (role === 'technician' && canTechnicianEdit(c) && c.approvalStatus !== 'approved') || canApprove2;
-  const canDelete2   = role === 'admin';
+  const canDelete2   = role === 'admin' || canDeleteFile(c);  // admin always; tech within 24hr window
 
   document.getElementById('drawerFooter').innerHTML = `
     <button class="btn btn-ghost" onclick="closeDrawer()">Close</button>
@@ -1836,7 +1890,10 @@ function openDrawer(id) {
     ${canApprove2 && c.approvalStatus==='pending' ? `
       <button class="btn btn-success" onclick="closeDrawer();approveCert('${c.certId}')">Approve</button>
       <button class="btn btn-danger"  onclick="closeDrawer();openRejectModal('${c.certId}')">Reject</button>` : ''}
-    ${canDelete2 ? `<button class="btn btn-danger" onclick="closeDrawer();openDeleteModal('${c.certId}')">Delete</button>` : ''}
+    ${canDelete2 ? `<button class="btn btn-danger" onclick="closeDrawer();openDeleteModal('${c.certId}')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+      Delete
+    </button>` : ''}
   `;
 
   document.getElementById('drawerOverlay').classList.add('open');
@@ -1844,6 +1901,10 @@ function openDrawer(id) {
 function closeDrawer() { document.getElementById('drawerOverlay').classList.remove('open'); }
 document.getElementById('drawerOverlay').addEventListener('click', function(e) {
   if (e.target === this) closeDrawer();
+});
+
+document.getElementById('certDeleteConfirmModal').addEventListener('click', function(e) {
+  if (e.target === this) closeCertDeleteModal();
 });
 
 /* ── Certificate file link opener ── */
@@ -1893,23 +1954,105 @@ function previewFile(id) {
 
 /* ── Delete ── */
 function openDeleteModal(id) {
-  deleteTargetId = id;
   const c = CERTS.find(x => x.certId === id);
-  document.getElementById('deleteMsg').textContent =
-    `Delete "${c?.name||id}"? This cannot be undone.`;
-  document.getElementById('deleteModal').classList.add('open');
+  if (!c) return;
+  openCertDeleteModal(id);
 }
-async function confirmDelete() {
+
+/* ── New cert delete modal (admin always; technician within 24hrs own records only) ── */
+function openCertDeleteModal(id) {
+  const c = CERTS.find(x => x.certId === id);
+  if (!c) return;
+
+  const role = session?.role;
+
+  // Manager / user: never
+  if (role !== 'admin' && role !== 'technician') {
+    showToast('error', 'Not Allowed', 'Only admins and technicians can delete certificates.');
+    return;
+  }
+
+  // Technician: enforce 24hr window and ownership client-side
+  if (role === 'technician') {
+    if (!canTechnicianEdit(c)) {
+      showToast('error', 'Window Expired', 'You can only delete certificates within 24 hours of upload.');
+      return;
+    }
+    // Ownership check using userId stored at login
+    const myId = session?.userId || session?.sub;
+    if (c.uploaded_by && myId && c.uploaded_by !== myId) {
+      showToast('error', 'Not Allowed', 'You can only delete your own uploads.');
+      return;
+    }
+  }
+
+  deleteTargetId = id;
+
+  // Populate modal info
+  const infoEl = document.getElementById('certDeleteModalInfo');
+  const noteEl = document.getElementById('certDeleteWindowNote');
+
+  infoEl.innerHTML = `
+    <div style="font-weight:700;font-size:14px;margin-bottom:4px;">${h(c.name)}</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span class="cert-id-chip">${fmtCertId(c)}</span>
+      ${getApprovalBadge(c.approvalStatus)}
+      ${c.fileName ? `<span style="font-size:11px;color:var(--sap-brand);">📎 ${h(c.fileName)}</span>` : '<span style="font-size:11px;color:var(--sap-text-disabled);">No file attached</span>'}
+    </div>`;
+
+  if (role === 'technician') {
+    const uploaded = new Date(c.uploadTime);
+    const hoursLeft = Math.max(0, 24 - (Date.now() - uploaded.getTime()) / 3600000);
+    const hh = Math.floor(hoursLeft);
+    const mm = Math.floor((hoursLeft % 1) * 60);
+    noteEl.textContent = `⏱ Your delete window closes in ${hh}h ${mm}m.`;
+    noteEl.style.color = hoursLeft < 2 ? 'var(--sap-error)' : 'var(--sap-text-secondary)';
+  } else {
+    noteEl.textContent = '';
+  }
+
+  document.getElementById('certDeleteConfirmModal').classList.add('open');
+}
+
+function closeCertDeleteModal() {
+  document.getElementById('certDeleteConfirmModal').classList.remove('open');
+  deleteTargetId = null;
+}
+
+async function confirmCertDelete() {
   const cert = CERTS.find(x => x.certId === deleteTargetId);
-  document.getElementById('deleteModal').classList.remove('open');
+  closeCertDeleteModal();
+
+  const btn = document.getElementById('certDeleteConfirmBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
+
   try {
     const res  = await apiFetch('/api/certificates/' + (cert?.id || deleteTargetId), { method: 'DELETE' });
     const data = await res.json();
-    if (!data.success) { showToast('error','Failed',(data.data||data).error||'Could not delete.'); return; }
+
+    if (!data.success) {
+      const errMsg = (data.data || data).error || 'Could not delete.';
+      const friendly = errMsg.includes('window') || errMsg.includes('expired')
+        ? 'Your 24-hour delete window has expired.'
+        : errMsg;
+      showToast('error', 'Delete Failed', friendly);
+      if (btn) { btn.disabled = false; btn.textContent = 'Delete Certificate'; }
+      return;
+    }
+
     CERTS = CERTS.filter(x => x.certId !== deleteTargetId);
-    showToast('success','Deleted',`"${cert?.name || deleteTargetId}" deleted.`);
+    showToast('success', 'Deleted', `"${cert?.name || deleteTargetId}" permanently deleted.`);
     renderTable();
-  } catch(e) { showToast('error','Network Error','Could not delete.'); }
+  } catch(e) {
+    showToast('error', 'Network Error', 'Could not delete. Please try again.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Delete Certificate'; }
+  }
+}
+
+async function confirmDelete() {
+  // Legacy — redirect to new handler
+  await confirmCertDelete();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2239,7 +2382,9 @@ async function loadCerts() {
       fileUrl:         cert.file_url  || '',
       rejectionReason: cert.rejection_reason || '',
       jobNumber:       cert.notes || '',
-      uploadTime:      (cert.created_at||'').split('T')[0],
+      uploadTime:      cert.created_at || '',   // full ISO timestamp for accurate 24hr window
+      uploadedBy:      cert.uploaded_by || '',
+      uploaded_by:     cert.uploaded_by || '',
     }));
     window._certUrls = {};
     CERTS.forEach(cert => { if (cert.file_url) window._certUrls[cert.id] = cert.file_url; });
@@ -2299,6 +2444,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loadCerts(); // also calls syncCerts() inside
   loadColState();
+
+  /* ESC key closes any open modal/drawer */
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const deleteModal = document.getElementById('certDeleteConfirmModal');
+    if (deleteModal?.classList.contains('open')) { closeCertDeleteModal(); return; }
+    const rejectMod = document.getElementById('rejectModal');
+    if (rejectMod?.classList.contains('open')) { closeRejectModal(); return; }
+    const certMod = document.getElementById('certModal');
+    if (certMod?.classList.contains('open')) { closeModal(); return; }
+    const drawer = document.getElementById('drawerOverlay');
+    if (drawer?.classList.contains('open')) { closeDrawer(); return; }
+  });
 });
 </script>
 </body>

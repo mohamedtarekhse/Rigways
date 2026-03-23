@@ -864,11 +864,37 @@ async function handleCertificates(request, env, path) {
     return ok(updated || existing, env);
   }
 
-  /* DELETE */
+  /* DELETE — admin anytime; technician within 24 hrs of upload (own records only); manager/user forbidden */
   if (certId && method === 'DELETE') {
-    if (!requireRole(session, ['admin'])) return forbidden(env);
-    const { data: ex } = await db.from('certificates', { filters: { 'id.eq': certId }, select: 'id', limit: 1 });
-    if (!(Array.isArray(ex) ? ex[0] : ex)) return notFound('Certificate', env);
+    // Only admin and technician can delete
+    if (!requireRole(session, ['admin', 'technician'])) return forbidden(env);
+
+    // Fetch the full record so we can check ownership, timing, and get the file key
+    const { data: ex } = await db.from('certificates', {
+      filters: { 'id.eq': certId },
+      select: 'id,file_url,uploaded_by,created_at',
+      limit: 1,
+    });
+    const existing = Array.isArray(ex) ? ex[0] : ex;
+    if (!existing) return notFound('Certificate', env);
+
+    if (session.role === 'technician') {
+      // Must be the uploader
+      if (existing.uploaded_by !== session.sub) return forbidden(env);
+      // Must be within 24 hours of creation
+      const ageHours = (Date.now() - new Date(existing.created_at).getTime()) / 3600000;
+      if (ageHours > 24) {
+        return json({ success: false, error: 'Delete window has expired (24 hours from upload)', code: 'WINDOW_EXPIRED' }, 403, env);
+      }
+    }
+
+    // Delete file from R2 if one exists
+    if (existing.file_url && env.CERT_BUCKET) {
+      try { await env.CERT_BUCKET.delete(existing.file_url); }
+      catch(e) { console.warn('R2 delete warning:', e.message); }
+    }
+
+    // Delete the DB record
     await db.delete('certificates', { filters: { 'id.eq': certId } });
     return ok({ id: certId, deleted: true }, env);
   }
