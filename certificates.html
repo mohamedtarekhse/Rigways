@@ -353,6 +353,158 @@
     /* Original colors for light backgrounds */
   }
 
+  /* ── Job Wizard Modal ── */
+  .jw-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.5);
+    z-index: 1100;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity .25s;
+  }
+  .jw-overlay.open { opacity: 1; pointer-events: all; }
+  .jw-modal {
+    background: #fff; border-radius: 10px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.28);
+    width: 96vw; max-width: 1100px; max-height: 92vh;
+    display: flex; flex-direction: column;
+    transform: translateY(24px); transition: transform .25s;
+  }
+  .jw-overlay.open .jw-modal { transform: translateY(0); }
+  .jw-header {
+    background: linear-gradient(135deg, #0d1f33, #1a3a5c);
+    color: #fff; padding: 16px 24px 0;
+    border-radius: 10px 10px 0 0; flex-shrink: 0;
+  }
+  .jw-header__top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .jw-header__title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .jw-header__title svg { width: 18px; height: 18px; }
+  .jw-header__job { font-family: monospace; font-size: 13px; font-weight: 700;
+    background: rgba(0,112,242,.35); border: 1px solid rgba(0,112,242,.5);
+    border-radius: 4px; padding: 2px 10px; color: #90caf9; }
+  .jw-header__close { background: rgba(255,255,255,.15); border: none; color: #fff;
+    border-radius: 4px; width: 28px; height: 28px; display: flex; align-items: center;
+    justify-content: center; cursor: pointer; }
+  .jw-header__close:hover { background: rgba(255,255,255,.3); }
+  .jw-header__close svg { width: 15px; height: 15px; }
+  .jw-steps { display: flex; align-items: center; gap: 0; }
+  .jw-step {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 14px 10px;
+    font-size: 12px; font-weight: 600; color: rgba(255,255,255,.5);
+    border-bottom: 2px solid transparent; cursor: pointer; transition: all .15s; white-space: nowrap;
+  }
+  .jw-step.active { color: #fff; border-bottom-color: #0070f2; }
+  .jw-step.done   { color: rgba(255,255,255,.75); }
+  .jw-step__num {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: rgba(255,255,255,.15);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; flex-shrink: 0;
+  }
+  .jw-step.active .jw-step__num { background: #0070f2; color: #fff; }
+  .jw-step.done   .jw-step__num { background: #188918; color: #fff; }
+  .jw-body { flex: 1; overflow-y: auto; padding: 24px; min-height: 0; }
+  .jw-panel { display: none; }
+  .jw-panel.active { display: block; }
+  .jw-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px; }
+  .jw-location-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; background: var(--sap-brand-light);
+    border: 1px solid var(--sap-info-border); border-radius: 6px; margin-bottom: 16px;
+  }
+  .jw-location-bar label { font-size: 12px; font-weight: 700; color: var(--sap-brand); white-space: nowrap; }
+  .jw-asset-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+  .jw-asset-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; background: #fff;
+    border: 1px solid var(--sap-table-border); border-radius: 6px; transition: background .12s;
+  }
+  .jw-asset-item:hover { background: var(--sap-page-bg); }
+  .jw-asset-item input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--sap-brand); flex-shrink: 0; }
+  .jw-asset-item__id { font-family: monospace; font-size: 11px; font-weight: 700;
+    color: var(--sap-brand); background: var(--sap-brand-light);
+    border: 1px solid var(--sap-info-border); border-radius: 3px; padding: 1px 5px; white-space: nowrap; }
+  .jw-asset-item__name { font-size: 13px; font-weight: 600; flex: 1; }
+  .jw-asset-item__type { font-size: 11px; color: var(--sap-text-secondary); }
+  .jw-extra-search { display: flex; gap: 8px; align-items: center;
+    padding: 10px 12px; border: 1px dashed var(--sap-input-border);
+    border-radius: 6px; background: var(--sap-page-bg); }
+  .jw-extra-search svg { width: 14px; height: 14px; color: var(--sap-text-secondary); flex-shrink: 0; }
+  .jw-matrix-wrap { overflow-x: auto; }
+  .jw-matrix { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 900px; }
+  .jw-matrix th {
+    background: var(--sap-table-header-bg); color: var(--sap-text-secondary);
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
+    padding: 8px 10px; border-bottom: 2px solid var(--sap-table-border);
+    white-space: nowrap; text-align: center;
+  }
+  .jw-matrix th.col-asset { text-align: left; }
+  .jw-matrix td { padding: 0; border-bottom: 1px solid var(--sap-table-border); vertical-align: top; }
+  .jw-matrix tr:hover td { background: #fafbff; }
+  .jw-asset-cell { padding: 10px; min-width: 160px; }
+  .jw-asset-cell__id { font-family: monospace; font-size: 10px; font-weight: 700; color: var(--sap-brand); }
+  .jw-asset-cell__name { font-size: 12px; font-weight: 600; color: var(--sap-text-primary); margin-top: 1px; }
+  .jw-asset-cell__loc { font-size: 10px; color: var(--sap-text-secondary); margin-top: 1px; }
+  .jw-cert-cell {
+    padding: 8px 6px; text-align: center; min-width: 88px;
+    border-left: 1px solid var(--sap-table-border);
+  }
+  .jw-cert-check { display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
+  .jw-cert-check input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--sap-brand); cursor: pointer; }
+  .jw-cert-fields { display: none; flex-direction: column; gap: 4px; }
+  .jw-cert-fields.visible { display: flex; }
+  .jw-days-input {
+    width: 100%; height: 26px; font-size: 11px;
+    border: 1px solid var(--sap-input-border); border-radius: 3px;
+    padding: 0 5px; text-align: center; outline: none; transition: border-color .15s;
+  }
+  .jw-days-input:focus { border-color: var(--sap-brand); }
+  .jw-expiry-display { font-size: 10px; font-weight: 600; color: var(--sap-text-secondary); text-align: center; }
+  .jw-expiry-display.set { color: var(--sap-success); }
+  .jw-expiry-display.warn { color: var(--sap-warning); }
+  .jw-file-btn {
+    display: flex; align-items: center; justify-content: center;
+    gap: 3px; width: 100%; height: 24px; font-size: 10px; font-weight: 600;
+    border: 1px dashed var(--sap-input-border); border-radius: 3px;
+    background: transparent; color: var(--sap-text-secondary); cursor: pointer; transition: all .15s;
+  }
+  .jw-file-btn:hover { border-color: var(--sap-brand); color: var(--sap-brand); background: var(--sap-brand-light); }
+  .jw-file-btn.has-file { border-style: solid; border-color: var(--sap-success-border); color: var(--sap-success); background: var(--sap-success-bg); }
+  .jw-file-btn svg { width: 10px; height: 10px; }
+  .jw-remove-btn {
+    background: none; border: none; color: var(--sap-text-disabled);
+    cursor: pointer; padding: 4px; border-radius: 3px; width: 24px; height: 24px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .jw-remove-btn:hover { color: var(--sap-error); background: var(--sap-error-bg); }
+  .jw-remove-btn svg { width: 12px; height: 12px; }
+  .jw-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .jw-summary-kpi {
+    background: var(--sap-page-bg); border: 1px solid var(--sap-table-border);
+    border-radius: 8px; padding: 16px; text-align: center;
+  }
+  .jw-summary-kpi__val { font-size: 28px; font-weight: 800; color: var(--sap-brand); line-height: 1; }
+  .jw-summary-kpi__label { font-size: 11px; color: var(--sap-text-secondary); margin-top: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+  .jw-review-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .jw-review-table th { background: var(--sap-table-header-bg); color: var(--sap-text-secondary); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; padding: 7px 10px; border-bottom: 2px solid var(--sap-table-border); text-align: left; }
+  .jw-review-table td { padding: 8px 10px; border-bottom: 1px solid var(--sap-table-border); vertical-align: middle; }
+  .jw-review-table tr:hover td { background: var(--sap-page-bg); }
+  .jw-footer {
+    padding: 14px 24px; border-top: 1px solid var(--sap-table-border);
+    display: flex; align-items: center; justify-content: space-between;
+    background: #fafbfc; border-radius: 0 0 10px 10px; flex-shrink: 0;
+  }
+  .jw-footer__left { font-size: 12px; color: var(--sap-text-secondary); }
+  .jw-footer__right { display: flex; gap: 8px; }
+  .jw-progress-wrap { padding: 20px 0; }
+  .jw-progress-bar { height: 8px; background: var(--sap-page-bg); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+  .jw-progress-fill { height: 100%; background: var(--sap-brand); border-radius: 4px; transition: width .3s ease; width: 0; }
+  .jw-progress-text { font-size: 13px; color: var(--sap-text-secondary); margin-top: 6px; }
+  .jw-approval-banner { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; }
+  .jw-approval-banner--admin { background: var(--sap-success-bg); border: 1px solid var(--sap-success-border); color: var(--sap-success); }
+  .jw-approval-banner--tech  { background: #fff8e1; border: 1px solid #ffe082; color: #f57f17; }
+  .jw-approval-banner svg { width: 16px; height: 16px; flex-shrink: 0; }
+
   </style>
 </head>
 <body>
@@ -851,6 +1003,199 @@
     </div>
   </div>
 </div>
+
+<!-- ═══════════════════════ JOB WIZARD MODAL ═══════════════════════ -->
+<div class="jw-overlay" id="jwOverlay">
+  <div class="jw-modal">
+
+    <!-- Header -->
+    <div class="jw-header">
+      <div class="jw-header__top">
+        <div class="jw-header__title">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+          Bulk Certificate Job Wizard
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="jw-header__job" id="jwJobNumber">JOB-2025-001</span>
+          <button class="jw-header__close" onclick="jwClose()">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+      <!-- Step track -->
+      <div class="jw-steps">
+        <div class="jw-step active" id="jwStep1Tab" onclick="jwGoStep(1)"><span class="jw-step__num">1</span> Job Header</div>
+        <div class="jw-step"        id="jwStep2Tab" onclick="jwGoStep(2)"><span class="jw-step__num">2</span> Select Assets</div>
+        <div class="jw-step"        id="jwStep3Tab" onclick="jwGoStep(3)"><span class="jw-step__num">3</span> Cert Matrix</div>
+        <div class="jw-step"        id="jwStep4Tab" onclick="jwGoStep(4)"><span class="jw-step__num">4</span> Review</div>
+        <div class="jw-step"        id="jwStep5Tab" onclick="jwGoStep(5)"><span class="jw-step__num">5</span> Submit</div>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="jw-body">
+
+      <!-- ── STEP 1: Job Header ── -->
+      <div class="jw-panel active" id="jwPanel1">
+        <div style="margin-bottom:20px;">
+          <div style="font-size:15px;font-weight:700;color:var(--sap-text-primary);margin-bottom:4px;">Job Details</div>
+          <div style="font-size:13px;color:var(--sap-text-secondary);">These fields apply to every certificate in this job.</div>
+        </div>
+        <div class="jw-grid-2">
+          <div class="sap-field">
+            <label class="sap-label">Job Number <span style="font-size:10px;color:var(--sap-text-disabled);">(system generated)</span></label>
+            <input type="text" id="jw_jobNumber" class="sap-input" readonly style="background:#f5f6f7;font-family:monospace;font-weight:700;color:var(--sap-brand);"/>
+          </div>
+          <div class="sap-field">
+            <label class="sap-label">Client <span class="required">*</span></label>
+            <select id="jw_client" class="sap-select" onchange="jwOnClientChange()">
+              <option value="">Select client…</option>
+            </select>
+          </div>
+          <div class="sap-field">
+            <label class="sap-label">Inspector (Issued By) <span class="required">*</span></label>
+            <select id="jw_inspector" class="sap-select">
+              <option value="">Select inspector…</option>
+            </select>
+          </div>
+          <div class="sap-field">
+            <label class="sap-label">Issue Date <span class="required">*</span></label>
+            <input type="date" id="jw_issueDate" class="sap-input" onchange="jwRecalcAllExpiry()"/>
+          </div>
+        </div>
+        <div class="sap-alert sap-alert--info" style="margin-top:20px;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div class="sap-alert__body">
+            <strong>Expiry = Issue date + validity days</strong> — you will set the validity (in days) per certificate in Step 3. The expiry date is calculated automatically.
+          </div>
+        </div>
+      </div>
+
+      <!-- ── STEP 2: Select Assets ── -->
+      <div class="jw-panel" id="jwPanel2">
+        <div style="margin-bottom:16px;">
+          <div style="font-size:15px;font-weight:700;margin-bottom:4px;">Select Assets for This Job</div>
+          <div style="font-size:13px;color:var(--sap-text-secondary);">Auto-load by functional location, then add extras manually.</div>
+        </div>
+        <!-- Location auto-loader -->
+        <div class="jw-location-bar">
+          <label>Auto-load from location:</label>
+          <select id="jw_location" class="sap-select" style="flex:1;height:32px;font-size:13px;" onchange="jwLoadAssetsByLocation()">
+            <option value="">Select a functional location…</option>
+          </select>
+          <button class="btn btn-secondary" style="height:32px;" onclick="jwLoadAssetsByLocation()">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+            Load
+          </button>
+        </div>
+        <!-- Asset checklist -->
+        <div id="jwAssetList" class="jw-asset-list">
+          <div style="text-align:center;padding:24px;color:var(--sap-text-secondary);font-size:13px;">
+            Select a functional location above, or search and add assets manually below.
+          </div>
+        </div>
+        <!-- Manual add -->
+        <div class="jw-extra-search">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="jwExtraSearch" class="sap-input" placeholder="Search by asset ID or name to add extra…" style="flex:1;height:30px;font-size:12px;" oninput="jwSearchExtraAsset(this.value)"/>
+          <div id="jwExtraResults" style="display:none;position:absolute;z-index:200;background:#fff;border:1px solid var(--sap-table-border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:340px;max-height:200px;overflow-y:auto;"></div>
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:var(--sap-text-secondary);" id="jwAssetSelCount">0 assets selected</div>
+      </div>
+
+      <!-- ── STEP 3: Cert Matrix ── -->
+      <div class="jw-panel" id="jwPanel3">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+          <div>
+            <div style="font-size:15px;font-weight:700;margin-bottom:4px;">Certificate Matrix</div>
+            <div style="font-size:13px;color:var(--sap-text-secondary);">Check cert types per asset. Enter validity in days — expiry is auto-calculated. Upload one PDF per cert.</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:12px;color:var(--sap-text-secondary);">Quick-set all checked to:</span>
+            <input type="number" id="jwBulkDays" class="sap-input" placeholder="days" style="width:70px;height:30px;font-size:12px;" min="1"/>
+            <button class="btn btn-ghost" style="height:30px;font-size:12px;" onclick="jwApplyBulkDays()">Apply to all</button>
+          </div>
+        </div>
+        <!-- hidden file inputs pool -->
+        <div id="jwFileInputs" style="display:none;"></div>
+        <div class="jw-matrix-wrap">
+          <table class="jw-matrix" id="jwMatrix">
+            <thead>
+              <tr>
+                <th class="col-asset">Asset</th>
+                <th>CAT III</th>
+                <th>CAT IV</th>
+                <th>ORIG. COC</th>
+                <th>LOAD TEST</th>
+                <th>LIFTING</th>
+                <th>NDT</th>
+                <th>TUBULAR</th>
+                <th style="width:36px;"></th>
+              </tr>
+            </thead>
+            <tbody id="jwMatrixBody">
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:var(--sap-text-secondary);" id="jwCertCount">0 certificates configured</div>
+      </div>
+
+      <!-- ── STEP 4: Review ── -->
+      <div class="jw-panel" id="jwPanel4">
+        <div style="font-size:15px;font-weight:700;margin-bottom:16px;">Review Before Submission</div>
+        <div class="jw-summary-grid" id="jwSummaryKpis"></div>
+        <div id="jwApprovalBanner"></div>
+        <table class="jw-review-table" id="jwReviewTable">
+          <thead>
+            <tr>
+              <th>Asset ID</th>
+              <th>Asset Name</th>
+              <th>Cert Type</th>
+              <th>Issue Date</th>
+              <th>Validity</th>
+              <th>Expiry Date</th>
+              <th>File</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="jwReviewBody"></tbody>
+        </table>
+      </div>
+
+      <!-- ── STEP 5: Submit ── -->
+      <div class="jw-panel" id="jwPanel5">
+        <div style="font-size:15px;font-weight:700;margin-bottom:16px;">Submitting Job</div>
+        <div class="jw-progress-wrap">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <span style="font-size:13px;font-weight:600;" id="jwProgressLabel">Ready to submit</span>
+            <span style="font-size:13px;font-weight:700;color:var(--sap-brand);" id="jwProgressPct">0%</span>
+          </div>
+          <div class="jw-progress-bar"><div class="jw-progress-fill" id="jwProgressFill"></div></div>
+          <div class="jw-progress-text" id="jwProgressText">Press "Submit Job" to begin.</div>
+        </div>
+        <div id="jwSubmitResult" style="margin-top:20px;display:none;"></div>
+      </div>
+
+    </div><!-- /jw-body -->
+
+    <!-- Footer -->
+    <div class="jw-footer">
+      <div class="jw-footer__left" id="jwFooterHint"></div>
+      <div class="jw-footer__right">
+        <button class="btn btn-ghost" id="jwBtnBack" onclick="jwBack()" style="display:none;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><polyline points="15 18 9 12 15 6"/></svg>
+          Back
+        </button>
+        <button class="btn btn-ghost" onclick="jwClose()">Cancel</button>
+        <button class="btn btn-primary" id="jwBtnNext" onclick="jwNext()">
+          Next
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /jw-modal -->
+</div><!-- /jw-overlay -->
 
 <div class="sap-toast-container" id="toastContainer"></div>
 
@@ -2459,9 +2804,13 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Header actions */
   const ha = document.getElementById('headerActions');
   if (role === 'admin' || role === 'manager' || role === 'technician') {
-    ha.innerHTML = `<button class="btn btn-primary" onclick="openUploadModal()">
+    ha.innerHTML = `<button class="btn btn-secondary" onclick="openUploadModal()">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
-      <span>Upload Certificate</span>
+      <span>Upload Single</span>
+    </button>
+    <button class="btn btn-primary" onclick="openJobWizard()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+      <span>Bulk Job Wizard</span>
     </button>`;
     if (role === 'admin' || role === 'manager') {
       ha.innerHTML += `<a href="notifications.html" class="btn btn-secondary">
@@ -2480,6 +2829,8 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ESC key closes any open modal/drawer */
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
+    const jwOverlay = document.getElementById('jwOverlay');
+    if (jwOverlay?.classList.contains('open')) { jwClose(); return; }
     const deleteModal = document.getElementById('certDeleteConfirmModal');
     if (deleteModal?.classList.contains('open')) { closeCertDeleteModal(); return; }
     const rejectMod = document.getElementById('rejectModal');
@@ -2490,6 +2841,663 @@ document.addEventListener('DOMContentLoaded', () => {
     if (drawer?.classList.contains('open')) { closeDrawer(); return; }
   });
 });
+/* ═══════════════════════════════════════════════════════
+   JOB WIZARD
+═══════════════════════════════════════════════════════ */
+const JW_CERT_TYPES = ['CAT III','CAT IV','ORIGINAL COC','LOAD TEST','LIFTING','NDT','TUBULAR'];
+
+/* Wizard state */
+let jwState = {
+  step: 1,
+  jobNumber: '',
+  client: '',
+  inspector: '',
+  issueDate: '',
+  assets: [],      /* [{asset_number, name, asset_type, functional_location}] */
+  matrix: {},      /* { asset_number: { 'CAT III': {days:'', file:null, fileName:''}, ... } } */
+  allAssets: [],   /* full asset list for search */
+};
+
+/* ── Open / Close ── */
+async function openJobWizard() {
+  jwResetState();
+  await jwLoadDropdowns();
+  jwGenerateJobNumber();
+  jwGoStep(1);
+  document.getElementById('jwOverlay').classList.add('open');
+}
+
+function jwClose() {
+  document.getElementById('jwOverlay').classList.remove('open');
+}
+
+function jwResetState() {
+  jwState = { step:1, jobNumber:'', client:'', inspector:'', issueDate:'', assets:[], matrix:{}, allAssets:[] };
+  document.getElementById('jw_issueDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('jw_client').value = '';
+  document.getElementById('jw_inspector').value = '';
+  document.getElementById('jw_location').value = '';
+  document.getElementById('jwAssetList').innerHTML = '<div style="text-align:center;padding:24px;color:var(--sap-text-secondary);font-size:13px;">Select a functional location above, or search and add assets manually below.</div>';
+  document.getElementById('jwAssetSelCount').textContent = '0 assets selected';
+  document.getElementById('jwMatrixBody').innerHTML = '';
+  document.getElementById('jwCertCount').textContent = '0 certificates configured';
+  document.getElementById('jwProgressFill').style.width = '0%';
+  document.getElementById('jwProgressPct').textContent = '0%';
+  document.getElementById('jwProgressLabel').textContent = 'Ready to submit';
+  document.getElementById('jwProgressText').textContent = 'Press "Submit Job" to begin.';
+  document.getElementById('jwSubmitResult').style.display = 'none';
+  document.getElementById('jwFileInputs').innerHTML = '';
+  document.getElementById('jwExtraSearch').value = '';
+  document.getElementById('jwExtraResults').style.display = 'none';
+}
+
+/* ── Generate job number: JOB-YYYY-NNN ── */
+async function jwGenerateJobNumber() {
+  const year = new Date().getFullYear();
+  try {
+    const res  = await apiFetch(`/api/certificates?limit=1&order=created_at.desc`);
+    const data = await res.json();
+    const certs = (data.data?.certificates || data.data || []);
+    /* Count certs with notes starting JOB-{year} to get next seq */
+    const res2 = await apiFetch(`/api/certificates?limit=200`);
+    const d2   = await res2.json();
+    const all  = (d2.data?.certificates || d2.data || []);
+    const thisYearJobs = [...new Set(all.map(c => c.notes).filter(n => n && n.startsWith(`JOB-${year}-`)))];
+    const maxSeq = thisYearJobs.reduce((m, j) => {
+      const n = parseInt(j.split('-')[2] || '0', 10);
+      return n > m ? n : m;
+    }, 0);
+    const seq = String(maxSeq + 1).padStart(3, '0');
+    jwState.jobNumber = `JOB-${year}-${seq}`;
+  } catch(e) {
+    jwState.jobNumber = `JOB-${year}-001`;
+  }
+  document.getElementById('jw_jobNumber').value = jwState.jobNumber;
+  document.getElementById('jwJobNumber').textContent = jwState.jobNumber;
+}
+
+/* ── Load dropdowns ── */
+async function jwLoadDropdowns() {
+  /* Clients */
+  try {
+    const r = await apiFetch('/api/clients?status=active&limit=200');
+    const d = await r.json();
+    const list = d.data?.clients || d.data || [];
+    const sel = document.getElementById('jw_client');
+    sel.innerHTML = '<option value="">Select client…</option>' +
+      list.map(c => `<option value="${c.client_id}">${c.name} (${c.client_id})</option>`).join('');
+    /* Pre-select if scoped user */
+    if (session?.customerId) { sel.value = session.customerId; sel.disabled = true; }
+  } catch(e) {}
+
+  /* Inspectors */
+  try {
+    const r = await apiFetch('/api/inspectors?status=active&limit=200');
+    const d = await r.json();
+    const list = d.data?.inspectors || d.data || [];
+    const sel = document.getElementById('jw_inspector');
+    sel.innerHTML = '<option value="">Select inspector…</option>' +
+      list.map(i => `<option value="${i.name}">${i.name}${i.title ? ' — '+i.title : ''}</option>`).join('');
+  } catch(e) {}
+
+  /* Functional locations */
+  try {
+    const r = await apiFetch('/api/functional-locations?status=active&limit=200');
+    const d = await r.json();
+    const list = d.data?.functional_locations || d.data || [];
+    const sel = document.getElementById('jw_location');
+    sel.innerHTML = '<option value="">Select a functional location…</option>' +
+      list.map(l => `<option value="${l.fl_id||l.id}">${l.name} (${l.type})</option>`).join('');
+  } catch(e) {}
+
+  /* All assets cache for manual search */
+  try {
+    const r = await apiFetch('/api/assets?limit=500');
+    const d = await r.json();
+    jwState.allAssets = d.data?.assets || d.data || [];
+  } catch(e) { jwState.allAssets = []; }
+}
+
+/* ── Step navigation ── */
+function jwGoStep(n) {
+  /* Validate before advancing */
+  if (n > jwState.step) {
+    for (let s = jwState.step; s < n; s++) {
+      const err = jwValidateStep(s);
+      if (err) { showToast('error', 'Required', err); return; }
+    }
+  }
+  jwState.step = n;
+
+  /* Update panels */
+  for (let i = 1; i <= 5; i++) {
+    document.getElementById(`jwPanel${i}`).classList.toggle('active', i === n);
+    const tab = document.getElementById(`jwStep${i}Tab`);
+    tab.classList.remove('active','done');
+    if (i === n)      tab.classList.add('active');
+    else if (i < n)   tab.classList.add('done');
+  }
+
+  /* On entering step 3 rebuild matrix */
+  if (n === 3) jwBuildMatrix();
+  /* On entering step 4 build review */
+  if (n === 4) jwBuildReview();
+
+  /* Footer */
+  const btnBack = document.getElementById('jwBtnBack');
+  const btnNext = document.getElementById('jwBtnNext');
+  btnBack.style.display = n > 1 ? 'inline-flex' : 'none';
+
+  const hints = ['', 'Fill job details', 'Select assets for this job', 'Configure certificates per asset', 'Review all certificates', ''];
+  document.getElementById('jwFooterHint').textContent = hints[n] || '';
+
+  if (n === 5) {
+    btnNext.textContent = 'Submit Job';
+    btnNext.innerHTML   = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Submit Job';
+    btnNext.onclick     = jwSubmitJob;
+  } else if (n === 4) {
+    btnNext.innerHTML   = 'Next <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg>';
+    btnNext.onclick     = jwNext;
+  } else {
+    btnNext.innerHTML   = 'Next <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg>';
+    btnNext.onclick     = jwNext;
+  }
+}
+
+function jwNext() {
+  const err = jwValidateStep(jwState.step);
+  if (err) { showToast('error', 'Required', err); return; }
+  jwGoStep(jwState.step + 1);
+}
+
+function jwBack() {
+  jwGoStep(jwState.step - 1);
+}
+
+function jwValidateStep(s) {
+  if (s === 1) {
+    if (!document.getElementById('jw_client').value)    return 'Please select a client.';
+    if (!document.getElementById('jw_inspector').value) return 'Please select an inspector.';
+    if (!document.getElementById('jw_issueDate').value) return 'Please enter an issue date.';
+  }
+  if (s === 2) {
+    jwSyncAssetSelection();
+    if (!jwState.assets.length) return 'Please select at least one asset.';
+  }
+  if (s === 3) {
+    const certs = jwCollectMatrix();
+    if (!certs.length) return 'Please check at least one certificate type for at least one asset.';
+    const missing = certs.filter(c => !c.days || parseInt(c.days) < 1);
+    if (missing.length) return `Please enter a validity (days) for all checked certificates. ${missing.length} still missing.`;
+  }
+  return null;
+}
+
+/* ── Client change: filter location dropdown ── */
+async function jwOnClientChange() {
+  jwState.client = document.getElementById('jw_client').value;
+}
+
+/* ── Step 2: Load assets by location ── */
+async function jwLoadAssetsByLocation() {
+  const locId = document.getElementById('jw_location').value;
+  if (!locId) return;
+
+  /* Get location name from the select text */
+  const locSel  = document.getElementById('jw_location');
+  const locName = locSel.options[locSel.selectedIndex]?.text?.replace(/\s*\(.*\)$/, '').trim() || locId;
+
+  /* Filter from cached asset list */
+  const assets = jwState.allAssets.filter(a =>
+    (a.functional_location && (a.functional_location === locName || a.functional_location === locId)) ||
+    (a.location && a.location === locName)
+  );
+
+  /* Also filter by client if selected */
+  const clientId = document.getElementById('jw_client').value;
+  const filtered = clientId ? assets.filter(a => a.client_id === clientId || a.client === clientId) : assets;
+
+  /* Render checklist — pre-check all */
+  const list = document.getElementById('jwAssetList');
+  if (!filtered.length) {
+    list.innerHTML = `<div style="text-align:center;padding:20px;color:var(--sap-text-secondary);font-size:13px;">No assets found at ${h(locName)}${clientId?' for the selected client':''}.</div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(a => {
+    const id   = a.asset_number || a.id;
+    const name = a.name || '';
+    const type = a.asset_type || a.type || '';
+    return `<div class="jw-asset-item" id="jwAI_${id}">
+      <input type="checkbox" checked data-id="${id}" data-name="${h(name)}" data-type="${h(type)}" data-loc="${h(locName)}" onchange="jwUpdateAssetCount()"/>
+      <span class="jw-asset-item__id">${id}</span>
+      <span class="jw-asset-item__name">${h(name)}</span>
+      <span class="jw-asset-item__type">${h(type)}</span>
+    </div>`;
+  }).join('');
+
+  jwUpdateAssetCount();
+}
+
+function jwUpdateAssetCount() {
+  const checked = document.querySelectorAll('#jwAssetList input[type="checkbox"]:checked').length;
+  document.getElementById('jwAssetSelCount').textContent = `${checked} asset${checked !== 1 ? 's' : ''} selected`;
+}
+
+function jwSyncAssetSelection() {
+  const checkboxes = document.querySelectorAll('#jwAssetList input[type="checkbox"]:checked');
+  jwState.assets = Array.from(checkboxes).map(cb => ({
+    asset_number: cb.dataset.id,
+    name:         cb.dataset.name,
+    asset_type:   cb.dataset.type,
+    location:     cb.dataset.loc || '',
+  }));
+}
+
+/* ── Extra asset search ── */
+function jwSearchExtraAsset(q) {
+  const box = document.getElementById('jwExtraResults');
+  if (!q || q.length < 2) { box.style.display = 'none'; return; }
+  const results = jwState.allAssets.filter(a =>
+    (a.asset_number||'').toLowerCase().includes(q.toLowerCase()) ||
+    (a.name||'').toLowerCase().includes(q.toLowerCase())
+  ).slice(0, 8);
+  if (!results.length) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  box.innerHTML = results.map(a => {
+    const id = a.asset_number || a.id;
+    return `<div style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--sap-table-border);"
+      onmousedown="jwAddExtraAsset('${id}','${h(a.name||'')}','${h(a.asset_type||'')}','${h(a.functional_location||a.location||'')}')"
+      onmouseover="this.style.background='var(--sap-brand-light)'" onmouseout="this.style.background=''">
+      <strong style="font-family:monospace;color:var(--sap-brand);">${id}</strong> — ${h(a.name||'')}
+      <span style="color:var(--sap-text-secondary);font-size:11px;"> · ${h(a.asset_type||'')}</span>
+    </div>`;
+  }).join('');
+}
+
+function jwAddExtraAsset(id, name, type, loc) {
+  document.getElementById('jwExtraResults').style.display = 'none';
+  document.getElementById('jwExtraSearch').value = '';
+  /* Check not already listed */
+  if (document.getElementById(`jwAI_${id}`)) {
+    showToast('info', 'Already added', `${id} is already in the list.`);
+    return;
+  }
+  const list = document.getElementById('jwAssetList');
+  /* Remove placeholder */
+  const placeholder = list.querySelector('div[style*="text-align:center"]');
+  if (placeholder) placeholder.remove();
+
+  const item = document.createElement('div');
+  item.className = 'jw-asset-item';
+  item.id = `jwAI_${id}`;
+  item.innerHTML = `
+    <input type="checkbox" checked data-id="${id}" data-name="${h(name)}" data-type="${h(type)}" data-loc="${h(loc)}" onchange="jwUpdateAssetCount()"/>
+    <span class="jw-asset-item__id">${id}</span>
+    <span class="jw-asset-item__name">${h(name)}</span>
+    <span class="jw-asset-item__type">${h(type)}</span>
+    <span style="font-size:10px;background:#fff3e0;color:#e76500;border:1px solid #ffcc80;border-radius:3px;padding:1px 5px;margin-left:auto;">manual</span>`;
+  list.appendChild(item);
+  jwUpdateAssetCount();
+}
+
+/* ── Step 3: Build matrix ── */
+function jwBuildMatrix() {
+  jwSyncAssetSelection();
+  const issueDate = document.getElementById('jw_issueDate').value;
+  const tbody = document.getElementById('jwMatrixBody');
+
+  /* Preserve existing matrix data */
+  const existingMatrix = jwState.matrix;
+
+  tbody.innerHTML = '';
+  jwState.matrix = {};
+
+  jwState.assets.forEach(asset => {
+    const id = asset.asset_number;
+    /* Init cert map, preserving existing data */
+    jwState.matrix[id] = {};
+    JW_CERT_TYPES.forEach(ct => {
+      const ex = existingMatrix[id]?.[ct];
+      jwState.matrix[id][ct] = {
+        checked:  ex?.checked  || false,
+        days:     ex?.days     || '',
+        file:     ex?.file     || null,
+        fileName: ex?.fileName || '',
+      };
+    });
+
+    const tr = document.createElement('tr');
+    tr.id = `jwRow_${id}`;
+
+    /* Asset cell */
+    const assetTd = document.createElement('td');
+    assetTd.innerHTML = `<div class="jw-asset-cell">
+      <div class="jw-asset-cell__id">${id}</div>
+      <div class="jw-asset-cell__name">${h(asset.name)}</div>
+      <div class="jw-asset-cell__loc">${h(asset.location || '')}</div>
+    </div>`;
+    tr.appendChild(assetTd);
+
+    /* Cert type cells */
+    JW_CERT_TYPES.forEach(ct => {
+      const ctKey = ct.replace(/[^a-z0-9]/gi, '_');
+      const td = document.createElement('td');
+      td.className = 'jw-cert-cell';
+      td.id = `jwCell_${id}_${ctKey}`;
+
+      const state = jwState.matrix[id][ct];
+      const expiry = state.days && issueDate ? jwCalcExpiry(issueDate, state.days) : '';
+
+      td.innerHTML = `
+        <div class="jw-cert-check">
+          <input type="checkbox" ${state.checked?'checked':''} onchange="jwToggleCert('${id}','${ct}',this.checked)"/>
+        </div>
+        <div class="jw-cert-fields${state.checked?' visible':''}" id="jwFields_${id}_${ctKey}">
+          <input type="number" class="jw-days-input" id="jwDays_${id}_${ctKey}"
+            placeholder="days" min="1" value="${state.days}"
+            oninput="jwOnDaysInput('${id}','${ct}',this.value)"/>
+          <div class="jw-expiry-display${expiry?' set':''}" id="jwExpiry_${id}_${ctKey}">${expiry || '—'}</div>
+          <button class="jw-file-btn${state.fileName?' has-file':''}" id="jwFileBtn_${id}_${ctKey}"
+            onclick="jwTriggerFile('${id}','${ct}')">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            ${state.fileName ? h(state.fileName.substring(0,10)+'…') : 'Upload'}
+          </button>
+        </div>`;
+      tr.appendChild(td);
+    });
+
+    /* Remove row button */
+    const removeTd = document.createElement('td');
+    removeTd.style.cssText = 'padding:8px 6px;border-left:1px solid var(--sap-table-border);vertical-align:middle;';
+    removeTd.innerHTML = `<button class="jw-remove-btn" onclick="jwRemoveAssetRow('${id}')" title="Remove asset from job">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>`;
+    tr.appendChild(removeTd);
+
+    tbody.appendChild(tr);
+  });
+
+  jwUpdateCertCount();
+}
+
+function jwRemoveAssetRow(id) {
+  jwState.assets = jwState.assets.filter(a => a.asset_number !== id);
+  delete jwState.matrix[id];
+  const row = document.getElementById(`jwRow_${id}`);
+  if (row) row.remove();
+  /* Also uncheck in step 2 */
+  const cb = document.querySelector(`#jwAI_${id} input[type="checkbox"]`);
+  if (cb) { cb.checked = false; jwUpdateAssetCount(); }
+  jwUpdateCertCount();
+}
+
+function jwToggleCert(assetId, certType, checked) {
+  const ctKey = certType.replace(/[^a-z0-9]/gi, '_');
+  jwState.matrix[assetId][certType].checked = checked;
+  const fields = document.getElementById(`jwFields_${assetId}_${ctKey}`);
+  if (fields) fields.classList.toggle('visible', checked);
+  jwUpdateCertCount();
+}
+
+function jwOnDaysInput(assetId, certType, val) {
+  const ctKey = certType.replace(/[^a-z0-9]/gi, '_');
+  jwState.matrix[assetId][certType].days = val;
+  const issueDate = document.getElementById('jw_issueDate').value;
+  const expEl     = document.getElementById(`jwExpiry_${assetId}_${ctKey}`);
+  if (expEl) {
+    if (val && issueDate) {
+      const exp = jwCalcExpiry(issueDate, val);
+      expEl.textContent = exp;
+      expEl.className   = 'jw-expiry-display set';
+    } else {
+      expEl.textContent = '—';
+      expEl.className   = 'jw-expiry-display';
+    }
+  }
+}
+
+function jwRecalcAllExpiry() {
+  const issueDate = document.getElementById('jw_issueDate').value;
+  Object.entries(jwState.matrix).forEach(([assetId, certs]) => {
+    Object.entries(certs).forEach(([ct, state]) => {
+      if (!state.checked || !state.days) return;
+      const ctKey = ct.replace(/[^a-z0-9]/gi, '_');
+      const expEl = document.getElementById(`jwExpiry_${assetId}_${ctKey}`);
+      if (expEl && issueDate) {
+        expEl.textContent = jwCalcExpiry(issueDate, state.days);
+        expEl.className   = 'jw-expiry-display set';
+      }
+    });
+  });
+}
+
+function jwCalcExpiry(issueDate, days) {
+  if (!issueDate || !days) return '';
+  try {
+    const d = new Date(issueDate);
+    d.setDate(d.getDate() + parseInt(days, 10));
+    return d.toISOString().split('T')[0];
+  } catch(e) { return ''; }
+}
+
+function jwApplyBulkDays() {
+  const days = document.getElementById('jwBulkDays').value;
+  if (!days || parseInt(days) < 1) { showToast('error','Invalid','Enter a number of days first.'); return; }
+  const issueDate = document.getElementById('jw_issueDate').value;
+  Object.entries(jwState.matrix).forEach(([assetId, certs]) => {
+    Object.entries(certs).forEach(([ct, state]) => {
+      if (!state.checked) return;
+      state.days = days;
+      const ctKey = ct.replace(/[^a-z0-9]/gi, '_');
+      const daysEl = document.getElementById(`jwDays_${assetId}_${ctKey}`);
+      if (daysEl) daysEl.value = days;
+      const expEl = document.getElementById(`jwExpiry_${assetId}_${ctKey}`);
+      if (expEl && issueDate) {
+        expEl.textContent = jwCalcExpiry(issueDate, days);
+        expEl.className   = 'jw-expiry-display set';
+      }
+    });
+  });
+  showToast('success','Applied',`${days} days applied to all checked certificates.`);
+}
+
+function jwUpdateCertCount() {
+  let n = 0;
+  Object.values(jwState.matrix).forEach(certs => {
+    Object.values(certs).forEach(s => { if (s.checked) n++; });
+  });
+  document.getElementById('jwCertCount').textContent = `${n} certificate${n!==1?'s':''} configured`;
+}
+
+/* ── File upload per cert ── */
+function jwTriggerFile(assetId, certType) {
+  const ctKey  = certType.replace(/[^a-z0-9]/gi, '_');
+  const inputId = `jwFile_${assetId}_${ctKey}`;
+  let input = document.getElementById(inputId);
+  if (!input) {
+    input = document.createElement('input');
+    input.type    = 'file';
+    input.id      = inputId;
+    input.accept  = '.pdf,.jpg,.jpeg,.png,.webp';
+    input.style   = 'display:none';
+    input.onchange = () => jwHandleFile(assetId, certType, input);
+    document.getElementById('jwFileInputs').appendChild(input);
+  }
+  input.click();
+}
+
+function jwHandleFile(assetId, certType, input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  const ctKey = certType.replace(/[^a-z0-9]/gi, '_');
+  jwState.matrix[assetId][certType].file     = file;
+  jwState.matrix[assetId][certType].fileName = file.name;
+  const btn = document.getElementById(`jwFileBtn_${assetId}_${ctKey}`);
+  if (btn) {
+    btn.classList.add('has-file');
+    btn.innerHTML = `<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:10px;height:10px;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> ${h(file.name.length>12?file.name.substring(0,12)+'…':file.name)}`;
+  }
+}
+
+/* ── Collect matrix into cert list ── */
+function jwCollectMatrix() {
+  const issueDate = document.getElementById('jw_issueDate').value;
+  const certs = [];
+  Object.entries(jwState.matrix).forEach(([assetId, certMap]) => {
+    const asset = jwState.assets.find(a => a.asset_number === assetId);
+    Object.entries(certMap).forEach(([certType, state]) => {
+      if (!state.checked) return;
+      certs.push({
+        assetId, assetName: asset?.name || '',
+        certType,
+        days:       state.days,
+        expiry:     jwCalcExpiry(issueDate, state.days),
+        file:       state.file     || null,
+        fileName:   state.fileName || '',
+        issueDate,
+      });
+    });
+  });
+  return certs;
+}
+
+/* ── Step 4: Build review ── */
+function jwBuildReview() {
+  const certs    = jwCollectMatrix();
+  const assets   = jwState.assets.length;
+  const files    = certs.filter(c => c.file).length;
+  const noFiles  = certs.length - files;
+  const isAdmin  = session?.role === 'admin';
+
+  /* KPIs */
+  document.getElementById('jwSummaryKpis').innerHTML = `
+    <div class="jw-summary-kpi"><div class="jw-summary-kpi__val">${assets}</div><div class="jw-summary-kpi__label">Assets</div></div>
+    <div class="jw-summary-kpi"><div class="jw-summary-kpi__val" style="color:var(--sap-success);">${certs.length}</div><div class="jw-summary-kpi__label">Certificates</div></div>
+    <div class="jw-summary-kpi"><div class="jw-summary-kpi__val" style="color:var(--sap-brand);">${files}</div><div class="jw-summary-kpi__label">Files attached</div></div>
+    <div class="jw-summary-kpi"><div class="jw-summary-kpi__val" style="color:${noFiles>0?'var(--sap-warning)':'var(--sap-success)'};">${noFiles}</div><div class="jw-summary-kpi__label">Files missing</div></div>`;
+
+  /* Approval banner */
+  document.getElementById('jwApprovalBanner').innerHTML = isAdmin
+    ? `<div class="jw-approval-banner jw-approval-banner--admin"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span>You are submitting as <strong>Admin</strong> — all ${certs.length} certificates will be <strong>auto-approved</strong>.</span></div>`
+    : `<div class="jw-approval-banner jw-approval-banner--tech"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>You are submitting as <strong>Technician</strong> — all ${certs.length} certificates will require <strong>manager approval</strong>.</span></div>`;
+
+  /* Review table */
+  const inspector = document.getElementById('jw_inspector').value;
+  document.getElementById('jwReviewBody').innerHTML = certs.map(c => {
+    const expClass = !c.expiry ? '' : (() => {
+      const days = Math.ceil((new Date(c.expiry) - new Date()) / 86400000);
+      return days < 0 ? 'color:var(--sap-error);font-weight:700;' : days <= 30 ? 'color:var(--sap-warning);font-weight:700;' : '';
+    })();
+    return `<tr>
+      <td><span style="font-family:monospace;font-size:11px;font-weight:700;color:var(--sap-brand);">${c.assetId}</span></td>
+      <td style="font-size:12px;font-weight:600;">${h(c.assetName)}</td>
+      <td><span style="font-size:11px;font-weight:700;background:var(--sap-brand-light);color:var(--sap-brand);border:1px solid var(--sap-info-border);border-radius:3px;padding:2px 6px;">${c.certType}</span></td>
+      <td style="font-size:12px;">${c.issueDate}</td>
+      <td style="font-size:12px;text-align:center;">${c.days}d</td>
+      <td style="font-size:12px;${expClass}">${c.expiry || '—'}</td>
+      <td style="font-size:11px;">${c.file ? `<span style="color:var(--sap-success);">✓ ${h(c.fileName.length>18?c.fileName.substring(0,18)+'…':c.fileName)}</span>` : '<span style="color:var(--sap-text-disabled);">No file</span>'}</td>
+      <td><span class="sap-badge ${isAdmin?'sap-badge--success':'sap-badge--pending'}">${isAdmin?'Approved':'Pending'}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── Step 5: Submit ── */
+async function jwSubmitJob() {
+  const certs     = jwCollectMatrix();
+  const jobNumber = jwState.jobNumber;
+  const inspector = document.getElementById('jw_inspector').value;
+  const issueDate = document.getElementById('jw_issueDate').value;
+  const clientId  = document.getElementById('jw_client').value;
+
+  jwGoStep(5);
+
+  const fill   = document.getElementById('jwProgressFill');
+  const pct    = document.getElementById('jwProgressPct');
+  const label  = document.getElementById('jwProgressLabel');
+  const text   = document.getElementById('jwProgressText');
+  const token  = (() => { try { return JSON.parse(sessionStorage.getItem('sap_session')||'{}').token||''; } catch(e) { return ''; } })();
+
+  let done = 0, failed = 0;
+  const total = certs.length;
+
+  const setProgress = (d, f) => {
+    const p = total ? Math.round(((d+f)/total)*100) : 100;
+    fill.style.width  = p + '%';
+    pct.textContent   = p + '%';
+    label.textContent = `${d+f} of ${total} processed`;
+    text.textContent  = `${d} created · ${f} failed`;
+  };
+
+  for (const cert of certs) {
+    try {
+      /* 1. Upload file if present */
+      let fileName = null, fileUrl = null;
+      if (cert.file) {
+        const fd = new FormData();
+        fd.append('file', cert.file);
+        const uploadRes = await fetch('/api/certificates/upload', {
+          method: 'POST',
+          headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+          body: fd,
+        });
+        const ud = await uploadRes.json();
+        if (ud.success) {
+          fileName = ud.data?.file_name || ud.data?.file_url?.split('/').pop() || cert.fileName;
+          fileUrl  = ud.data?.file_url  || null;
+        }
+      }
+
+      /* 2. Create cert record */
+      const payload = {
+        cert_number:  `${jobNumber}-${cert.certType.replace(/\s+/g,'_')}-${cert.assetId}`,
+        name:         `${cert.certType} — ${cert.assetName} (${jobNumber})`,
+        cert_type:    cert.certType,
+        asset_id:     cert.assetId,
+        client_id:    clientId || undefined,
+        issued_by:    inspector,
+        issue_date:   issueDate,
+        expiry_date:  cert.expiry,
+        notes:        jobNumber,
+        file_name:    fileName || undefined,
+        file_url:     fileUrl  || undefined,
+      };
+
+      const res  = await apiFetch('/api/certificates', { method: 'POST', body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (data.success) { done++; } else { failed++; console.warn('Cert create failed:', data); }
+    } catch(e) {
+      failed++;
+      console.error('Error submitting cert:', cert, e);
+    }
+    setProgress(done, failed);
+  }
+
+  /* Final result */
+  const resultEl = document.getElementById('jwSubmitResult');
+  resultEl.style.display = 'block';
+  if (failed === 0) {
+    resultEl.innerHTML = `
+      <div style="background:var(--sap-success-bg);border:1px solid var(--sap-success-border);border-radius:8px;padding:20px;text-align:center;">
+        <div style="font-size:32px;margin-bottom:8px;">✓</div>
+        <div style="font-size:16px;font-weight:700;color:var(--sap-success);margin-bottom:4px;">Job submitted successfully!</div>
+        <div style="font-size:13px;color:var(--sap-text-secondary);margin-bottom:16px;">${done} certificate${done!==1?'s':''} created under <strong>${jobNumber}</strong></div>
+        <button class="btn btn-primary" onclick="jwClose();loadCerts();">View Certificates</button>
+      </div>`;
+    document.getElementById('jwBtnNext').style.display = 'none';
+  } else {
+    resultEl.innerHTML = `
+      <div style="background:var(--sap-warning-bg);border:1px solid var(--sap-warning-border);border-radius:8px;padding:20px;text-align:center;">
+        <div style="font-size:15px;font-weight:700;color:var(--sap-warning);margin-bottom:4px;">Partially submitted</div>
+        <div style="font-size:13px;color:var(--sap-text-secondary);margin-bottom:16px;">${done} created · ${failed} failed. Check console for details.</div>
+        <button class="btn btn-secondary" onclick="jwClose();loadCerts();">View Certificates</button>
+      </div>`;
+  }
+
+  /* Refresh certs table in background */
+  loadCerts();
+}
+
 </script>
 </body>
 </html>
