@@ -731,7 +731,7 @@
         <!-- File Upload -->
         <div class="sap-field mt-md">
           <label class="sap-label">Certificate File (PDF / Image) <span class="required">*</span></label>
-          <div class="upload-zone" id="uploadZone" onclick="document.getElementById('certFileInput').click()">
+          <div class="upload-zone" id="uploadZone">
             <input type="file" id="certFileInput" accept=".pdf,.jpg,.jpeg,.png,.webp" onchange="handleFileSelect(this)"/>
             <div class="upload-zone__icon">📄</div>
             <div class="upload-zone__title"><span>Click to upload</span> <span>or drag & drop</span></div>
@@ -1522,16 +1522,16 @@ zone.addEventListener('drop', e => {
 
 /* ── Save ── */
 async function saveCert() {
-  const jobNumber     = document.getElementById('f_jobNumber')?.value?.trim() || '';
-  const name          = document.getElementById('f_name')?.value?.trim() || '';
-  const certType      = document.getElementById('f_certType')?.value || '';
+  const jobNumber      = document.getElementById('f_jobNumber')?.value?.trim() || '';
+  const name           = document.getElementById('f_name')?.value?.trim() || '';
+  const certType       = document.getElementById('f_certType')?.value || '';
   const liftingSubtype = certType === 'LIFTING' ? (document.getElementById('f_liftingSubtype')?.value || '') : '';
-  const issuedBy      = document.getElementById('f_issuedBy')?.value?.trim() || '';
-  const issueDate     = document.getElementById('f_issueDate')?.value || '';
-  const expiryDate    = document.getElementById('f_expiryDate')?.value || '';
-  const client        = document.getElementById('f_client')?.value || session?.customerId || '';
-  const assetId       = document.getElementById('f_assetId')?.value || '';
-  const editId        = document.getElementById('editCertId')?.value || '';
+  const issuedBy       = document.getElementById('f_issuedBy')?.value?.trim() || '';
+  const issueDate      = document.getElementById('f_issueDate')?.value || '';
+  const expiryDate     = document.getElementById('f_expiryDate')?.value || '';
+  const client         = document.getElementById('f_client')?.value || session?.customerId || '';
+  const assetId        = document.getElementById('f_assetId')?.value || '';
+  const editId         = document.getElementById('editCertId')?.value || '';
 
   if (!name || !certType || !issuedBy || !issueDate || !expiryDate) {
     showToast('error','Required Fields','Please fill all required fields.'); return;
@@ -1547,36 +1547,9 @@ async function saveCert() {
   }
 
   const saveBtn = document.querySelector('[onclick*="saveCert"]');
-  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Uploading…'; }
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
 
-  let fileName = null, fileKey = null;
-  if (selectedFile) {
-    try {
-      const fd    = new FormData();
-      fd.append('file', selectedFile);
-      const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
-      const uploadRes = await fetch('/api/certificates/upload', {
-        method: 'POST',
-        headers: token ? { 'Authorization': 'Bearer ' + token } : {},
-        body: fd,
-      });
-      const ud  = await uploadRes.json();
-      const udd = ud.data || ud;
-      if (!ud.success) {
-        showToast('error','Upload Failed', udd.error || 'Could not upload file.');
-        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
-        return;
-      }
-      fileName = udd.file_name;
-      fileKey  = udd.file_url;
-    } catch(e) {
-      showToast('error','Upload Error','File upload failed.');
-      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
-      return;
-    }
-  }
-
-  if (saveBtn) saveBtn.textContent = 'Saving…';
+  /* ── Step 1: Save/update the cert record (without file fields) ── */
   const payload = {
     name,
     cert_type:   certType + (liftingSubtype ? ' — ' + liftingSubtype : ''),
@@ -1586,9 +1559,9 @@ async function saveCert() {
     issue_date:  issueDate,
     expiry_date: expiryDate,
     notes:       jobNumber || null,
-    ...(fileName ? { file_name: fileName, file_url: fileKey } : {}),
   };
 
+  let savedCert = null;
   try {
     const editCert = editId ? CERTS.find(x => x.certId === editId) : null;
     const url      = editId ? '/api/certificates/' + (editCert?.id || editId) : '/api/certificates';
@@ -1600,17 +1573,65 @@ async function saveCert() {
       if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
       return;
     }
-    selectedFile = null;
-    showToast('success', editId ? 'Updated' : 'Uploaded',
-      '"' + name + '" ' + (editId ? 'updated.' : 'uploaded & sent for approval.'));
-    document.getElementById('certModal').classList.remove('open');
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
-    await loadCerts();
+    savedCert = data.data || data;
   } catch(e) {
     showToast('error','Network Error','Could not save certificate.');
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
+    return;
   }
+
+  /* ── Step 2: Upload file with structured R2 key (only if a new file was selected) ── */
+  if (selectedFile) {
+    if (saveBtn) saveBtn.textContent = 'Uploading file…';
+    try {
+      // Build structured metadata for the R2 key
+      // Key pattern: clients/{CLIENT_ID}/jobs/{JOB_NUMBER}/{JOB_NUMBER}_{CERT_NUMBER}_{originalname}.{ext}
+      const certNumber  = savedCert.cert_number || savedCert.id;
+      const jobNum      = jobNumber || savedCert.notes || 'NO-JOB';
+      const clientId    = client || savedCert.client_id || session?.customerId || 'GENERAL';
+
+      const fd = new FormData();
+      fd.append('file',        selectedFile);
+      fd.append('cert_number', certNumber);
+      fd.append('job_number',  jobNum);
+      fd.append('client_id',   clientId);
+
+      const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
+      const uploadRes = await fetch('/api/certificates/upload', {
+        method: 'POST',
+        headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+        body: fd,
+      });
+      const ud  = await uploadRes.json();
+      const udd = ud.data || ud;
+
+      if (!ud.success) {
+        // Cert record is already saved — warn but don't block
+        showToast('warning','File Upload Failed',
+          'Certificate saved but file could not be uploaded: ' + (udd.error || 'Unknown error') +
+          '. Edit the certificate to try again.');
+      } else {
+        // Step 3: PATCH the cert record with the structured file_url + file_name
+        await apiFetch('/api/certificates/' + savedCert.id, {
+          method: 'PATCH',
+          body: JSON.stringify({ file_name: udd.file_name, file_url: udd.file_url }),
+        });
+      }
+    } catch(e) {
+      showToast('warning','File Upload Error',
+        'Certificate saved but file upload failed. Edit the certificate to re-attach the file.');
+    }
+  }
+
+  /* ── Done ── */
+  selectedFile = null;
+  showToast('success', editId ? 'Updated' : 'Saved',
+    '"' + name + '" ' + (editId ? 'updated.' : 'saved & sent for approval.'));
+  document.getElementById('certModal').classList.remove('open');
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Certificate'; }
+  await loadCerts();
 }
+
 
 /* ═══════════════════════════════════════════════════════
    APPROVAL

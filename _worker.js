@@ -635,9 +635,26 @@ async function handleCertUpload(request, env, path) {
       return badReq('File too large. Maximum size is 10MB', 'FILE_TOO_LARGE', env);
     }
 
-    // Generate unique key
-    const ext      = file.name.split('.').pop().toLowerCase();
-    const key      = `certs/${session.sub}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    // Structured R2 key: clients/{clientId}/jobs/{jobNumber}/{certNumber}.{ext}
+    // All three are required — passed from frontend after the cert record has been saved.
+    const clientId  = (formData.get('client_id')   || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    const jobNumber = (formData.get('job_number')   || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    const certNumber= (formData.get('cert_number')  || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    const ext       = (file.name.split('.').pop() || 'pdf').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    if (!clientId || !jobNumber || !certNumber) {
+      return badReq('client_id, job_number and cert_number are required for structured upload', 'MISSING_FIELDS', env);
+    }
+
+    // Key: clients/{clientId}/jobs/{jobNumber}/{jobNumber}_{certNumber}_{safeOriginalName}.{ext}
+    // e.g. clients/C001/jobs/JOB-2024-010/JOB-2024-010_CERT-0012_inspection-report.pdf
+    const safeOriginal = file.name
+      .replace(/\.[^.]+$/, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60);
+    const key       = `clients/${clientId}/jobs/${jobNumber}/${jobNumber}_${certNumber}_${safeOriginal}.${ext}`;
     const fileBuffer = await file.arrayBuffer();
 
     try {
@@ -647,6 +664,9 @@ async function handleCertUpload(request, env, path) {
           originalName: file.name,
           uploadedBy:   session.sub,
           username:     session.username,
+          certNumber,
+          jobNumber,
+          clientId,
         },
       });
     } catch(e) {
@@ -654,7 +674,7 @@ async function handleCertUpload(request, env, path) {
       return json({ success: false, error: 'File upload failed: ' + e.message, code: 'UPLOAD_FAILED' }, 500, env);
     }
 
-    return ok({ key, file_name: file.name, file_url: key }, env);
+    return ok({ key, file_name: `${jobNumber}_${certNumber}_${safeOriginal}.${ext}`, file_url: key }, env);
   }
 
   // ── GET /api/certificates/file/:certId — get signed URL ──
@@ -785,7 +805,7 @@ async function handleCertificates(request, env, path) {
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
     const { valid, errors } = validate(body, {
       name: { required: true, type: 'string', minLength: 2, maxLength: 200 },
-      cert_type: { required: true, type: 'string', enum: CERT_TYPES },
+      cert_type: { required: true, type: 'string', minLength: 2, maxLength: 100 },
       asset_id: { required: true, type: 'string' },
       issued_by: { required: true, type: 'string', minLength: 2, maxLength: 200 },
       issue_date: { required: true, type: 'string', pattern: /^\d{4}-\d{2}-\d{2}$/ },
