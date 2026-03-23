@@ -378,10 +378,6 @@
       <!-- Client filter (admin/manager) -->
       <select class="sap-select" id="clientFilter" style="height:28px;font-size:12px;max-width:150px;display:none;" onchange="applyFilters()">
         <option value="all">All Clients</option>
-        <option value="C001">Acme Corp (C001)</option>
-        <option value="C002">Gulf Holdings (C002)</option>
-        <option value="C003">Delta Industries (C003)</option>
-        <option value="C004">Nile Ventures (C004)</option>
       </select>
 
       <!-- Type filter -->
@@ -672,10 +668,6 @@
             <label class="sap-label">Assigned Client <span class="required">*</span></label>
             <select id="f_client" class="sap-select" required>
               <option value="">Select client…</option>
-              <option value="C001">Acme Corp (C001)</option>
-              <option value="C002">Gulf Holdings (C002)</option>
-              <option value="C003">Delta Industries (C003)</option>
-              <option value="C004">Nile Ventures (C004)</option>
             </select>
           </div>
 
@@ -692,7 +684,7 @@
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveAsset(event)" id="saveBtn">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        <span>Save Asset</span>
+        <span id="saveBtnLabel">Save Asset</span>
       </button>
     </div>
   </div>
@@ -1552,14 +1544,16 @@ function openAddModal() {
   document.getElementById('statusApprovalNote').style.display =
     session.role === 'technician' ? 'block' : 'none';
 
-  /* Pre-fill client for non-admin */
-  if (session.customerId) {
-    document.getElementById('f_client').value = session.customerId;
-    document.getElementById('f_client_wrap').style.display = 'none';
-  } else {
-    document.getElementById('f_client_wrap').style.display = 'flex';
-    document.getElementById('f_client_wrap').style.flexDirection = 'column';
-  }
+  /* Refresh client dropdown from API then pre-fill */
+  loadClients().then(() => {
+    if (session.customerId) {
+      document.getElementById('f_client').value = session.customerId;
+      document.getElementById('f_client_wrap').style.display = 'none';
+    } else {
+      document.getElementById('f_client_wrap').style.display = 'flex';
+      document.getElementById('f_client_wrap').style.flexDirection = 'column';
+    }
+  });
 
   populateFuncLocDropdown();
   document.getElementById('assetModal').classList.add('open');
@@ -1573,19 +1567,26 @@ function openEditModal(id) {
   document.getElementById('f_type').value    = a.type;
   document.getElementById('f_serial').value  = a.serial;
   document.getElementById('f_appliedStandard').value = a.appliedStandard || '';
-  onTypeChange(); // show Applied Standard field since type is set
+  onTypeChange();
   document.getElementById('f_status').value  = a.status;
   document.getElementById('f_zone_equipment').value = a.zoneEquipment || a.zone || '';
   populateFuncLocDropdown(a.location, a.client||session?.customerId||null);
   closeInlineAddFuncLoc();
 
-  document.getElementById('f_client').value  = a.client;
-  document.getElementById('f_notes').value   = a.notes;
+  document.getElementById('f_notes').value   = a.notes || '';
 
   document.getElementById('modalTitle').textContent = 'Edit Asset';
   document.getElementById('statusApprovalNote').style.display = 'none';
 
-  if (session.customerId) document.getElementById('f_client_wrap').style.display = 'none';
+  if (session.customerId) {
+    document.getElementById('f_client_wrap').style.display = 'none';
+  }
+
+  // Load clients first so the option exists before we try to select it
+  loadClients().then(() => {
+    document.getElementById('f_client').value = a.client;
+  });
+
   document.getElementById('assetModal').classList.add('open');
 }
 
@@ -1620,7 +1621,7 @@ async function saveAsset(e) {
 
   const editId = document.getElementById('editAssetId').value;
   const saveBtn = document.getElementById('saveBtn');
-  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+  if (saveBtn) { saveBtn.disabled = true; const _lbl = document.getElementById('saveBtnLabel'); if (_lbl) _lbl.textContent = 'Saving…'; }
 
   try {
     const payload = {
@@ -1655,7 +1656,7 @@ async function saveAsset(e) {
   } catch(e) {
     showToast('error', 'Network Error', 'Could not save asset. Please try again.');
   } finally {
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Asset'; }
+    if (saveBtn) { saveBtn.disabled = false; const _lbl2 = document.getElementById('saveBtnLabel'); if (_lbl2) _lbl2.textContent = 'Save Asset'; }
   }
 }
 
@@ -2222,6 +2223,40 @@ function showToast(type, title, msg) {
    INIT
 ═══════════════════════════════════════════════════════ */
 
+async function loadClients() {
+  try {
+    const res  = await apiFetch('/api/clients?status=active&limit=200');
+    const data = await res.json();
+    const d    = data.data || data;
+    const clients = d.clients || d || [];
+
+    // Rebuild CLIENTS_MAP from live data
+    clients.forEach(c => {
+      CLIENTS_MAP[c.client_id] = c.name;
+    });
+
+    // Populate toolbar filter dropdown
+    const filterSel = document.getElementById('clientFilter');
+    if (filterSel) {
+      const current = filterSel.value;
+      filterSel.innerHTML = '<option value="all">All Clients</option>' +
+        clients.map(c => `<option value="${c.client_id}">${c.name} (${c.client_id})</option>`).join('');
+      if (current && current !== 'all') filterSel.value = current;
+    }
+
+    // Populate modal f_client dropdown
+    const modalSel = document.getElementById('f_client');
+    if (modalSel) {
+      const currentVal = modalSel.value;
+      modalSel.innerHTML = '<option value="">Select client…</option>' +
+        clients.map(c => `<option value="${c.client_id}">${c.name} (${c.client_id})</option>`).join('');
+      if (currentVal) modalSel.value = currentVal;
+    }
+  } catch(e) {
+    console.warn('Could not load clients:', e);
+  }
+}
+
 async function loadAssets() {
   try {
     const params = new URLSearchParams({ limit: 200 });
@@ -2301,6 +2336,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Notification badge */
   if (role !== 'user') document.getElementById('notifBadge').style.display = 'block';
 
+  loadClients();
   loadAssets();
   loadColState();
 });
