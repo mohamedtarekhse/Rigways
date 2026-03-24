@@ -142,7 +142,6 @@
     .alert-strip__link { font-size: 12px; color: #0070f2; font-weight: 600; white-space: nowrap; }
 
     /* Chart containers */
-    .chart-container { position: relative; height: 220px; }
     .chart-container--tall { height: 280px; }
 
     /* Expiry list */
@@ -213,50 +212,6 @@
     .approval-item__meta { font-size: 11px; color: var(--sap-text-secondary); margin-top: 1px; }
     .approval-actions { display: flex; gap: 4px; }
 
-    /* Stat mini */
-    .stat-mini {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-      padding: var(--sp-md);
-      border-right: 1px solid var(--sap-table-border);
-      flex: 1;
-      text-align: center;
-    }
-    .stat-mini:last-child { border-right: none; }
-    .stat-mini__value { font-size: 22px; font-weight: 800; color: var(--sap-text-primary); }
-    .stat-mini__label { font-size: 10px; color: var(--sap-text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; text-align: center; }
-
-    /* Quick actions */
-    .quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-sm); }
-    .quick-action {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: var(--sp-sm);
-      padding: var(--sp-md) var(--sp-sm);
-      border: 1px solid var(--sap-table-border);
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all var(--transition);
-      background: #fff;
-      text-decoration: none;
-    }
-    .quick-action:hover {
-      border-color: var(--sap-brand);
-      background: var(--sap-brand-light);
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0,112,242,.15);
-      text-decoration: none;
-    }
-    .quick-action__icon {
-      width: 40px; height: 40px;
-      border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .quick-action__icon svg { width: 20px; height: 20px; }
-    .quick-action__label { font-size: 11px; font-weight: 600; color: var(--sap-text-primary); text-align: center; line-height: 1.3; }
 
     /* Client selector (admin/manager) */
     .client-filter-bar {
@@ -278,7 +233,6 @@
     @media(max-width:900px) {
       .dash-grid { grid-template-columns: 1fr; }
       .dash-col-2, .dash-col-3 { grid-column: span 1; }
-      .quick-actions { grid-template-columns: repeat(2,1fr); }
       .welcome-banner { flex-direction: column; align-items: flex-start; }
       .welcome-banner__right { text-align: left; }
     }
@@ -447,54 +401,7 @@
   <!-- Main dashboard grid -->
   <div class="dash-grid">
 
-    <!-- Asset Status Chart -->
-    <div class="sap-card">
-      <div class="sap-card__header">
-        <div>
-          <div class="sap-card__title">
-            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-            <span>Assets by Status</span>
-          </div>
-          <div class="sap-card__subtitle">Current distribution</div>
-        </div>
-      </div>
-      <div class="sap-card__body">
-        <div class="chart-container">
-          <canvas id="assetStatusChart"></canvas>
-        </div>
-        <div class="d-flex" style="margin-top:12px; border-top:1px solid var(--sap-table-border); padding-top:12px;">
-          <div class="stat-mini"><div class="stat-mini__value" style="color:var(--sap-success)" id="activeCount">142</div><div class="stat-mini__label">Active</div></div>
-          <div class="stat-mini"><div class="stat-mini__value" style="color:var(--sap-warning)" id="maintenanceCount">18</div><div class="stat-mini__label">Maintenance</div></div>
-          <div class="stat-mini"><div class="stat-mini__value" style="color:var(--sap-neutral)" id="inactiveCount">14</div><div class="stat-mini__label">Inactive</div></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Certificate Status Chart -->
-    <div class="sap-card">
-      <div class="sap-card__header">
-        <div>
-          <div class="sap-card__title">
-            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
-            <span>Certificates by Status</span>
-          </div>
-          <div class="sap-card__subtitle">Compliance overview</div>
-        </div>
-      </div>
-      <div class="sap-card__body">
-        <div class="chart-container">
-          <canvas id="certStatusChart"></canvas>
-        </div>
-        <div class="d-flex" style="margin-top:12px; border-top:1px solid var(--sap-table-border); padding-top:12px;">
-          <div class="stat-mini"><div class="stat-mini__value" style="color:var(--sap-success)">89</div><div class="stat-mini__label">Valid</div></div>
-          <div class="stat-mini"><div class="stat-mini__value" style="color:var(--sap-warning)">14</div><div class="stat-mini__label">Expiring</div></div>
-          <div class="stat-mini"><div class="stat-mini__value" style="color:var(--sap-error)">6</div><div class="stat-mini__label">Expired</div></div>
-          <div class="stat-mini"><div class="stat-mini__value" style="color:#f57f17">5</div><div class="stat-mini__label">Pending</div></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Expiring Soon -->
+    <!-- Expiring Soon — 1 col -->
     <div class="sap-card">
       <div class="sap-card__header">
         <div>
@@ -507,13 +414,29 @@
         <a href="notifications.html" class="btn btn-ghost btn-sm">View All</a>
       </div>
       <div class="sap-card__body--no-pad">
-        <div class="expiry-list" id="expiryList">
-          <!-- Rendered by JS -->
-        </div>
+        <div class="expiry-list" id="expiryList"></div>
       </div>
     </div>
 
-    <!-- Monthly Trend Chart -->
+    <!-- Approval Queue — 2 col -->
+    <div class="sap-card dash-col-2" id="approvalCard">
+      <div class="sap-card__header">
+        <div>
+          <div class="sap-card__title">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            <span>Approval Queue</span>
+          </div>
+          <div class="sap-card__subtitle">Pending certificate approvals</div>
+        </div>
+        <span class="sap-badge sap-badge--pending" id="approvalCount">5 Pending</span>
+      </div>
+      <div class="sap-card__body--no-pad" id="approvalList"></div>
+      <div class="sap-card__footer">
+        <a href="certificates.html" class="btn btn-secondary btn-sm">View All Certs</a>
+      </div>
+    </div>
+
+    <!-- Monthly Trend Chart — 2 col -->
     <div class="sap-card dash-col-2">
       <div class="sap-card__header">
         <div>
@@ -531,43 +454,8 @@
       </div>
     </div>
 
-    <!-- Approval Queue (admin/manager/technician) -->
-    <div class="sap-card" id="approvalCard">
-      <div class="sap-card__header">
-        <div>
-          <div class="sap-card__title">
-            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-            <span>Approval Queue</span>
-          </div>
-          <div class="sap-card__subtitle">Pending certificate approvals</div>
-        </div>
-        <span class="sap-badge sap-badge--pending" id="approvalCount">5 Pending</span>
-      </div>
-      <div class="sap-card__body--no-pad" id="approvalList">
-        <!-- Rendered by JS -->
-      </div>
-      <div class="sap-card__footer">
-        <a href="certificates.html" class="btn btn-secondary btn-sm">View All Certs</a>
-      </div>
-    </div>
-
-    <!-- Quick Actions -->
+    <!-- Recent Activity — 1 col -->
     <div class="sap-card">
-      <div class="sap-card__header">
-        <div class="sap-card__title">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          <span>Quick Actions</span>
-        </div>
-      </div>
-      <div class="sap-card__body">
-        <div class="quick-actions" id="quickActions">
-          <!-- Rendered by JS -->
-        </div>
-      </div>
-    </div>
-
-    <!-- Recent Activity -->
-    <div class="sap-card dash-col-2">
       <div class="sap-card__header">
         <div>
           <div class="sap-card__title">
@@ -578,9 +466,7 @@
         </div>
       </div>
       <div class="sap-card__body--no-pad">
-        <div class="activity-feed" id="activityFeed">
-          <!-- Rendered by JS -->
-        </div>
+        <div class="activity-feed" id="activityFeed"></div>
       </div>
     </div>
 
@@ -837,16 +723,6 @@ function rejectItem(id, btn) {
 /* ═══════════════════════════════════════════════════════
    RENDER QUICK ACTIONS
 ═══════════════════════════════════════════════════════ */
-function renderQuickActions(role) {
-  const container = document.getElementById('quickActions');
-  const actions = QUICK_ACTIONS[role] || QUICK_ACTIONS.user;
-  container.innerHTML = actions.map(a => `
-    <a href="${a.href}" class="quick-action">
-      <div class="quick-action__icon" style="background:${a.bg};color:${a.color};">${getIcon(a.icon)}</div>
-      <div class="quick-action__label">${a.label}</div>
-    </a>`
-  ).join('');
-}
 
 /* ═══════════════════════════════════════════════════════
    CHARTS
@@ -879,55 +755,6 @@ function initCharts(as, cs) {
 
   /* Update stat numbers below charts */
   const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  setEl('activeCount',      asActive);
-  setEl('maintenanceCount', asMaintenance);
-  setEl('inactiveCount',    asInactive);
-
-  /* Asset Status Doughnut */
-  _makeChart('assetStatusChart', {
-    type: 'doughnut',
-    data: {
-      labels: ['Active / Operation', 'Maintenance / Stacked', 'Inactive'],
-      datasets: [{
-        data: [asActive, asMaintenance, asInactive],
-        backgroundColor: ['#188918', '#e76500', '#9ea3a8'],
-        borderWidth: 3,
-        borderColor: '#fff',
-        hoverOffset: 8,
-      }]
-    },
-    options: {
-      cutout: '68%',
-      plugins: {
-        legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle' } },
-        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} assets` } }
-      },
-      animation: { animateScale: true, duration: 800 },
-    }
-  });
-
-  /* Cert Status Doughnut */
-  _makeChart('certStatusChart', {
-    type: 'doughnut',
-    data: {
-      labels: ['Valid', 'Expiring Soon', 'Expired', 'Pending Approval'],
-      datasets: [{
-        data: [csValid, csExpiring, csExpired, csPending],
-        backgroundColor: ['#188918', '#e76500', '#bb0000', '#f57f17'],
-        borderWidth: 3,
-        borderColor: '#fff',
-        hoverOffset: 8,
-      }]
-    },
-    options: {
-      cutout: '68%',
-      plugins: {
-        legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, pointStyle: 'circle' } },
-        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } }
-      },
-      animation: { animateScale: true, duration: 800 },
-    }
-  });
 
   /* Monthly Trend Line */
   const months = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
@@ -1194,35 +1021,6 @@ async function dashRejectCert(id, btn) {
   } catch(e) { btn.disabled = false; }
 }
 
-function renderQuickActions(role) {
-  const container = document.getElementById('quickActions');
-  if (!container) return;
-  const actions = {
-    admin:      [{ label:'Add Asset', href:'assets.html', bg:'#e8f3ff', color:'#0070f2' },
-                 { label:'Upload Cert', href:'certificates.html', bg:'#f0faf0', color:'#188918' },
-                 { label:'Add Client', href:'clients.html', bg:'#fff3e0', color:'#e76500' }],
-    manager:    [{ label:'View Assets', href:'assets.html', bg:'#e8f3ff', color:'#0070f2' },
-                 { label:'View Certs', href:'certificates.html', bg:'#f0faf0', color:'#188918' },
-                 { label:'Notifications', href:'notifications.html', bg:'#fce4e4', color:'#bb0000' }],
-    technician: [{ label:'Upload Cert', href:'certificates.html', bg:'#f0faf0', color:'#188918' },
-                 { label:'Update Asset', href:'assets.html', bg:'#fff3e0', color:'#e76500' },
-                 { label:'Notifications', href:'notifications.html', bg:'#fce4e4', color:'#bb0000' }],
-    user:       [{ label:'My Assets', href:'assets.html', bg:'#e8f3ff', color:'#0070f2' },
-                 { label:'My Certs', href:'certificates.html', bg:'#f0faf0', color:'#188918' },
-                 { label:'Notifications', href:'notifications.html', bg:'#fff3e0', color:'#e76500' }],
-  };
-  const list = actions[role] || actions.user;
-  container.innerHTML = list.map(a =>
-    `<a href="${a.href}" class="quick-action">
-      <div class="quick-action__icon" style="background:${a.bg};color:${a.color};">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
-        </svg>
-      </div>
-      <div class="quick-action__label">${a.label}</div>
-    </a>`
-  ).join('');
-}
 
 document.addEventListener('DOMContentLoaded', () => {
   session = getSession();
@@ -1290,7 +1088,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* Init clock and quick actions; charts are now rendered inside loadDashboardData after API data arrives */
   if (typeof startClock === 'function') startClock();
-  if (typeof renderQuickActions === 'function') renderQuickActions(role);
 
   /* Load all data from API */
   loadDashboardData(role);
