@@ -452,6 +452,19 @@ async function resolveAssetId(db, rawId) {
   return rawId; // already a UUID
 }
 
+async function generateNextAssetNumber(db) {
+  const { data } = await db.from('assets', { select: 'asset_number', limit: 5000 });
+  const rows = Array.isArray(data) ? data : [];
+  let max = 0;
+  for (const r of rows) {
+    const m = String(r.asset_number || '').toUpperCase().match(/^AST-(\d+)$/);
+    if (!m) continue;
+    const n = parseInt(m[1], 10);
+    if (!isNaN(n) && n > max) max = n;
+  }
+  return `AST-${String(max + 1).padStart(4, '0')}`;
+}
+
 
 async function handleAssets(request, env, path) {
   const session = await getSession(request, env);
@@ -554,28 +567,65 @@ async function handleAssets(request, env, path) {
     if (!requireRole(session, ['admin', 'manager'])) return forbidden(env);
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
     const { valid, errors } = validate(body, {
-      asset_number: { required: true, type: 'string', minLength: 1, maxLength: 50 },
+      asset_number: { required: false, type: 'string', minLength: 1, maxLength: 50 },
       name: { required: true, type: 'string', minLength: 2, maxLength: 200 },
       asset_type: { required: true, type: 'string', enum: ASSET_TYPES },
       status: { required: false, type: 'string', enum: ASSET_STATUSES },
       client_id: { required: false, type: 'string' },
     });
     if (!valid) return badReq(errors.join('; '), 'VALIDATION', env);
-    const { data, error } = await db.insert('assets', {
-      asset_number: body.asset_number,
-      name: body.name,
-      asset_type: body.asset_type,
-      status: body.status || 'active',
-      client_id: body.client_id || null,
-      functional_location: body.functional_location || null,
-      serial_number: body.serial_number || null,
-      manufacturer: body.manufacturer || null,
-      model: body.model || null,
-      description: body.description || null,
-      created_by: session.sub,
-    });
+
+    // Strict client/location ownership: functional_location must belong to the same client
+    if (body.functional_location) {
+      let { data: flRows } = await db.from('functional_locations', {
+        filters: { 'fl_id.eq': body.functional_location },
+        select: 'id,client_id,status',
+        limit: 1,
+      });
+      let fl = Array.isArray(flRows) ? flRows[0] : flRows;
+      if (!fl) {
+        const { data: byNameRows } = await db.from('functional_locations', {
+          filters: { 'name.ilike': body.functional_location },
+          select: 'id,client_id,status',
+          limit: 1,
+        });
+        fl = Array.isArray(byNameRows) ? byNameRows[0] : byNameRows;
+      }
+      if (!fl) return badReq('Functional location not found', 'INVALID_LOCATION', env);
+      if (!body.client_id) return badReq('client_id is required when functional_location is set', 'VALIDATION', env);
+      if (fl.client_id !== body.client_id) {
+        return badReq('Functional location must belong to the same client', 'CLIENT_LOCATION_MISMATCH', env);
+      }
+    }
+
+    const requestedNumber = String(body.asset_number || '').trim().toUpperCase();
+    let assetNumber = requestedNumber || await generateNextAssetNumber(db);
+    let data, error;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = await db.insert('assets', {
+        asset_number: assetNumber,
+        name: body.name,
+        asset_type: body.asset_type,
+        status: body.status || 'active',
+        client_id: body.client_id || null,
+        functional_location: body.functional_location || null,
+        serial_number: body.serial_number || null,
+        manufacturer: body.manufacturer || null,
+        model: body.model || null,
+        description: body.description || null,
+        created_by: session.sub,
+      });
+      data = result.data; error = result.error;
+      if (!error) break;
+      if (error.code === '23505' && !requestedNumber) {
+        assetNumber = await generateNextAssetNumber(db);
+        continue;
+      }
+      break;
+    }
+
     if (error) {
-      if (error.code === '23505') return conflict('Asset number already exists', env);
+      if (error.code === '23505') return conflict('Asset number already exists across all clients', env);
       return serverErr(env);
     }
     const asset = Array.isArray(data) ? data[0] : data;
@@ -604,6 +654,29 @@ async function handleAssets(request, env, path) {
       notes: { type: 'string', maxLength: 2000 },
     });
     if (!valid) return badReq(errors.join('; '), 'VALIDATION', env);
+
+    const effectiveClientId = body.client_id || existing.client_id;
+    const effectiveLocation = body.functional_location || existing.functional_location;
+    if (effectiveLocation) {
+      let { data: flRows } = await db.from('functional_locations', {
+        filters: { 'fl_id.eq': effectiveLocation },
+        select: 'id,client_id,status',
+        limit: 1,
+      });
+      let fl = Array.isArray(flRows) ? flRows[0] : flRows;
+      if (!fl) {
+        const { data: byNameRows } = await db.from('functional_locations', {
+          filters: { 'name.ilike': effectiveLocation },
+          select: 'id,client_id,status',
+          limit: 1,
+        });
+        fl = Array.isArray(byNameRows) ? byNameRows[0] : byNameRows;
+      }
+      if (!fl) return badReq('Functional location not found', 'INVALID_LOCATION', env);
+      if (fl.client_id !== effectiveClientId) {
+        return badReq('Functional location must belong to the same client', 'CLIENT_LOCATION_MISMATCH', env);
+      }
+    }
 
     const update = compact({ ...pick(body, ['name', 'asset_type', 'status', 'client_id', 'functional_location', 'serial_number', 'manufacturer', 'model', 'description', 'notes']), updated_by: session.sub, updated_at: new Date().toISOString() });
     const { data, error } = await db.update('assets', update, { filters: { 'id.eq': asId } });
@@ -1329,14 +1402,22 @@ async function handleFunctionalLocations(request, env, path) {
   const url = new URL(request.url);
   const idM = path.match(/^\/functional-locations\/([^/]+)$/);
   const flId = idM?.[1];
+  const isAdmin = session.role === 'admin';
+  const isManager = session.role === 'manager';
 
-  /* All roles can READ functional locations (for dropdowns etc) */
+  /* READ scope:
+     - admin/manager: all
+     - user/technician: only their own customerId */
   if (!flId && method === 'GET') {
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 500);
     const offset = parseInt(url.searchParams.get('offset') || '0');
     const filters = {};
     if (url.searchParams.get('status')) filters['status.eq'] = url.searchParams.get('status');
     if (url.searchParams.get('type')) filters['type.eq'] = url.searchParams.get('type');
+    if (!isAdmin && !isManager) {
+      if (!session.customerId) return forbidden(env);
+      filters['client_id.eq'] = session.customerId;
+    }
     const { data, error } = await db.from('functional_locations', { select: '*', filters, limit, offset, order: 'fl_id.asc' });
     if (error) return serverErr(env);
     return ok({ functional_locations: data || [], limit, offset }, env);
@@ -1346,11 +1427,12 @@ async function handleFunctionalLocations(request, env, path) {
     const { data } = await db.from('functional_locations', { filters: { 'id.eq': flId }, select: '*', limit: 1 });
     const fl = Array.isArray(data) ? data[0] : data;
     if (!fl) return notFound('Functional Location', env);
+    if (!isAdmin && !isManager && session.customerId !== fl.client_id) return forbidden(env);
     return ok(fl, env);
   }
 
-  /* Write operations: admin/manager only */
-  if (!requireRole(session, ['admin', 'manager'])) return forbidden(env);
+  /* Write operations: admin only */
+  if (!isAdmin) return forbidden(env);
 
   if (!flId && method === 'POST') {
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
@@ -1358,6 +1440,7 @@ async function handleFunctionalLocations(request, env, path) {
       fl_id: { required: true, type: 'string', minLength: 1, maxLength: 20 },
       name: { required: true, type: 'string', minLength: 1, maxLength: 100 },
       type: { required: true, type: 'string', enum: FL_TYPES },
+      client_id: { required: true, type: 'string', minLength: 1, maxLength: 20 },
     });
     if (!valid) return badReq(errors.join('; '), 'VALIDATION', env);
     const { data: dup } = await db.from('functional_locations', { filters: { 'fl_id.ilike': body.fl_id }, select: 'id', limit: 1 });
