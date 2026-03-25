@@ -452,6 +452,19 @@ async function resolveAssetId(db, rawId) {
   return rawId; // already a UUID
 }
 
+async function generateNextAssetNumber(db) {
+  const { data } = await db.from('assets', { select: 'asset_number', limit: 5000 });
+  const rows = Array.isArray(data) ? data : [];
+  let max = 0;
+  for (const r of rows) {
+    const m = String(r.asset_number || '').toUpperCase().match(/^AST-(\d+)$/);
+    if (!m) continue;
+    const n = parseInt(m[1], 10);
+    if (!isNaN(n) && n > max) max = n;
+  }
+  return `AST-${String(max + 1).padStart(4, '0')}`;
+}
+
 
 async function handleAssets(request, env, path) {
   const session = await getSession(request, env);
@@ -460,6 +473,51 @@ async function handleAssets(request, env, path) {
   const method = request.method;
   const db  = createSupabase(env);
   const url = new URL(request.url);
+
+  /* ── POST /api/assets/import/validate — server-side revalidation for mass upload ── */
+  if (path === '/assets/import/validate' && method === 'POST') {
+    if (!requireRole(session, ['admin'])) return forbidden(env);
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    const rows = Array.isArray(body?.rows) ? body.rows : [];
+    if (!rows.length) return ok({ rows: [] }, env);
+
+    const { data: existingRows } = await db.from('assets', {
+      select: 'id,asset_number,serial_number',
+      limit: 5000,
+    });
+    const existing = Array.isArray(existingRows) ? existingRows : [];
+    const byAsset = new Map(existing.map(r => [String(r.asset_number || '').toLowerCase(), r]));
+    const bySerial = new Map(existing.filter(r => r.serial_number).map(r => [String(r.serial_number || '').toLowerCase(), r]));
+    const seenAsset = new Set();
+    const seenSerial = new Set();
+
+    const out = rows.map((row, idx) => {
+      const assetNumber = String(row.asset_number || '').trim().toUpperCase();
+      const serial = String(row.serial_number || '').trim();
+      const errors = [];
+      const warnings = [];
+      if (!assetNumber) errors.push('asset_number is required');
+      if (!String(row.name || '').trim()) errors.push('name is required');
+      if (!String(row.asset_type || '').trim()) errors.push('asset_type is required');
+      if (!String(row.status || '').trim()) errors.push('status is required');
+      if (!String(row.client_id || '').trim()) errors.push('client_id is required');
+      if (!String(row.functional_location || '').trim()) errors.push('functional_location is required');
+      if (!serial) errors.push('serial_number is required');
+      if (row.asset_type && !ASSET_TYPES.includes(row.asset_type)) errors.push(`asset_type "${row.asset_type}" is not valid`);
+      if (row.status && !ASSET_STATUSES.includes(String(row.status).toLowerCase())) errors.push(`status "${row.status}" is not valid`);
+      if (!String(row.manufacturer || '').trim()) warnings.push('manufacturer is empty');
+      if (!String(row.model || '').trim()) warnings.push('model is empty');
+      const assetKey = assetNumber.toLowerCase();
+      const serialKey = serial.toLowerCase();
+      const duplicate = Boolean((assetKey && byAsset.has(assetKey)) || (serialKey && bySerial.has(serialKey)) || seenAsset.has(assetKey) || seenSerial.has(serialKey));
+      if (assetKey) seenAsset.add(assetKey);
+      if (serialKey) seenSerial.add(serialKey);
+
+      const status = errors.length ? 'error' : (duplicate ? 'duplicate' : (warnings.length ? 'warning' : 'valid'));
+      return { index: idx, status, errors, warnings, duplicate, duplicate_by: duplicate ? 'asset_number_or_serial_number' : null };
+    });
+    return ok({ rows: out }, env);
+  }
   /* ── GET /api/assets/stats — dashboard KPIs ── */
   if (path === '/assets/stats' && method === 'GET') {
     const filters = {};
@@ -509,28 +567,65 @@ async function handleAssets(request, env, path) {
     if (!requireRole(session, ['admin', 'manager'])) return forbidden(env);
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
     const { valid, errors } = validate(body, {
-      asset_number: { required: true, type: 'string', minLength: 1, maxLength: 50 },
+      asset_number: { required: false, type: 'string', minLength: 1, maxLength: 50 },
       name: { required: true, type: 'string', minLength: 2, maxLength: 200 },
       asset_type: { required: true, type: 'string', enum: ASSET_TYPES },
       status: { required: false, type: 'string', enum: ASSET_STATUSES },
       client_id: { required: false, type: 'string' },
     });
     if (!valid) return badReq(errors.join('; '), 'VALIDATION', env);
-    const { data, error } = await db.insert('assets', {
-      asset_number: body.asset_number,
-      name: body.name,
-      asset_type: body.asset_type,
-      status: body.status || 'active',
-      client_id: body.client_id || null,
-      functional_location: body.functional_location || null,
-      serial_number: body.serial_number || null,
-      manufacturer: body.manufacturer || null,
-      model: body.model || null,
-      description: body.description || null,
-      created_by: session.sub,
-    });
+
+    // Strict client/location ownership: functional_location must belong to the same client
+    if (body.functional_location) {
+      if (!body.client_id) return badReq('client_id is required when functional_location is set', 'VALIDATION', env);
+      let { data: flRows } = await db.from('functional_locations', {
+        filters: { 'fl_id.eq': body.functional_location },
+        select: 'id,client_id,status',
+        limit: 1,
+      });
+      let fl = Array.isArray(flRows) ? flRows[0] : flRows;
+      if (!fl) {
+        const { data: byNameRows } = await db.from('functional_locations', {
+          filters: { 'name.ilike': body.functional_location, 'client_id.eq': body.client_id },
+          select: 'id,client_id,status',
+          limit: 1,
+        });
+        fl = Array.isArray(byNameRows) ? byNameRows[0] : byNameRows;
+      }
+      if (!fl) return badReq('Functional location not found', 'INVALID_LOCATION', env);
+      if (fl.client_id !== body.client_id) {
+        return badReq('Functional location must belong to the same client', 'CLIENT_LOCATION_MISMATCH', env);
+      }
+    }
+
+    const requestedNumber = String(body.asset_number || '').trim().toUpperCase();
+    let assetNumber = requestedNumber || await generateNextAssetNumber(db);
+    let data, error;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = await db.insert('assets', {
+        asset_number: assetNumber,
+        name: body.name,
+        asset_type: body.asset_type,
+        status: body.status || 'operation',
+        client_id: body.client_id || null,
+        functional_location: body.functional_location || null,
+        serial_number: body.serial_number || null,
+        manufacturer: body.manufacturer || null,
+        model: body.model || null,
+        description: body.description || null,
+        created_by: session.sub,
+      });
+      data = result.data; error = result.error;
+      if (!error) break;
+      if (error.code === '23505' && !requestedNumber) {
+        assetNumber = await generateNextAssetNumber(db);
+        continue;
+      }
+      break;
+    }
+
     if (error) {
-      if (error.code === '23505') return conflict('Asset number already exists', env);
+      if (error.code === '23505') return conflict('Asset number already exists across all clients', env);
       return serverErr(env);
     }
     const asset = Array.isArray(data) ? data[0] : data;
@@ -559,6 +654,30 @@ async function handleAssets(request, env, path) {
       notes: { type: 'string', maxLength: 2000 },
     });
     if (!valid) return badReq(errors.join('; '), 'VALIDATION', env);
+
+    const effectiveClientId = body.client_id || existing.client_id;
+    const effectiveLocation = body.functional_location || existing.functional_location;
+    if (effectiveLocation) {
+      if (!effectiveClientId) return badReq('client_id is required when functional_location is set', 'VALIDATION', env);
+      let { data: flRows } = await db.from('functional_locations', {
+        filters: { 'fl_id.eq': effectiveLocation },
+        select: 'id,client_id,status',
+        limit: 1,
+      });
+      let fl = Array.isArray(flRows) ? flRows[0] : flRows;
+      if (!fl) {
+        const { data: byNameRows } = await db.from('functional_locations', {
+          filters: { 'name.ilike': effectiveLocation, 'client_id.eq': effectiveClientId },
+          select: 'id,client_id,status',
+          limit: 1,
+        });
+        fl = Array.isArray(byNameRows) ? byNameRows[0] : byNameRows;
+      }
+      if (!fl) return badReq('Functional location not found', 'INVALID_LOCATION', env);
+      if (fl.client_id !== effectiveClientId) {
+        return badReq('Functional location must belong to the same client', 'CLIENT_LOCATION_MISMATCH', env);
+      }
+    }
 
     const update = compact({ ...pick(body, ['name', 'asset_type', 'status', 'client_id', 'functional_location', 'serial_number', 'manufacturer', 'model', 'description', 'notes']), updated_by: session.sub, updated_at: new Date().toISOString() });
     const { data, error } = await db.update('assets', update, { filters: { 'id.eq': asId } });
@@ -738,6 +857,24 @@ async function handleCertificates(request, env, path) {
   const db = createSupabase(env);
   const url = new URL(request.url);
 
+  /* ── GET /api/certificates/history/export — all certificates history snapshot ── */
+  if (path === '/certificates/history/export' && method === 'GET') {
+    if (!requireRole(session, ['admin', 'manager', 'technician'])) return forbidden(env);
+    const filters = {};
+    if (['user', 'technician'].includes(session.role) && session.customerId)
+      filters['client_id.eq'] = session.customerId;
+    const { data, error } = await db.from('certificate_history', {
+      select: '*',
+      filters,
+      order: 'changed_at.desc',
+      limit: Math.min(parseInt(url.searchParams.get('limit') || '2000', 10), 5000),
+    });
+    if (error) return serverErr(env);
+    const rows = Array.isArray(data) ? data : [];
+    const withNames = await _withUploaderUsername(db, rows, 'changed_by');
+    return ok({ history: withNames }, env);
+  }
+
   /* ── GET /api/certificates/expiring?days=30 — dashboard widget ── */
   if (path === '/certificates/expiring' && method === 'GET') {
     const days = parseInt(url.searchParams.get('days') || '30');
@@ -771,6 +908,8 @@ async function handleCertificates(request, env, path) {
 
   const idM = path.match(/^\/certificates\/([^/]+)$/);
   const certId = idM?.[1];
+  const fileDeleteM = path.match(/^\/certificates\/([^/]+)\/file$/);
+  const fileDeleteId = fileDeleteM?.[1];
 
   /* LIST */
   if (!certId && method === 'GET') {
@@ -786,7 +925,9 @@ async function handleCertificates(request, env, path) {
       filters['client_id.eq'] = url.searchParams.get('client_id');
     const { data, error } = await db.from('certificates', { select: '*', filters, limit, offset, order: 'expiry_date.asc' });
     if (error) return serverErr(env);
-    return ok({ certificates: data || [], limit, offset }, env);
+    const certs = Array.isArray(data) ? data : [];
+    const withNames = await _withUploaderUsername(db, certs, 'uploaded_by');
+    return ok({ certificates: withNames, limit, offset }, env);
   }
 
   /* GET ONE */
@@ -796,7 +937,8 @@ async function handleCertificates(request, env, path) {
     if (!cert) return notFound('Certificate', env);
     if (['user', 'technician'].includes(session.role) && session.customerId && cert.client_id !== session.customerId)
       return forbidden(env);
-    return ok(cert, env);
+    const [withNames] = await _withUploaderUsername(db, [cert], 'uploaded_by');
+    return ok(withNames || cert, env);
   }
 
   /* CREATE */
@@ -842,6 +984,7 @@ async function handleCertificates(request, env, path) {
     });
     if (error) return serverErr(env);
     const cert = Array.isArray(data) ? data[0] : data;
+    await _recordCertificateHistory(db, cert, session, 'create');
 
     // Notify managers/admins about pending certs
     if (cert.approval_status === 'pending') await _notifyApprovers(db, session, cert);
@@ -875,6 +1018,7 @@ async function handleCertificates(request, env, path) {
     const { data, error } = await db.update('certificates', update, { filters: { 'id.eq': certId } });
     if (error) return serverErr(env);
     const updated = Array.isArray(data) ? data[0] : data;
+    await _recordCertificateHistory(db, updated || existing, session, 'update');
 
     // Notify uploader of decision
     if (body.approval_status && body.approval_status !== existing.approval_status && existing.uploaded_by)
@@ -884,39 +1028,91 @@ async function handleCertificates(request, env, path) {
     return ok(updated || existing, env);
   }
 
-  /* DELETE — admin anytime; technician within 24 hrs of upload (own records only); manager/user forbidden */
-  if (certId && method === 'DELETE') {
-    // Only admin and technician can delete
+  /* DELETE FILE ONLY — admin anytime; technician within 24hrs own record only */
+  if (fileDeleteId && method === 'DELETE') {
     if (!requireRole(session, ['admin', 'technician'])) return forbidden(env);
 
-    // Fetch the full record so we can check ownership, timing, and get the file key
     const { data: ex } = await db.from('certificates', {
-      filters: { 'id.eq': certId },
-      select: 'id,file_url,uploaded_by,created_at',
+      filters: { 'id.eq': fileDeleteId },
+      select: 'id,name,file_name,file_url,uploaded_by,created_at,approval_status,client_id',
       limit: 1,
     });
     const existing = Array.isArray(ex) ? ex[0] : ex;
     if (!existing) return notFound('Certificate', env);
+    if (!existing.file_url && !existing.file_name) return ok({ id: fileDeleteId, file_deleted: false, message: 'No file attached' }, env);
 
     if (session.role === 'technician') {
-      // Must be the uploader
       if (existing.uploaded_by !== session.sub) return forbidden(env);
-      // Must be within 24 hours of creation
       const ageHours = (Date.now() - new Date(existing.created_at).getTime()) / 3600000;
       if (ageHours > 24) {
         return json({ success: false, error: 'Delete window has expired (24 hours from upload)', code: 'WINDOW_EXPIRED' }, 403, env);
       }
     }
+    if (['user', 'technician'].includes(session.role) && session.customerId && existing.client_id !== session.customerId)
+      return forbidden(env);
 
-    // Delete file from R2 if one exists
     if (existing.file_url && env.CERT_BUCKET) {
       try { await env.CERT_BUCKET.delete(existing.file_url); }
-      catch(e) { console.warn('R2 delete warning:', e.message); }
+      catch (e) { console.warn('R2 delete warning:', e.message); }
     }
 
-    // Delete the DB record
+    const { data: updatedRows, error: updateErr } = await db.update('certificates', {
+      file_name: null,
+      file_url: null,
+      updated_at: new Date().toISOString(),
+    }, { filters: { 'id.eq': fileDeleteId } });
+    if (updateErr) return serverErr(env);
+    const updated = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows;
+    await _recordCertificateHistory(db, updated || existing, session, 'file_deleted');
+    return ok({ id: fileDeleteId, file_deleted: true, certificate: updated || existing }, env);
+  }
+
+  /* DELETE — admin anytime; technician within 24 hrs of upload (own records only); manager/user forbidden */
+  if (certId && method === 'DELETE') {
+    // Record delete is admin-only. Optional scope: ?delete_scope=asset (delete all certs for same asset).
+    if (!requireRole(session, ['admin'])) return forbidden(env);
+    const deleteScope = (url.searchParams.get('delete_scope') || '').toLowerCase();
+
+    // Fetch the full record so we can check ownership, timing, and get the file key
+    const { data: ex } = await db.from('certificates', {
+      filters: { 'id.eq': certId },
+      select: 'id,asset_id,file_url,uploaded_by,created_at',
+      limit: 1,
+    });
+    const existing = Array.isArray(ex) ? ex[0] : ex;
+    if (!existing) return notFound('Certificate', env);
+    if (deleteScope === 'asset') {
+      const { data: relRows, error: relErr } = await db.from('certificates', {
+        filters: { 'asset_id.eq': existing.asset_id },
+        select: '*',
+        limit: 5000,
+      });
+      if (relErr) return serverErr(env);
+      const related = Array.isArray(relRows) ? relRows : [];
+      for (const cert of related) {
+        if (cert.file_url && env.CERT_BUCKET) {
+          try { await env.CERT_BUCKET.delete(cert.file_url); }
+          catch (e) { console.warn('R2 delete warning:', e.message); }
+        }
+        await _recordCertificateHistory(db, cert, session, 'record_deleted');
+      }
+      await db.delete('certificates', { filters: { 'asset_id.eq': existing.asset_id } });
+      return ok({
+        deleted_scope: 'asset',
+        asset_id: existing.asset_id,
+        deleted_count: related.length,
+        deleted_ids: related.map(r => r.id),
+      }, env);
+    }
+
+    // Delete one certificate row
+    if (existing.file_url && env.CERT_BUCKET) {
+      try { await env.CERT_BUCKET.delete(existing.file_url); }
+      catch (e) { console.warn('R2 delete warning:', e.message); }
+    }
+    await _recordCertificateHistory(db, { ...existing, id: certId }, session, 'record_deleted');
     await db.delete('certificates', { filters: { 'id.eq': certId } });
-    return ok({ id: certId, deleted: true }, env);
+    return ok({ id: certId, deleted: true, deleted_scope: 'single' }, env);
   }
 
   return badReq('Not found', 'NOT_FOUND', env);
@@ -942,6 +1138,73 @@ async function _notifyUser(db, userId, type, title, body, refType, refId) {
   try {
     await db.insert('notifications', { user_id: userId, type, title, body, ref_type: refType, ref_id: refId, is_read: false });
   } catch (e) { console.warn('Notify failed:', e); }
+}
+
+async function _withUploaderUsername(db, rows, field = 'uploaded_by') {
+  if (!Array.isArray(rows) || !rows.length) return [];
+  const userIds = [...new Set(rows.map(r => r?.[field]).filter(Boolean))];
+  if (!userIds.length) return rows.map(r => ({ ...r, uploaded_by_username: null }));
+  const { data: users } = await db.from('users', {
+    select: 'id,username',
+    filters: { 'id.in': userIds },
+    limit: userIds.length + 5,
+  });
+  const map = new Map((Array.isArray(users) ? users : []).map(u => [u.id, u.username]));
+  return rows.map(r => ({
+    ...r,
+    uploaded_by_username: field === 'uploaded_by' ? (map.get(r.uploaded_by) || null) : undefined,
+    changed_by_username: field === 'changed_by' ? (map.get(r.changed_by) || null) : undefined,
+  }));
+}
+
+async function _recordCertificateHistory(db, cert, session, action) {
+  try {
+    if (!cert?.id) return;
+    const snapshot = _createHistorySnapshot(cert);
+    await db.insert('certificate_history', {
+      certificate_id: cert.id,
+      cert_number: cert.cert_number || null,
+      name: cert.name || null,
+      cert_type: cert.cert_type || null,
+      asset_id: cert.asset_id || null,
+      client_id: cert.client_id || null,
+      issued_by: cert.issued_by || null,
+      issue_date: cert.issue_date || null,
+      expiry_date: cert.expiry_date || null,
+      approval_status: cert.approval_status || null,
+      file_name: cert.file_name || null,
+      file_url: cert.file_url || null,
+      action_type: action,
+      changed_by: session?.sub || null,
+      changed_at: new Date().toISOString(),
+      snapshot_json: snapshot,
+    });
+  } catch (e) { console.warn('Certificate history write failed:', e); }
+}
+
+function _createHistorySnapshot(cert) {
+  return {
+    id: cert.id || null,
+    cert_number: cert.cert_number || null,
+    name: cert.name || null,
+    cert_type: cert.cert_type || null,
+    asset_id: cert.asset_id || null,
+    client_id: cert.client_id || null,
+    inspector_id: cert.inspector_id || null,
+    issued_by: cert.issued_by || null,
+    issue_date: cert.issue_date || null,
+    expiry_date: cert.expiry_date || null,
+    file_name: cert.file_name || null,
+    file_url: cert.file_url || null,
+    notes: cert.notes || null,
+    approval_status: cert.approval_status || null,
+    rejection_reason: cert.rejection_reason || null,
+    uploaded_by: cert.uploaded_by || null,
+    reviewed_by: cert.reviewed_by || null,
+    reviewed_at: cert.reviewed_at || null,
+    created_at: cert.created_at || null,
+    updated_at: cert.updated_at || null,
+  };
 }
 
 // ── clients.js ──
@@ -1047,8 +1310,51 @@ async function handleInspectors(request, env, path) {
   const method = request.method;
   const db = createSupabase(env);
   const url = new URL(request.url);
+  const cvM = path.match(/^\/inspectors\/cv\/([^/]+)$/);
+  const cvId = cvM?.[1];
   const idM = path.match(/^\/inspectors\/([^/]+)$/);
   const iid = idM?.[1];
+
+  if (path === '/inspectors/upload-cv' && method === 'POST') {
+    if (!requireRole(session, ['admin'])) return forbidden(env);
+    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    let formData;
+    try { formData = await request.formData(); } catch { return badReq('Invalid form data', 'BAD_FORM_DATA', env); }
+    const file = formData.get('file');
+    if (!file || typeof file === 'string') return badReq('No file provided', 'NO_FILE', env);
+    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!allowedTypes.includes(file.type)) return badReq('Invalid file type. Allowed: PDF, DOC, DOCX', 'INVALID_TYPE', env);
+    if (file.size > 10 * 1024 * 1024) return badReq('File too large (max 10MB)', 'FILE_TOO_LARGE', env);
+    const ext = (file.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const safeName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9-_]+/g, '_').slice(0, 80) || 'cv';
+    const key = `inspectors/cv/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeName}.${ext}`;
+    try {
+      await env.CERT_BUCKET.put(key, await file.arrayBuffer(), {
+        httpMetadata: { contentType: file.type },
+        customMetadata: { originalName: file.name, uploadedBy: session.sub },
+      });
+    } catch {
+      return badReq('CV upload failed', 'UPLOAD_FAILED', env);
+    }
+    return ok({ cv_file: file.name, cv_url: key }, env);
+  }
+
+  if (cvId && method === 'GET') {
+    const idFilter = cvId.includes('-') ? { 'id.eq': cvId } : { 'inspector_number.eq': cvId };
+    const { data } = await db.from('inspectors', { filters: idFilter, select: 'id,cv_file,cv_url', limit: 1 });
+    const insp = Array.isArray(data) ? data[0] : data;
+    if (!insp) return notFound('Inspector', env);
+    if (!insp.cv_url) return notFound('CV file', env);
+    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    const obj = await env.CERT_BUCKET.get(insp.cv_url);
+    if (!obj) return notFound('CV file', env);
+    return new Response(obj.body, {
+      headers: {
+        'Content-Type': obj.httpMetadata?.contentType || 'application/octet-stream',
+        'Content-Disposition': `inline; filename="${insp.cv_file || 'inspector-cv'}"`,
+      },
+    });
+  }
 
   if (!iid && method === 'GET') {
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 200);
@@ -1130,6 +1436,7 @@ async function handleInspectors(request, env, path) {
 
 
 const FL_TYPES = ['Rig', 'Workshop', 'Yard', 'Warehouse', 'Other'];
+const FL_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function handleFunctionalLocations(request, env, path) {
   const session = await getSession(request, env);
@@ -1140,28 +1447,38 @@ async function handleFunctionalLocations(request, env, path) {
   const url = new URL(request.url);
   const idM = path.match(/^\/functional-locations\/([^/]+)$/);
   const flId = idM?.[1];
+  const isAdmin = session.role === 'admin';
+  const isManager = session.role === 'manager';
 
-  /* All roles can READ functional locations (for dropdowns etc) */
+  /* READ scope:
+     - admin/manager: all
+     - user/technician: only their own customerId */
   if (!flId && method === 'GET') {
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 500);
     const offset = parseInt(url.searchParams.get('offset') || '0');
     const filters = {};
     if (url.searchParams.get('status')) filters['status.eq'] = url.searchParams.get('status');
     if (url.searchParams.get('type')) filters['type.eq'] = url.searchParams.get('type');
+    if (!isAdmin && !isManager) {
+      if (!session.customerId) return forbidden(env);
+      filters['client_id.eq'] = session.customerId;
+    }
     const { data, error } = await db.from('functional_locations', { select: '*', filters, limit, offset, order: 'fl_id.asc' });
     if (error) return serverErr(env);
     return ok({ functional_locations: data || [], limit, offset }, env);
   }
 
   if (flId && method === 'GET') {
-    const { data } = await db.from('functional_locations', { filters: { 'id.eq': flId }, select: '*', limit: 1 });
+    const lookup = FL_UUID_RE.test(flId) ? { 'id.eq': flId } : { 'fl_id.eq': flId.toUpperCase() };
+    const { data } = await db.from('functional_locations', { filters: lookup, select: '*', limit: 1 });
     const fl = Array.isArray(data) ? data[0] : data;
     if (!fl) return notFound('Functional Location', env);
+    if (!isAdmin && !isManager && session.customerId !== fl.client_id) return forbidden(env);
     return ok(fl, env);
   }
 
-  /* Write operations: admin/manager only */
-  if (!requireRole(session, ['admin', 'manager'])) return forbidden(env);
+  /* Write operations: admin only */
+  if (!isAdmin) return forbidden(env);
 
   if (!flId && method === 'POST') {
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
@@ -1169,6 +1486,7 @@ async function handleFunctionalLocations(request, env, path) {
       fl_id: { required: true, type: 'string', minLength: 1, maxLength: 20 },
       name: { required: true, type: 'string', minLength: 1, maxLength: 100 },
       type: { required: true, type: 'string', enum: FL_TYPES },
+      client_id: { required: true, type: 'string', minLength: 1, maxLength: 20 },
     });
     if (!valid) return badReq(errors.join('; '), 'VALIDATION', env);
     const { data: dup } = await db.from('functional_locations', { filters: { 'fl_id.ilike': body.fl_id }, select: 'id', limit: 1 });
@@ -1188,7 +1506,8 @@ async function handleFunctionalLocations(request, env, path) {
   if (flId && method === 'PATCH') {
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
     const update = compact({ ...pick(body, ['name', 'type', 'status', 'client_id', 'notes']), updated_at: new Date().toISOString() });
-    const { data, error } = await db.update('functional_locations', update, { filters: { 'id.eq': flId } });
+    const lookup = FL_UUID_RE.test(flId) ? { 'id.eq': flId } : { 'fl_id.eq': flId.toUpperCase() };
+    const { data, error } = await db.update('functional_locations', update, { filters: lookup });
     if (error) return serverErr(env);
     const updated = Array.isArray(data) ? data[0] : data;
     if (!updated) return notFound('Functional Location', env);
@@ -1197,9 +1516,10 @@ async function handleFunctionalLocations(request, env, path) {
 
   if (flId && method === 'DELETE') {
     if (!requireRole(session, ['admin'])) return forbidden(env);
-    const { data: ex } = await db.from('functional_locations', { filters: { 'id.eq': flId }, select: 'id', limit: 1 });
+    const lookup = FL_UUID_RE.test(flId) ? { 'id.eq': flId } : { 'fl_id.eq': flId.toUpperCase() };
+    const { data: ex } = await db.from('functional_locations', { filters: lookup, select: 'id,fl_id', limit: 1 });
     if (!(Array.isArray(ex) ? ex[0] : ex)) return notFound('Functional Location', env);
-    await db.delete('functional_locations', { filters: { 'id.eq': flId } });
+    await db.delete('functional_locations', { filters: lookup });
     return ok({ id: flId, deleted: true }, env);
   }
 

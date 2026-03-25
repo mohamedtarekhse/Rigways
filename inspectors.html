@@ -1147,6 +1147,10 @@ function openAddModal() {
   document.getElementById('trainingContainer').innerHTML = '';
   document.getElementById('trainingCertsContainer').innerHTML = '';
   document.getElementById('cvExistingNote').style.display = 'none';
+  document.getElementById('cvFileInput').dataset.existing = '';
+  document.getElementById('cvFileInput').dataset.existingKey = '';
+  document.getElementById('cvFileInput').value = '';
+  document.getElementById('cvUrlInput').value = '';
   switchCVMode('file');
   document.getElementById('modalTitle').textContent = currentLang==='ar'?'إضافة مفتش جديد':'Add New Inspector';
   document.getElementById('saveBtnLabel').textContent = currentLang==='ar'?'حفظ المفتش':'Save Inspector';
@@ -1182,6 +1186,7 @@ function openEditModal(id) {
   if (insp.cvFile) {
     switchCVMode('file');
     document.getElementById('cvFileInput').dataset.existing = insp.cvFile;
+    document.getElementById('cvFileInput').dataset.existingKey = insp.cvKey || '';
     const note = document.getElementById('cvExistingNote');
     note.style.display = 'block';
     note.textContent = (currentLang==='ar'?'📎 الملف الحالي: ':'📎 Current file: ') + insp.cvFile;
@@ -1234,8 +1239,27 @@ async function saveInspector() {
 
   // CV
   const cvMode = document.querySelector('.file-url-btn[data-mode="url"].active') ? 'url' : 'file';
-  const cvFile = cvMode === 'file' ? (document.getElementById('cvFileInput')?.dataset?.existing || '') : '';
-  const cvUrl  = cvMode === 'url'  ? (document.getElementById('cvUrlInput')?.value?.trim() || '') : '';
+  const cvInput = document.getElementById('cvFileInput');
+  let cvFile = '';
+  let cvUrl = '';
+  if (cvMode === 'file') {
+    const selectedFile = cvInput?.files?.[0];
+    if (selectedFile) {
+      const uploaded = await uploadInspectorCV(selectedFile);
+      cvFile = uploaded.cv_file || selectedFile.name;
+      cvUrl = uploaded.cv_url || '';
+      if (cvInput) {
+        cvInput.dataset.existing = cvFile;
+        cvInput.dataset.existingKey = cvUrl;
+        cvInput.value = '';
+      }
+    } else {
+      cvFile = cvInput?.dataset?.existing || '';
+      cvUrl = cvInput?.dataset?.existingKey || '';
+    }
+  } else {
+    cvUrl  = document.getElementById('cvUrlInput')?.value?.trim() || '';
+  }
 
   const payload = {
     name,
@@ -1472,14 +1496,29 @@ document.getElementById('drawerOverlay').addEventListener('click', function(e) {
 function openCV(id) {
   const insp = INSPECTORS.find(i => i.inspectorId === id);
   if (!insp) return;
-  if (insp.cvUrl) { safeOpen(insp.cvUrl); return; }  // FIX #4: scheme validation
+  if (insp.cvKey && insp._uuid) { window.open('/api/inspectors/cv/' + encodeURIComponent(insp._uuid), '_blank'); return; }
+  if (insp.cvUrl && /^https?:\/\//i.test(insp.cvUrl)) { safeOpen(insp.cvUrl); return; }
   if (insp.cvFile) {
-    showToast('info',
-      currentLang==='ar'?'فتح السيرة الذاتية':'Opening CV',
-      currentLang==='ar'?`سيتم فتح "${insp.cvFile}" — نظام مباشر يحتاج رابط حقيقي.`:`"${insp.cvFile}" — In production this opens the stored file.`);
+    showToast('warning',
+      currentLang==='ar'?'الملف غير متاح':'CV unavailable',
+      currentLang==='ar'?'ملف السيرة الذاتية غير متاح. يرجى إعادة الرفع.':'CV file is unavailable. Please upload it again.');
     return;
   }
   showToast('warning', currentLang==='ar'?'لا يوجد ملف':'No CV', currentLang==='ar'?'لم يُرفع ملف سيرة ذاتية لهذا المفتش.':'No CV has been uploaded for this inspector.');
+}
+
+async function uploadInspectorCV(file) {
+  const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch('/api/inspectors/upload-cv', {
+    method: 'POST',
+    headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+    body: fd,
+  });
+  const out = await res.json();
+  if (!out.success) throw new Error((out.data || out).error || 'CV upload failed');
+  return out.data || out;
 }
 
 /* FIX #3 + #4: Read from data attributes (no user data in JS strings) + validate URL scheme */
@@ -1582,6 +1621,7 @@ async function loadInspectors() {
       ...i,
       inspectorId:     i.inspector_number || i.id,
       _uuid:           i.id,                        // real UUID for API calls
+      cvKey:           i.cv_url || '',
       experienceYears: i.experience_years,
       experienceDesc:  i.experience_desc,
       education:       typeof i.education === 'string' ? JSON.parse(i.education||'[]') : (i.education||[]),

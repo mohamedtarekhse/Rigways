@@ -5,6 +5,7 @@ import { ok, created, badReq, unauth, forbidden, notFound, conflict, serverErr }
 import { validate, pick, compact } from '../utils/validate.js';
 
 const TYPES = ['Rig','Workshop','Yard','Warehouse','Other'];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function handleFunctionalLocations(request, env, path) {
   const session = await getSession(request, env);
@@ -15,28 +16,38 @@ export async function handleFunctionalLocations(request, env, path) {
   const url    = new URL(request.url);
   const idM    = path.match(/^\/functional-locations\/([^/]+)$/);
   const flId   = idM?.[1];
+  const isAdmin = session.role === 'admin';
+  const isManager = session.role === 'manager';
 
-  /* All roles can READ functional locations (for dropdowns etc) */
+  /* READ scope:
+     - admin/manager: all
+     - user/technician: only their own customerId */
   if (!flId && method === 'GET') {
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'),500);
     const offset = parseInt(url.searchParams.get('offset') || '0');
     const filters = {};
     if (url.searchParams.get('status')) filters['status.eq'] = url.searchParams.get('status');
     if (url.searchParams.get('type'))   filters['type.eq']   = url.searchParams.get('type');
+    if (!isAdmin && !isManager) {
+      if (!session.customerId) return forbidden(env);
+      filters['client_id.eq'] = session.customerId;
+    }
     const { data, error } = await db.from('functional_locations', { select:'*', filters, limit, offset, order:'fl_id.asc' });
     if (error) return serverErr(env);
     return ok({ functional_locations: data || [], limit, offset }, env);
   }
 
   if (flId && method === 'GET') {
-    const { data } = await db.from('functional_locations', { filters: { 'id.eq': flId }, select:'*', limit:1 });
+    const lookup = UUID_RE.test(flId) ? { 'id.eq': flId } : { 'fl_id.eq': flId.toUpperCase() };
+    const { data } = await db.from('functional_locations', { filters: lookup, select:'*', limit:1 });
     const fl = Array.isArray(data) ? data[0] : data;
     if (!fl) return notFound('Functional Location', env);
+    if (!isAdmin && !isManager && session.customerId !== fl.client_id) return forbidden(env);
     return ok(fl, env);
   }
 
-  /* Write operations: admin/manager only */
-  if (!requireRole(session, ['admin','manager'])) return forbidden(env);
+  /* Write operations: admin only */
+  if (!isAdmin) return forbidden(env);
 
   if (!flId && method === 'POST') {
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON','BAD_JSON',env); }
@@ -44,6 +55,7 @@ export async function handleFunctionalLocations(request, env, path) {
       fl_id: { required: true, type:'string', minLength:1, maxLength:20 },
       name:  { required: true, type:'string', minLength:1, maxLength:100 },
       type:  { required: true, type:'string', enum: TYPES },
+      client_id: { required: true, type:'string', minLength:1, maxLength:20 },
     });
     if (!valid) return badReq(errors.join('; '),'VALIDATION',env);
     const { data: dup } = await db.from('functional_locations', { filters: { 'fl_id.ilike': body.fl_id }, select:'id', limit:1 });
@@ -63,7 +75,8 @@ export async function handleFunctionalLocations(request, env, path) {
   if (flId && method === 'PATCH') {
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON','BAD_JSON',env); }
     const update = compact({ ...pick(body,['name','type','status','client_id','notes']), updated_at: new Date().toISOString() });
-    const { data, error } = await db.update('functional_locations', update, { filters: { 'id.eq': flId } });
+    const lookup = UUID_RE.test(flId) ? { 'id.eq': flId } : { 'fl_id.eq': flId.toUpperCase() };
+    const { data, error } = await db.update('functional_locations', update, { filters: lookup });
     if (error) return serverErr(env);
     const updated = Array.isArray(data) ? data[0] : data;
     if (!updated) return notFound('Functional Location', env);
@@ -72,9 +85,10 @@ export async function handleFunctionalLocations(request, env, path) {
 
   if (flId && method === 'DELETE') {
     if (!requireRole(session, ['admin'])) return forbidden(env);
-    const { data: ex } = await db.from('functional_locations', { filters: { 'id.eq': flId }, select:'id', limit:1 });
+    const lookup = UUID_RE.test(flId) ? { 'id.eq': flId } : { 'fl_id.eq': flId.toUpperCase() };
+    const { data: ex } = await db.from('functional_locations', { filters: lookup, select:'id,fl_id', limit:1 });
     if (!(Array.isArray(ex) ? ex[0] : ex)) return notFound('Functional Location', env);
-    await db.delete('functional_locations', { filters: { 'id.eq': flId } });
+    await db.delete('functional_locations', { filters: lookup });
     return ok({ id: flId, deleted: true }, env);
   }
 
