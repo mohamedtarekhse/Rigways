@@ -195,10 +195,25 @@ export async function handleCertificates(request, env, path) {
   /* DELETE */
   if (certId && method === 'DELETE') {
     if (!requireRole(session, ['admin'])) return forbidden(env);
-    const { data: ex } = await db.from('certificates', { filters: { 'id.eq': certId }, select:'id', limit:1 });
-    if (!(Array.isArray(ex) ? ex[0] : ex)) return notFound('Certificate', env);
+    const deleteScope = (url.searchParams.get('delete_scope') || '').toLowerCase();
+    const { data: ex } = await db.from('certificates', { filters: { 'id.eq': certId }, select:'*', limit:1 });
+    const existing = Array.isArray(ex) ? ex[0] : ex;
+    if (!existing) return notFound('Certificate', env);
+
+    if (deleteScope === 'asset') {
+      const { data: relRows, error: relErr } = await db.from('certificates', {
+        filters: { 'asset_id.eq': existing.asset_id }, select:'*', limit:5000,
+      });
+      if (relErr) return serverErr(env);
+      const related = Array.isArray(relRows) ? relRows : [];
+      for (const cert of related) await _recordCertificateHistory(db, cert, session, 'record_deleted');
+      await db.delete('certificates', { filters: { 'asset_id.eq': existing.asset_id } });
+      return ok({ deleted_scope: 'asset', asset_id: existing.asset_id, deleted_count: related.length, deleted_ids: related.map(r => r.id) }, env);
+    }
+
+    await _recordCertificateHistory(db, existing, session, 'record_deleted');
     await db.delete('certificates', { filters: { 'id.eq': certId } });
-    return ok({ id: certId, deleted: true }, env);
+    return ok({ id: certId, deleted: true, deleted_scope: 'single' }, env);
   }
 
   return badReq('Not found','NOT_FOUND',env);

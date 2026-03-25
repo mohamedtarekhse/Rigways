@@ -1011,6 +1011,10 @@ function canDeleteFile(cert) {
   return false;
 }
 
+function isAdmin() {
+  return session?.role === 'admin';
+}
+
 function getEditWindowBadge(cert) {
   if (!cert.uploadTime) return '';
   const uploaded = new Date(cert.uploadTime);
@@ -1104,7 +1108,7 @@ function renderTable() {
     `Showing ${start+1}–${end} of ${total}`;
 
   const canApprove  = role === 'admin' || role === 'manager';
-  const canDelete   = role === 'admin';   // global — per-row also checks tech 24hr
+  const canDelete   = role === 'admin';   // admin row delete => delete all certs for same asset
   const isTech      = role === 'technician';
   const showClient  = role === 'admin' || role === 'manager';
   const tc = TYPE_COLORS;
@@ -1183,7 +1187,7 @@ function renderTable() {
               <button class="btn btn-danger btn-icon" onclick="openRejectModal('${c.certId}')" title="Reject" style="width:26px;height:26px;">
                 <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>` : ''}
-            ${(canDelete || techCanDelete) ? `<button class="btn btn-danger btn-icon" onclick="openDeleteModal('${c.certId}')" title="Delete file attachment" style="width:26px;height:26px;">
+            ${(canDelete || techCanDelete) ? `<button class="btn btn-danger btn-icon" onclick="${canDelete ? `deleteAssetCertificates('${c.certId}')` : `openDeleteModal('${c.certId}')`}" title="${canDelete ? 'Delete all certificates for this asset' : 'Delete file attachment'}" style="width:26px;height:26px;">
               <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
             </button>` : ''}
           </div>
@@ -1773,6 +1777,11 @@ function buildAssetCertHistory(assetId, currentCertId) {
       </div>`;
     certs.forEach(cert => {
       const isCurrent = cert.certId === currentCertId;
+      const adminActions = isAdmin() ? `
+          <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:4px;">
+            <button class="btn btn-ghost btn-sm" type="button" style="height:22px;padding:0 6px;font-size:10px;" onclick="openDeleteModal('${cert.certId}')" title="Delete file attachment">Delete File</button>
+            <button class="btn btn-danger btn-sm" type="button" style="height:22px;padding:0 6px;font-size:10px;" onclick="deleteCertificateRecord('${cert.certId}')" title="Delete certificate row">Delete Row</button>
+          </div>` : '';
       rows += `
       <div class="hist-row${isCurrent ? ' hist-row--current' : ''}">
         <div class="hist-col-id">
@@ -1782,6 +1791,7 @@ function buildAssetCertHistory(assetId, currentCertId) {
         <div class="hist-col-name">
           <div style="font-size:12px;font-weight:600;color:var(--sap-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${cert.name}">${cert.name}</div>
           ${cert.fileName ? `<a href="#" onclick="event.preventDefault();openCertLink('${cert.certId}')" style="font-size:10px;color:var(--sap-brand);display:inline-flex;align-items:center;gap:2px;margin-top:2px;text-decoration:none;"><svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>${cert.fileName}</a>` : ''}
+          ${adminActions}
         </div>
         <div class="hist-col-type">${typeChip(cert)}</div>
         <div class="hist-col-exp">${expLabel(cert)}</div>
@@ -2078,6 +2088,56 @@ async function confirmCertDelete() {
 async function confirmDelete() {
   // Legacy — redirect to new handler
   await confirmCertDelete();
+}
+
+async function deleteCertificateRecord(certId) {
+  if (!isAdmin()) {
+    showToast('error', 'Not Allowed', 'Only admins can delete certificate rows.');
+    return;
+  }
+  const cert = CERTS.find(x => x.certId === certId);
+  if (!cert) return;
+  if (!confirm(`Delete certificate row "${cert.name}"? This will remove only this certificate record and its file.`)) return;
+  try {
+    const res = await apiFetch('/api/certificates/' + (cert.id || certId), { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('error', 'Delete Failed', (data.data || data).error || 'Could not delete certificate row.');
+      return;
+    }
+    CERTS = CERTS.filter(x => x.certId !== certId);
+    showToast('success', 'Row Deleted', `Certificate "${cert.name}" was deleted.`);
+    renderTable();
+  } catch (e) {
+    showToast('error', 'Network Error', 'Could not delete certificate row.');
+  }
+}
+
+async function deleteAssetCertificates(certId) {
+  if (!isAdmin()) {
+    showToast('error', 'Not Allowed', 'Only admins can delete related certificate rows.');
+    return;
+  }
+  const cert = CERTS.find(x => x.certId === certId);
+  if (!cert) return;
+  const assetDisplay = cert.assetId || cert.asset_id || 'Unknown Asset';
+  if (!confirm(`Delete ALL certificates for asset ${assetDisplay}? This will remove all related certificate rows and files.`)) return;
+  try {
+    const res = await apiFetch('/api/certificates/' + (cert.id || certId) + '?delete_scope=asset', { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('error', 'Delete Failed', (data.data || data).error || 'Could not delete related certificates.');
+      return;
+    }
+    const deletedIds = new Set((data.data?.deleted_ids || data.deleted_ids || []).map(String));
+    CERTS = CERTS.filter(x => !deletedIds.has(String(x.id)));
+    const deletedCount = data.data?.deleted_count ?? data.deleted_count ?? deletedIds.size;
+    showToast('success', 'Rows Deleted', `${deletedCount} certificate row(s) deleted for asset ${assetDisplay}.`);
+    clearSelection();
+    renderTable();
+  } catch (e) {
+    showToast('error', 'Network Error', 'Could not delete related certificates.');
+  }
 }
 
 /* ═══════════════════════════════════════════════════════

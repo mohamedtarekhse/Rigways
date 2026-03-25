@@ -950,38 +950,50 @@ async function handleCertificates(request, env, path) {
 
   /* DELETE — admin anytime; technician within 24 hrs of upload (own records only); manager/user forbidden */
   if (certId && method === 'DELETE') {
-    // Only admin and technician can delete
-    if (!requireRole(session, ['admin', 'technician'])) return forbidden(env);
+    // Record delete is admin-only. Optional scope: ?delete_scope=asset (delete all certs for same asset).
+    if (!requireRole(session, ['admin'])) return forbidden(env);
+    const deleteScope = (url.searchParams.get('delete_scope') || '').toLowerCase();
 
     // Fetch the full record so we can check ownership, timing, and get the file key
     const { data: ex } = await db.from('certificates', {
       filters: { 'id.eq': certId },
-      select: 'id,file_url,uploaded_by,created_at',
+      select: 'id,asset_id,file_url,uploaded_by,created_at',
       limit: 1,
     });
     const existing = Array.isArray(ex) ? ex[0] : ex;
     if (!existing) return notFound('Certificate', env);
-
-    if (session.role === 'technician') {
-      // Must be the uploader
-      if (existing.uploaded_by !== session.sub) return forbidden(env);
-      // Must be within 24 hours of creation
-      const ageHours = (Date.now() - new Date(existing.created_at).getTime()) / 3600000;
-      if (ageHours > 24) {
-        return json({ success: false, error: 'Delete window has expired (24 hours from upload)', code: 'WINDOW_EXPIRED' }, 403, env);
+    if (deleteScope === 'asset') {
+      const { data: relRows, error: relErr } = await db.from('certificates', {
+        filters: { 'asset_id.eq': existing.asset_id },
+        select: '*',
+        limit: 5000,
+      });
+      if (relErr) return serverErr(env);
+      const related = Array.isArray(relRows) ? relRows : [];
+      for (const cert of related) {
+        if (cert.file_url && env.CERT_BUCKET) {
+          try { await env.CERT_BUCKET.delete(cert.file_url); }
+          catch (e) { console.warn('R2 delete warning:', e.message); }
+        }
+        await _recordCertificateHistory(db, cert, session, 'record_deleted');
       }
+      await db.delete('certificates', { filters: { 'asset_id.eq': existing.asset_id } });
+      return ok({
+        deleted_scope: 'asset',
+        asset_id: existing.asset_id,
+        deleted_count: related.length,
+        deleted_ids: related.map(r => r.id),
+      }, env);
     }
 
-    // Delete file from R2 if one exists
+    // Delete one certificate row
     if (existing.file_url && env.CERT_BUCKET) {
       try { await env.CERT_BUCKET.delete(existing.file_url); }
-      catch(e) { console.warn('R2 delete warning:', e.message); }
+      catch (e) { console.warn('R2 delete warning:', e.message); }
     }
-
-    // Delete the DB record
     await _recordCertificateHistory(db, { ...existing, id: certId }, session, 'record_deleted');
     await db.delete('certificates', { filters: { 'id.eq': certId } });
-    return ok({ id: certId, deleted: true }, env);
+    return ok({ id: certId, deleted: true, deleted_scope: 'single' }, env);
   }
 
   return badReq('Not found', 'NOT_FOUND', env);
