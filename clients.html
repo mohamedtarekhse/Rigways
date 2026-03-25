@@ -1127,10 +1127,47 @@ function showToast(type, title, msg) {
 
 async function loadClients() {
   try {
-    const res  = await apiFetch('/api/clients?limit=200');
-    const data = await res.json();
-    const d    = data.data || data;
-    const raw  = d.clients || d || [];
+    const [clientsRes, assetsRes, certsRes] = await Promise.all([
+      apiFetch('/api/clients?limit=200'),
+      apiFetch('/api/assets?limit=5000'),
+      apiFetch('/api/certificates?limit=5000'),
+    ]);
+    const clientsPayload = await clientsRes.json();
+    const assetsPayload  = await assetsRes.json();
+    const certsPayload   = await certsRes.json();
+
+    const d       = clientsPayload.data || clientsPayload;
+    const raw     = d.clients || d || [];
+    const assetsD = assetsPayload.data || assetsPayload;
+    const certsD  = certsPayload.data || certsPayload;
+    const assets  = Array.isArray(assetsD.assets) ? assetsD.assets : (Array.isArray(assetsD) ? assetsD : []);
+    const certs   = Array.isArray(certsD.certificates) ? certsD.certificates : (Array.isArray(certsD) ? certsD : []);
+
+    const assetCountsByClient = new Map();
+    assets.forEach(a => {
+      const cid = a?.client_id;
+      if (!cid) return;
+      assetCountsByClient.set(cid, (assetCountsByClient.get(cid) || 0) + 1);
+    });
+
+    const certCountsByClient = new Map();
+    const expiringCountsByClient = new Map();
+    const now = new Date();
+    const soon = new Date(now);
+    soon.setDate(soon.getDate() + 30);
+    certs.forEach(c => {
+      const cid = c?.client_id;
+      if (!cid) return;
+      certCountsByClient.set(cid, (certCountsByClient.get(cid) || 0) + 1);
+
+      const expiry = c?.expiry_date ? new Date(c.expiry_date) : null;
+      const isApproved = !c?.approval_status || c.approval_status === 'approved';
+      if (!expiry || Number.isNaN(expiry.getTime()) || !isApproved) return;
+      if (expiry >= now && expiry <= soon) {
+        expiringCountsByClient.set(cid, (expiringCountsByClient.get(cid) || 0) + 1);
+      }
+    });
+
     // Map DB fields → display fields the page uses
     CLIENTS = raw.map(c => ({
       ...c,
@@ -1148,11 +1185,9 @@ async function loadClients() {
       contractEnd:   c.contract_end   || '',
       notes:         c.notes      || '',
       color:         c.color      || '#0070f2',
-      // Derived stats — real counts would need separate API calls;
-      // use 0 as placeholder so cards render without crashing
-      assets:   c.assets   ?? 0,
-      certs:    c.certs    ?? 0,
-      expiring: c.expiring ?? 0,
+      assets:   assetCountsByClient.get(c.client_id) || 0,
+      certs:    certCountsByClient.get(c.client_id) || 0,
+      expiring: expiringCountsByClient.get(c.client_id) || 0,
     }));
   } catch(e) { CLIENTS = []; }
   renderClients();
