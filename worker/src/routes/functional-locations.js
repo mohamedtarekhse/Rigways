@@ -15,14 +15,22 @@ export async function handleFunctionalLocations(request, env, path) {
   const url    = new URL(request.url);
   const idM    = path.match(/^\/functional-locations\/([^/]+)$/);
   const flId   = idM?.[1];
+  const isAdmin = session.role === 'admin';
+  const isManager = session.role === 'manager';
 
-  /* All roles can READ functional locations (for dropdowns etc) */
+  /* READ scope:
+     - admin/manager: all
+     - user/technician: only their own customerId */
   if (!flId && method === 'GET') {
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'),500);
     const offset = parseInt(url.searchParams.get('offset') || '0');
     const filters = {};
     if (url.searchParams.get('status')) filters['status.eq'] = url.searchParams.get('status');
     if (url.searchParams.get('type'))   filters['type.eq']   = url.searchParams.get('type');
+    if (!isAdmin && !isManager) {
+      if (!session.customerId) return forbidden(env);
+      filters['client_id.eq'] = session.customerId;
+    }
     const { data, error } = await db.from('functional_locations', { select:'*', filters, limit, offset, order:'fl_id.asc' });
     if (error) return serverErr(env);
     return ok({ functional_locations: data || [], limit, offset }, env);
@@ -32,11 +40,12 @@ export async function handleFunctionalLocations(request, env, path) {
     const { data } = await db.from('functional_locations', { filters: { 'id.eq': flId }, select:'*', limit:1 });
     const fl = Array.isArray(data) ? data[0] : data;
     if (!fl) return notFound('Functional Location', env);
+    if (!isAdmin && !isManager && session.customerId !== fl.client_id) return forbidden(env);
     return ok(fl, env);
   }
 
-  /* Write operations: admin/manager only */
-  if (!requireRole(session, ['admin','manager'])) return forbidden(env);
+  /* Write operations: admin only */
+  if (!isAdmin) return forbidden(env);
 
   if (!flId && method === 'POST') {
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON','BAD_JSON',env); }
@@ -44,6 +53,7 @@ export async function handleFunctionalLocations(request, env, path) {
       fl_id: { required: true, type:'string', minLength:1, maxLength:20 },
       name:  { required: true, type:'string', minLength:1, maxLength:100 },
       type:  { required: true, type:'string', enum: TYPES },
+      client_id: { required: true, type:'string', minLength:1, maxLength:20 },
     });
     if (!valid) return badReq(errors.join('; '),'VALIDATION',env);
     const { data: dup } = await db.from('functional_locations', { filters: { 'fl_id.ilike': body.fl_id }, select:'id', limit:1 });
