@@ -577,6 +577,7 @@ async function handleAssets(request, env, path) {
 
     // Strict client/location ownership: functional_location must belong to the same client
     if (body.functional_location) {
+      if (!body.client_id) return badReq('client_id is required when functional_location is set', 'VALIDATION', env);
       let { data: flRows } = await db.from('functional_locations', {
         filters: { 'fl_id.eq': body.functional_location },
         select: 'id,client_id,status',
@@ -585,14 +586,13 @@ async function handleAssets(request, env, path) {
       let fl = Array.isArray(flRows) ? flRows[0] : flRows;
       if (!fl) {
         const { data: byNameRows } = await db.from('functional_locations', {
-          filters: { 'name.ilike': body.functional_location },
+          filters: { 'name.ilike': body.functional_location, 'client_id.eq': body.client_id },
           select: 'id,client_id,status',
           limit: 1,
         });
         fl = Array.isArray(byNameRows) ? byNameRows[0] : byNameRows;
       }
       if (!fl) return badReq('Functional location not found', 'INVALID_LOCATION', env);
-      if (!body.client_id) return badReq('client_id is required when functional_location is set', 'VALIDATION', env);
       if (fl.client_id !== body.client_id) {
         return badReq('Functional location must belong to the same client', 'CLIENT_LOCATION_MISMATCH', env);
       }
@@ -606,7 +606,7 @@ async function handleAssets(request, env, path) {
         asset_number: assetNumber,
         name: body.name,
         asset_type: body.asset_type,
-        status: body.status || 'active',
+        status: body.status || 'operation',
         client_id: body.client_id || null,
         functional_location: body.functional_location || null,
         serial_number: body.serial_number || null,
@@ -658,6 +658,7 @@ async function handleAssets(request, env, path) {
     const effectiveClientId = body.client_id || existing.client_id;
     const effectiveLocation = body.functional_location || existing.functional_location;
     if (effectiveLocation) {
+      if (!effectiveClientId) return badReq('client_id is required when functional_location is set', 'VALIDATION', env);
       let { data: flRows } = await db.from('functional_locations', {
         filters: { 'fl_id.eq': effectiveLocation },
         select: 'id,client_id,status',
@@ -666,7 +667,7 @@ async function handleAssets(request, env, path) {
       let fl = Array.isArray(flRows) ? flRows[0] : flRows;
       if (!fl) {
         const { data: byNameRows } = await db.from('functional_locations', {
-          filters: { 'name.ilike': effectiveLocation },
+          filters: { 'name.ilike': effectiveLocation, 'client_id.eq': effectiveClientId },
           select: 'id,client_id,status',
           limit: 1,
         });
@@ -1392,6 +1393,7 @@ async function handleInspectors(request, env, path) {
 
 
 const FL_TYPES = ['Rig', 'Workshop', 'Yard', 'Warehouse', 'Other'];
+const FL_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function handleFunctionalLocations(request, env, path) {
   const session = await getSession(request, env);
@@ -1424,7 +1426,8 @@ async function handleFunctionalLocations(request, env, path) {
   }
 
   if (flId && method === 'GET') {
-    const { data } = await db.from('functional_locations', { filters: { 'id.eq': flId }, select: '*', limit: 1 });
+    const lookup = FL_UUID_RE.test(flId) ? { 'id.eq': flId } : { 'fl_id.eq': flId.toUpperCase() };
+    const { data } = await db.from('functional_locations', { filters: lookup, select: '*', limit: 1 });
     const fl = Array.isArray(data) ? data[0] : data;
     if (!fl) return notFound('Functional Location', env);
     if (!isAdmin && !isManager && session.customerId !== fl.client_id) return forbidden(env);
@@ -1460,7 +1463,8 @@ async function handleFunctionalLocations(request, env, path) {
   if (flId && method === 'PATCH') {
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
     const update = compact({ ...pick(body, ['name', 'type', 'status', 'client_id', 'notes']), updated_at: new Date().toISOString() });
-    const { data, error } = await db.update('functional_locations', update, { filters: { 'id.eq': flId } });
+    const lookup = FL_UUID_RE.test(flId) ? { 'id.eq': flId } : { 'fl_id.eq': flId.toUpperCase() };
+    const { data, error } = await db.update('functional_locations', update, { filters: lookup });
     if (error) return serverErr(env);
     const updated = Array.isArray(data) ? data[0] : data;
     if (!updated) return notFound('Functional Location', env);
@@ -1469,9 +1473,10 @@ async function handleFunctionalLocations(request, env, path) {
 
   if (flId && method === 'DELETE') {
     if (!requireRole(session, ['admin'])) return forbidden(env);
-    const { data: ex } = await db.from('functional_locations', { filters: { 'id.eq': flId }, select: 'id', limit: 1 });
+    const lookup = FL_UUID_RE.test(flId) ? { 'id.eq': flId } : { 'fl_id.eq': flId.toUpperCase() };
+    const { data: ex } = await db.from('functional_locations', { filters: lookup, select: 'id,fl_id', limit: 1 });
     if (!(Array.isArray(ex) ? ex[0] : ex)) return notFound('Functional Location', env);
-    await db.delete('functional_locations', { filters: { 'id.eq': flId } });
+    await db.delete('functional_locations', { filters: lookup });
     return ok({ id: flId, deleted: true }, env);
   }
 

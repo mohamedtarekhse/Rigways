@@ -124,6 +124,7 @@ export async function handleAssets(request, env, path) {
     if (!valid) return badReq(errors.join('; '),'VALIDATION',env);
 
     if (body.functional_location) {
+      if (!body.client_id) return badReq('client_id is required when functional_location is set','VALIDATION',env);
       let { data: flRows } = await db.from('functional_locations', {
         filters: { 'fl_id.eq': body.functional_location },
         select:'id,client_id,status',
@@ -132,12 +133,11 @@ export async function handleAssets(request, env, path) {
       let fl = Array.isArray(flRows) ? flRows[0] : flRows;
       if (!fl) {
         const { data: byNameRows } = await db.from('functional_locations', {
-          filters: { 'name.ilike': body.functional_location }, select:'id,client_id,status', limit:1,
+          filters: { 'name.ilike': body.functional_location, 'client_id.eq': body.client_id }, select:'id,client_id,status', limit:1,
         });
         fl = Array.isArray(byNameRows) ? byNameRows[0] : byNameRows;
       }
       if (!fl) return badReq('Functional location not found','INVALID_LOCATION',env);
-      if (!body.client_id) return badReq('client_id is required when functional_location is set','VALIDATION',env);
       if (fl.client_id !== body.client_id) return badReq('Functional location must belong to the same client','CLIENT_LOCATION_MISMATCH',env);
     }
 
@@ -149,7 +149,7 @@ export async function handleAssets(request, env, path) {
         asset_number:        assetNumber,
         name:                body.name,
         asset_type:          body.asset_type,
-        status:              body.status || 'active',
+        status:              body.status || 'operation',
         client_id:           body.client_id || null,
         functional_location: body.functional_location || null,
         serial_number:       body.serial_number || null,
@@ -200,13 +200,14 @@ export async function handleAssets(request, env, path) {
     const effectiveClientId = body.client_id || existing.client_id;
     const effectiveLocation = body.functional_location || existing.functional_location;
     if (effectiveLocation) {
+      if (!effectiveClientId) return badReq('client_id is required when functional_location is set','VALIDATION',env);
       let { data: flRows } = await db.from('functional_locations', {
         filters: { 'fl_id.eq': effectiveLocation }, select:'id,client_id,status', limit:1,
       });
       let fl = Array.isArray(flRows) ? flRows[0] : flRows;
       if (!fl) {
         const { data: byNameRows } = await db.from('functional_locations', {
-          filters: { 'name.ilike': effectiveLocation }, select:'id,client_id,status', limit:1,
+          filters: { 'name.ilike': effectiveLocation, 'client_id.eq': effectiveClientId }, select:'id,client_id,status', limit:1,
         });
         fl = Array.isArray(byNameRows) ? byNameRows[0] : byNameRows;
       }

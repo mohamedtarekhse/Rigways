@@ -173,10 +173,6 @@
       <!-- Client filter — admin/manager only -->
       <select class="sap-select" id="clientFilter" style="height:28px;font-size:12px;max-width:180px;display:none;" onchange="render()">
         <option value="all">All Clients</option>
-        <option value="C001">Acme Corp (C001)</option>
-        <option value="C002">Gulf Holdings (C002)</option>
-        <option value="C003">Delta Industries (C003)</option>
-        <option value="C004">Nile Ventures (C004)</option>
       </select>
       <div class="sap-search-box" style="width:220px;">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -261,10 +257,6 @@
           <label class="sap-label">Assigned Client <span class="required">*</span></label>
           <select id="f_loc_client" class="sap-select">
             <option value="">Select client…</option>
-            <option value="C001">Acme Corp (C001)</option>
-            <option value="C002">Gulf Holdings (C002)</option>
-            <option value="C003">Delta Industries (C003)</option>
-            <option value="C004">Nile Ventures (C004)</option>
           </select>
         </div>
         <div class="sap-field">
@@ -328,7 +320,7 @@ const DEFAULT_FUNC_LOCS = [
   { id:'FL-003', name:'Workshop A', type:'Workshop', client:'C001', desc:'Main maintenance workshop' },
   { id:'FL-004', name:'Workshop B', type:'Workshop', client:'C002', desc:'Heavy equipment workshop' },
 ];
-const CLIENTS_MAP = { C001:'Acme Corp', C002:'Gulf Holdings', C003:'Delta Industries', C004:'Nile Ventures' };
+let CLIENTS_MAP = {};
 
 /* ── Asset count per location ─────────────────────────────────
    assets.html writes a minimal snapshot to sap_assets_data on
@@ -368,7 +360,8 @@ function loadAssets() {
 function countAssetsForLoc(locName) {
   return loadAssets().filter(a => a.location === locName).length;
 }
-const CLIENT_COLORS = { C001:'#0070f2', C002:'#188918', C003:'#e76500', C004:'#bb0000' };
+let CLIENT_COLORS = {};
+let _clientsCache = null;
 
 let _locsCache = null;
 async function loadLocs() {
@@ -384,6 +377,65 @@ async function loadLocs() {
   return _locsCache;
 }
 function saveLocs() {} /* handled by API */
+
+function hydrateClientMaps(clients) {
+  CLIENTS_MAP = {};
+  CLIENT_COLORS = {};
+  (clients || []).forEach(c => {
+    const id = c.client_id || c.id;
+    if (!id) return;
+    CLIENTS_MAP[id] = c.name || id;
+    CLIENT_COLORS[id] = c.color || '#6a6d70';
+  });
+}
+
+function fillClientSelects(clients) {
+  const clientFilter = document.getElementById('clientFilter');
+  const formSelect = document.getElementById('f_loc_client');
+  if (!clientFilter || !formSelect) return;
+
+  const currentFilter = clientFilter.value || 'all';
+  const currentForm = formSelect.value || '';
+
+  clientFilter.innerHTML = `<option value="all">All Clients</option>`;
+  formSelect.innerHTML = `<option value="">Select client…</option>`;
+  (clients || []).forEach(c => {
+    const id = c.client_id || c.id;
+    if (!id) return;
+    const label = `${c.name || id} (${id})`;
+    clientFilter.insertAdjacentHTML('beforeend', `<option value="${id}">${label}</option>`);
+    formSelect.insertAdjacentHTML('beforeend', `<option value="${id}">${label}</option>`);
+  });
+
+  clientFilter.value = [...clientFilter.options].some(o => o.value === currentFilter) ? currentFilter : 'all';
+  formSelect.value = [...formSelect.options].some(o => o.value === currentForm) ? currentForm : '';
+}
+
+async function loadClients() {
+  if (_clientsCache) return _clientsCache;
+  let clients = [];
+  try {
+    const res = await apiFetch('/api/clients?limit=500');
+    const payload = await res.json();
+    if (payload?.success) {
+      const wrapped = payload.data || payload;
+      clients = wrapped.clients || [];
+    }
+  } catch (e) {}
+  if (!clients.length) {
+    const locs = await loadLocs();
+    const uniq = new Map();
+    locs.forEach(l => {
+      if (!l.client) return;
+      if (!uniq.has(l.client)) uniq.set(l.client, { client_id: l.client, name: l.client, color: '#6a6d70' });
+    });
+    clients = [...uniq.values()];
+  }
+  _clientsCache = clients;
+  hydrateClientMaps(clients);
+  fillClientSelects(clients);
+  return clients;
+}
 
 /* ── Auth ── */
 /* Session helpers — delegate to SapSession from app.js */
@@ -641,9 +693,10 @@ async function saveLocation() {
   const desc   = document.getElementById('f_loc_desc')?.value?.trim() || '';
   const editId = document.getElementById('editLocId')?.value || '';
   if (!name) { showToast('error','Required','Location name is required.'); return; }
+  if (!client) { showToast('error','Required','Assigned client is required.'); return; }
   const payload = {
     name, type,
-    client_id: client || null,
+    client_id: client,
     notes:     desc   || null,
     fl_id:     editId ? undefined : ('FL-' + Date.now().toString().slice(-4)),
     status:    'active',
@@ -758,7 +811,10 @@ document.addEventListener('DOMContentLoaded',()=>{
       `Your fleet locations — ${CLIENTS_MAP[session.customerId]||session.customerId}`;
   }
 
-  loadLocs().then(locs => { window._locsData = locs; render(); });
+  Promise.all([loadClients(), loadLocs()]).then(([, locs]) => {
+    window._locsData = locs;
+    render();
+  });
 
   document.querySelectorAll('.sap-modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
   document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.sap-modal-overlay.open').forEach(o=>o.classList.remove('open'));});
