@@ -1780,7 +1780,6 @@ function buildAssetCertHistory(assetId, currentCertId) {
       const adminActions = isAdmin() ? `
           <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:4px;">
             <button class="btn btn-ghost btn-sm" type="button" style="height:22px;padding:0 6px;font-size:10px;" onclick="openDeleteModal('${cert.certId}')" title="Delete file attachment">Delete File</button>
-            <button class="btn btn-danger btn-sm" type="button" style="height:22px;padding:0 6px;font-size:10px;" onclick="deleteCertificateRecord('${cert.certId}')" title="Delete certificate row">Delete Row</button>
           </div>` : '';
       rows += `
       <div class="hist-row${isCurrent ? ' hist-row--current' : ''}">

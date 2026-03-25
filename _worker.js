@@ -460,6 +460,51 @@ async function handleAssets(request, env, path) {
   const method = request.method;
   const db  = createSupabase(env);
   const url = new URL(request.url);
+
+  /* ── POST /api/assets/import/validate — server-side revalidation for mass upload ── */
+  if (path === '/assets/import/validate' && method === 'POST') {
+    if (!requireRole(session, ['admin'])) return forbidden(env);
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    const rows = Array.isArray(body?.rows) ? body.rows : [];
+    if (!rows.length) return ok({ rows: [] }, env);
+
+    const { data: existingRows } = await db.from('assets', {
+      select: 'id,asset_number,serial_number',
+      limit: 5000,
+    });
+    const existing = Array.isArray(existingRows) ? existingRows : [];
+    const byAsset = new Map(existing.map(r => [String(r.asset_number || '').toLowerCase(), r]));
+    const bySerial = new Map(existing.filter(r => r.serial_number).map(r => [String(r.serial_number || '').toLowerCase(), r]));
+    const seenAsset = new Set();
+    const seenSerial = new Set();
+
+    const out = rows.map((row, idx) => {
+      const assetNumber = String(row.asset_number || '').trim().toUpperCase();
+      const serial = String(row.serial_number || '').trim();
+      const errors = [];
+      const warnings = [];
+      if (!assetNumber) errors.push('asset_number is required');
+      if (!String(row.name || '').trim()) errors.push('name is required');
+      if (!String(row.asset_type || '').trim()) errors.push('asset_type is required');
+      if (!String(row.status || '').trim()) errors.push('status is required');
+      if (!String(row.client_id || '').trim()) errors.push('client_id is required');
+      if (!String(row.functional_location || '').trim()) errors.push('functional_location is required');
+      if (!serial) errors.push('serial_number is required');
+      if (row.asset_type && !ASSET_TYPES.includes(row.asset_type)) errors.push(`asset_type "${row.asset_type}" is not valid`);
+      if (row.status && !ASSET_STATUSES.includes(String(row.status).toLowerCase())) errors.push(`status "${row.status}" is not valid`);
+      if (!String(row.manufacturer || '').trim()) warnings.push('manufacturer is empty');
+      if (!String(row.model || '').trim()) warnings.push('model is empty');
+      const assetKey = assetNumber.toLowerCase();
+      const serialKey = serial.toLowerCase();
+      const duplicate = Boolean((assetKey && byAsset.has(assetKey)) || (serialKey && bySerial.has(serialKey)) || seenAsset.has(assetKey) || seenSerial.has(serialKey));
+      if (assetKey) seenAsset.add(assetKey);
+      if (serialKey) seenSerial.add(serialKey);
+
+      const status = errors.length ? 'error' : (duplicate ? 'duplicate' : (warnings.length ? 'warning' : 'valid'));
+      return { index: idx, status, errors, warnings, duplicate, duplicate_by: duplicate ? 'asset_number_or_serial_number' : null };
+    });
+    return ok({ rows: out }, env);
+  }
   /* ── GET /api/assets/stats — dashboard KPIs ── */
   if (path === '/assets/stats' && method === 'GET') {
     const filters = {};
