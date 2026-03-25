@@ -1519,7 +1519,7 @@ function openCV(id) {
   const insp = INSPECTORS.find(i => i.inspectorId === id);
   if (!insp) return;
   if (insp.cvKey && insp._uuid) {
-    window.open('/api/inspectors/file/' + encodeURIComponent(insp._uuid) + '?key=' + encodeURIComponent(insp.cvKey) + '&name=' + encodeURIComponent(insp.cvFile || 'cv'), '_blank');
+    openProtectedInspectorFile(insp._uuid, insp.cvKey, insp.cvFile || 'cv');
     return;
   }
   if (insp.cvUrl && /^https?:\/\//i.test(insp.cvUrl)) { safeOpen(insp.cvUrl); return; }
@@ -1553,8 +1553,29 @@ async function uploadInspectorFile(file, { category, label }) {
   return out.data || out;
 }
 
+async function openProtectedInspectorFile(inspectorUuid, key, fileName) {
+  try {
+    const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
+    const res = await fetch('/api/inspectors/file/' + encodeURIComponent(inspectorUuid) + '?key=' + encodeURIComponent(key) + '&name=' + encodeURIComponent(fileName || 'file'), {
+      headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+    });
+    if (!res.ok) {
+      let msg = 'Could not open file.';
+      try { const j = await res.json(); msg = (j.data || j).error || msg; } catch(e) {}
+      showToast('error', 'Open Failed', msg);
+      return;
+    }
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank', 'noopener');
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch (e) {
+    showToast('error', 'Open Failed', 'Could not open file. Please try again.');
+  }
+}
+
 /* FIX #3 + #4: Read from data attributes (no user data in JS strings) + validate URL scheme */
-function openTCLinkFromEl(el) {
+async function openTCLinkFromEl(el) {
   const url  = el.dataset.tcurl  || '';
   const file = el.dataset.tcfile || '';
   const name = el.dataset.tcname || '';
@@ -1562,7 +1583,7 @@ function openTCLinkFromEl(el) {
   if (url) {
     if (/^https?:\/\//i.test(url)) { safeOpen(url); return; }
     if (inspectorUuid) {
-      window.open('/api/inspectors/file/' + encodeURIComponent(inspectorUuid) + '?key=' + encodeURIComponent(url) + '&name=' + encodeURIComponent(file || name || 'certificate'), '_blank');
+      await openProtectedInspectorFile(inspectorUuid, url, file || name || 'certificate');
       return;
     }
     return;
