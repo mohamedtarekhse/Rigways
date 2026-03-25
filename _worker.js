@@ -432,8 +432,8 @@ async function handleUsers(request, env, path) {
 
 
 
-const ASSET_TYPES = ['Equipment', 'Vehicle', 'Facility', 'Tool', 'IT', 'Other'];
-const ASSET_STATUSES = ['active', 'inactive', 'maintenance', 'decommissioned'];
+const ASSET_TYPES = ['Hoisting Equipment','Drilling Equipment','Mud System Low Pressure','Mud System High Pressure','Wirelines','Structure','Well Control','Tubular'];
+const ASSET_STATUSES = ['operation', 'stacked'];
 
 // Resolve AST-number (e.g. AST-0001) to UUID for DB operations
 // Returns the UUID or the original value if it's already a UUID
