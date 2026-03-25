@@ -1310,8 +1310,51 @@ async function handleInspectors(request, env, path) {
   const method = request.method;
   const db = createSupabase(env);
   const url = new URL(request.url);
+  const cvM = path.match(/^\/inspectors\/cv\/([^/]+)$/);
+  const cvId = cvM?.[1];
   const idM = path.match(/^\/inspectors\/([^/]+)$/);
   const iid = idM?.[1];
+
+  if (path === '/inspectors/upload-cv' && method === 'POST') {
+    if (!requireRole(session, ['admin'])) return forbidden(env);
+    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    let formData;
+    try { formData = await request.formData(); } catch { return badReq('Invalid form data', 'BAD_FORM_DATA', env); }
+    const file = formData.get('file');
+    if (!file || typeof file === 'string') return badReq('No file provided', 'NO_FILE', env);
+    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!allowedTypes.includes(file.type)) return badReq('Invalid file type. Allowed: PDF, DOC, DOCX', 'INVALID_TYPE', env);
+    if (file.size > 10 * 1024 * 1024) return badReq('File too large (max 10MB)', 'FILE_TOO_LARGE', env);
+    const ext = (file.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const safeName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9-_]+/g, '_').slice(0, 80) || 'cv';
+    const key = `inspectors/cv/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeName}.${ext}`;
+    try {
+      await env.CERT_BUCKET.put(key, await file.arrayBuffer(), {
+        httpMetadata: { contentType: file.type },
+        customMetadata: { originalName: file.name, uploadedBy: session.sub },
+      });
+    } catch {
+      return badReq('CV upload failed', 'UPLOAD_FAILED', env);
+    }
+    return ok({ cv_file: file.name, cv_url: key }, env);
+  }
+
+  if (cvId && method === 'GET') {
+    const idFilter = cvId.includes('-') ? { 'id.eq': cvId } : { 'inspector_number.eq': cvId };
+    const { data } = await db.from('inspectors', { filters: idFilter, select: 'id,cv_file,cv_url', limit: 1 });
+    const insp = Array.isArray(data) ? data[0] : data;
+    if (!insp) return notFound('Inspector', env);
+    if (!insp.cv_url) return notFound('CV file', env);
+    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    const obj = await env.CERT_BUCKET.get(insp.cv_url);
+    if (!obj) return notFound('CV file', env);
+    return new Response(obj.body, {
+      headers: {
+        'Content-Type': obj.httpMetadata?.contentType || 'application/octet-stream',
+        'Content-Disposition': `inline; filename="${insp.cv_file || 'inspector-cv'}"`,
+      },
+    });
+  }
 
   if (!iid && method === 'GET') {
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 200);

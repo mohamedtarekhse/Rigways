@@ -1174,19 +1174,23 @@ async function loadNotifications() {
     // Load DB notifications + expiring certs + expired certs in parallel
     const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
 
-    const [notifRes, expiringRes, expiredRes] = await Promise.all([
+    const [notifRes, expiringRes, expiredRes, assetsRes] = await Promise.all([
       apiFetch('/api/notifications?limit=200'),
       apiFetch('/api/certificates/expiring?days=30'),
       apiFetch('/api/certificates?approval_status=approved&limit=200'),
+      apiFetch('/api/assets?limit=5000'),
     ]);
 
     const nd = (await notifRes.json());
     const ed = (await expiringRes.json());
     const ad = (await expiredRes.json());
+    const as = (await assetsRes.json());
 
     const dbNotifs  = ((nd.data || nd).notifications || nd.data || []);
     const expiring  = ((ed.data || ed).certificates  || []);
     const allCerts  = ((ad.data || ad).certificates  || []);
+    const allAssets = ((as.data || as).assets || []);
+    const assetNumberById = new Map((Array.isArray(allAssets) ? allAssets : []).map(a => [a.id, a.asset_number || a.id]));
 
     // Today for expiry math
     const todayMs = new Date().setHours(0,0,0,0);
@@ -1199,11 +1203,12 @@ async function loadNotifications() {
       const expiryMs = new Date(cert.expiry_date).setHours(0,0,0,0);
       const days     = Math.ceil((expiryMs - todayMs) / 86400000);
       const priority = days <= 7 ? 'critical' : days <= 14 ? 'high' : 'medium';
+      const assetLabel = assetNumberById.get(cert.asset_id) || cert.asset_id || '—';
       expiryNotifs.push({
         id:        'exp-' + cert.id,
         type:      'expiry',
         titleEn:   `Certificate Expiring: ${cert.name || cert.cert_number || cert.id}`,
-        descEn:    `Expires on ${cert.expiry_date} — ${days} day${days !== 1 ? 's' : ''} remaining. Asset: ${cert.asset_id || '—'}`,
+        descEn:    `Expires on ${cert.expiry_date} — ${days} day${days !== 1 ? 's' : ''} remaining. Asset: ${assetLabel}`,
         priority,
         daysLeft:  days,
         client:    cert.client_id,
@@ -1223,11 +1228,12 @@ async function loadNotifications() {
       const expiryMs = new Date(cert.expiry_date).setHours(0,0,0,0);
       const days     = Math.ceil((expiryMs - todayMs) / 86400000);
       if (days < 0) {
+        const assetLabel = assetNumberById.get(cert.asset_id) || cert.asset_id || '—';
         expiryNotifs.push({
           id:        'expired-' + cert.id,
           type:      'expiry',
           titleEn:   `Certificate EXPIRED: ${cert.name || cert.cert_number || cert.id}`,
-          descEn:    `Expired on ${cert.expiry_date} — ${Math.abs(days)} day${Math.abs(days) !== 1 ? 's' : ''} overdue. Immediate renewal required.`,
+          descEn:    `Expired on ${cert.expiry_date} — ${Math.abs(days)} day${Math.abs(days) !== 1 ? 's' : ''} overdue. Asset: ${assetLabel}. Immediate renewal required.`,
           priority:  'critical',
           daysLeft:  days,
           client:    cert.client_id,
