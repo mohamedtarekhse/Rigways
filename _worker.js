@@ -460,6 +460,51 @@ async function handleAssets(request, env, path) {
   const method = request.method;
   const db  = createSupabase(env);
   const url = new URL(request.url);
+
+  /* ── POST /api/assets/import/validate — server-side revalidation for mass upload ── */
+  if (path === '/assets/import/validate' && method === 'POST') {
+    if (!requireRole(session, ['admin'])) return forbidden(env);
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    const rows = Array.isArray(body?.rows) ? body.rows : [];
+    if (!rows.length) return ok({ rows: [] }, env);
+
+    const { data: existingRows } = await db.from('assets', {
+      select: 'id,asset_number,serial_number',
+      limit: 5000,
+    });
+    const existing = Array.isArray(existingRows) ? existingRows : [];
+    const byAsset = new Map(existing.map(r => [String(r.asset_number || '').toLowerCase(), r]));
+    const bySerial = new Map(existing.filter(r => r.serial_number).map(r => [String(r.serial_number || '').toLowerCase(), r]));
+    const seenAsset = new Set();
+    const seenSerial = new Set();
+
+    const out = rows.map((row, idx) => {
+      const assetNumber = String(row.asset_number || '').trim().toUpperCase();
+      const serial = String(row.serial_number || '').trim();
+      const errors = [];
+      const warnings = [];
+      if (!assetNumber) errors.push('asset_number is required');
+      if (!String(row.name || '').trim()) errors.push('name is required');
+      if (!String(row.asset_type || '').trim()) errors.push('asset_type is required');
+      if (!String(row.status || '').trim()) errors.push('status is required');
+      if (!String(row.client_id || '').trim()) errors.push('client_id is required');
+      if (!String(row.functional_location || '').trim()) errors.push('functional_location is required');
+      if (!serial) errors.push('serial_number is required');
+      if (row.asset_type && !ASSET_TYPES.includes(row.asset_type)) errors.push(`asset_type "${row.asset_type}" is not valid`);
+      if (row.status && !ASSET_STATUSES.includes(String(row.status).toLowerCase())) errors.push(`status "${row.status}" is not valid`);
+      if (!String(row.manufacturer || '').trim()) warnings.push('manufacturer is empty');
+      if (!String(row.model || '').trim()) warnings.push('model is empty');
+      const assetKey = assetNumber.toLowerCase();
+      const serialKey = serial.toLowerCase();
+      const duplicate = Boolean((assetKey && byAsset.has(assetKey)) || (serialKey && bySerial.has(serialKey)) || seenAsset.has(assetKey) || seenSerial.has(serialKey));
+      if (assetKey) seenAsset.add(assetKey);
+      if (serialKey) seenSerial.add(serialKey);
+
+      const status = errors.length ? 'error' : (duplicate ? 'duplicate' : (warnings.length ? 'warning' : 'valid'));
+      return { index: idx, status, errors, warnings, duplicate, duplicate_by: duplicate ? 'asset_number_or_serial_number' : null };
+    });
+    return ok({ rows: out }, env);
+  }
   /* ── GET /api/assets/stats — dashboard KPIs ── */
   if (path === '/assets/stats' && method === 'GET') {
     const filters = {};
@@ -738,6 +783,24 @@ async function handleCertificates(request, env, path) {
   const db = createSupabase(env);
   const url = new URL(request.url);
 
+  /* ── GET /api/certificates/history/export — all certificates history snapshot ── */
+  if (path === '/certificates/history/export' && method === 'GET') {
+    if (!requireRole(session, ['admin', 'manager', 'technician'])) return forbidden(env);
+    const filters = {};
+    if (['user', 'technician'].includes(session.role) && session.customerId)
+      filters['client_id.eq'] = session.customerId;
+    const { data, error } = await db.from('certificate_history', {
+      select: '*',
+      filters,
+      order: 'changed_at.desc',
+      limit: Math.min(parseInt(url.searchParams.get('limit') || '2000', 10), 5000),
+    });
+    if (error) return serverErr(env);
+    const rows = Array.isArray(data) ? data : [];
+    const withNames = await _withUploaderUsername(db, rows, 'changed_by');
+    return ok({ history: withNames }, env);
+  }
+
   /* ── GET /api/certificates/expiring?days=30 — dashboard widget ── */
   if (path === '/certificates/expiring' && method === 'GET') {
     const days = parseInt(url.searchParams.get('days') || '30');
@@ -771,6 +834,8 @@ async function handleCertificates(request, env, path) {
 
   const idM = path.match(/^\/certificates\/([^/]+)$/);
   const certId = idM?.[1];
+  const fileDeleteM = path.match(/^\/certificates\/([^/]+)\/file$/);
+  const fileDeleteId = fileDeleteM?.[1];
 
   /* LIST */
   if (!certId && method === 'GET') {
@@ -786,7 +851,9 @@ async function handleCertificates(request, env, path) {
       filters['client_id.eq'] = url.searchParams.get('client_id');
     const { data, error } = await db.from('certificates', { select: '*', filters, limit, offset, order: 'expiry_date.asc' });
     if (error) return serverErr(env);
-    return ok({ certificates: data || [], limit, offset }, env);
+    const certs = Array.isArray(data) ? data : [];
+    const withNames = await _withUploaderUsername(db, certs, 'uploaded_by');
+    return ok({ certificates: withNames, limit, offset }, env);
   }
 
   /* GET ONE */
@@ -796,7 +863,8 @@ async function handleCertificates(request, env, path) {
     if (!cert) return notFound('Certificate', env);
     if (['user', 'technician'].includes(session.role) && session.customerId && cert.client_id !== session.customerId)
       return forbidden(env);
-    return ok(cert, env);
+    const [withNames] = await _withUploaderUsername(db, [cert], 'uploaded_by');
+    return ok(withNames || cert, env);
   }
 
   /* CREATE */
@@ -842,6 +910,7 @@ async function handleCertificates(request, env, path) {
     });
     if (error) return serverErr(env);
     const cert = Array.isArray(data) ? data[0] : data;
+    await _recordCertificateHistory(db, cert, session, 'create');
 
     // Notify managers/admins about pending certs
     if (cert.approval_status === 'pending') await _notifyApprovers(db, session, cert);
@@ -875,6 +944,7 @@ async function handleCertificates(request, env, path) {
     const { data, error } = await db.update('certificates', update, { filters: { 'id.eq': certId } });
     if (error) return serverErr(env);
     const updated = Array.isArray(data) ? data[0] : data;
+    await _recordCertificateHistory(db, updated || existing, session, 'update');
 
     // Notify uploader of decision
     if (body.approval_status && body.approval_status !== existing.approval_status && existing.uploaded_by)
@@ -884,39 +954,91 @@ async function handleCertificates(request, env, path) {
     return ok(updated || existing, env);
   }
 
-  /* DELETE — admin anytime; technician within 24 hrs of upload (own records only); manager/user forbidden */
-  if (certId && method === 'DELETE') {
-    // Only admin and technician can delete
+  /* DELETE FILE ONLY — admin anytime; technician within 24hrs own record only */
+  if (fileDeleteId && method === 'DELETE') {
     if (!requireRole(session, ['admin', 'technician'])) return forbidden(env);
 
-    // Fetch the full record so we can check ownership, timing, and get the file key
     const { data: ex } = await db.from('certificates', {
-      filters: { 'id.eq': certId },
-      select: 'id,file_url,uploaded_by,created_at',
+      filters: { 'id.eq': fileDeleteId },
+      select: 'id,name,file_name,file_url,uploaded_by,created_at,approval_status,client_id',
       limit: 1,
     });
     const existing = Array.isArray(ex) ? ex[0] : ex;
     if (!existing) return notFound('Certificate', env);
+    if (!existing.file_url && !existing.file_name) return ok({ id: fileDeleteId, file_deleted: false, message: 'No file attached' }, env);
 
     if (session.role === 'technician') {
-      // Must be the uploader
       if (existing.uploaded_by !== session.sub) return forbidden(env);
-      // Must be within 24 hours of creation
       const ageHours = (Date.now() - new Date(existing.created_at).getTime()) / 3600000;
       if (ageHours > 24) {
         return json({ success: false, error: 'Delete window has expired (24 hours from upload)', code: 'WINDOW_EXPIRED' }, 403, env);
       }
     }
+    if (['user', 'technician'].includes(session.role) && session.customerId && existing.client_id !== session.customerId)
+      return forbidden(env);
 
-    // Delete file from R2 if one exists
     if (existing.file_url && env.CERT_BUCKET) {
       try { await env.CERT_BUCKET.delete(existing.file_url); }
-      catch(e) { console.warn('R2 delete warning:', e.message); }
+      catch (e) { console.warn('R2 delete warning:', e.message); }
     }
 
-    // Delete the DB record
+    const { data: updatedRows, error: updateErr } = await db.update('certificates', {
+      file_name: null,
+      file_url: null,
+      updated_at: new Date().toISOString(),
+    }, { filters: { 'id.eq': fileDeleteId } });
+    if (updateErr) return serverErr(env);
+    const updated = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows;
+    await _recordCertificateHistory(db, updated || existing, session, 'file_deleted');
+    return ok({ id: fileDeleteId, file_deleted: true, certificate: updated || existing }, env);
+  }
+
+  /* DELETE — admin anytime; technician within 24 hrs of upload (own records only); manager/user forbidden */
+  if (certId && method === 'DELETE') {
+    // Record delete is admin-only. Optional scope: ?delete_scope=asset (delete all certs for same asset).
+    if (!requireRole(session, ['admin'])) return forbidden(env);
+    const deleteScope = (url.searchParams.get('delete_scope') || '').toLowerCase();
+
+    // Fetch the full record so we can check ownership, timing, and get the file key
+    const { data: ex } = await db.from('certificates', {
+      filters: { 'id.eq': certId },
+      select: 'id,asset_id,file_url,uploaded_by,created_at',
+      limit: 1,
+    });
+    const existing = Array.isArray(ex) ? ex[0] : ex;
+    if (!existing) return notFound('Certificate', env);
+    if (deleteScope === 'asset') {
+      const { data: relRows, error: relErr } = await db.from('certificates', {
+        filters: { 'asset_id.eq': existing.asset_id },
+        select: '*',
+        limit: 5000,
+      });
+      if (relErr) return serverErr(env);
+      const related = Array.isArray(relRows) ? relRows : [];
+      for (const cert of related) {
+        if (cert.file_url && env.CERT_BUCKET) {
+          try { await env.CERT_BUCKET.delete(cert.file_url); }
+          catch (e) { console.warn('R2 delete warning:', e.message); }
+        }
+        await _recordCertificateHistory(db, cert, session, 'record_deleted');
+      }
+      await db.delete('certificates', { filters: { 'asset_id.eq': existing.asset_id } });
+      return ok({
+        deleted_scope: 'asset',
+        asset_id: existing.asset_id,
+        deleted_count: related.length,
+        deleted_ids: related.map(r => r.id),
+      }, env);
+    }
+
+    // Delete one certificate row
+    if (existing.file_url && env.CERT_BUCKET) {
+      try { await env.CERT_BUCKET.delete(existing.file_url); }
+      catch (e) { console.warn('R2 delete warning:', e.message); }
+    }
+    await _recordCertificateHistory(db, { ...existing, id: certId }, session, 'record_deleted');
     await db.delete('certificates', { filters: { 'id.eq': certId } });
-    return ok({ id: certId, deleted: true }, env);
+    return ok({ id: certId, deleted: true, deleted_scope: 'single' }, env);
   }
 
   return badReq('Not found', 'NOT_FOUND', env);
@@ -942,6 +1064,73 @@ async function _notifyUser(db, userId, type, title, body, refType, refId) {
   try {
     await db.insert('notifications', { user_id: userId, type, title, body, ref_type: refType, ref_id: refId, is_read: false });
   } catch (e) { console.warn('Notify failed:', e); }
+}
+
+async function _withUploaderUsername(db, rows, field = 'uploaded_by') {
+  if (!Array.isArray(rows) || !rows.length) return [];
+  const userIds = [...new Set(rows.map(r => r?.[field]).filter(Boolean))];
+  if (!userIds.length) return rows.map(r => ({ ...r, uploaded_by_username: null }));
+  const { data: users } = await db.from('users', {
+    select: 'id,username',
+    filters: { 'id.in': userIds },
+    limit: userIds.length + 5,
+  });
+  const map = new Map((Array.isArray(users) ? users : []).map(u => [u.id, u.username]));
+  return rows.map(r => ({
+    ...r,
+    uploaded_by_username: field === 'uploaded_by' ? (map.get(r.uploaded_by) || null) : undefined,
+    changed_by_username: field === 'changed_by' ? (map.get(r.changed_by) || null) : undefined,
+  }));
+}
+
+async function _recordCertificateHistory(db, cert, session, action) {
+  try {
+    if (!cert?.id) return;
+    const snapshot = _createHistorySnapshot(cert);
+    await db.insert('certificate_history', {
+      certificate_id: cert.id,
+      cert_number: cert.cert_number || null,
+      name: cert.name || null,
+      cert_type: cert.cert_type || null,
+      asset_id: cert.asset_id || null,
+      client_id: cert.client_id || null,
+      issued_by: cert.issued_by || null,
+      issue_date: cert.issue_date || null,
+      expiry_date: cert.expiry_date || null,
+      approval_status: cert.approval_status || null,
+      file_name: cert.file_name || null,
+      file_url: cert.file_url || null,
+      action_type: action,
+      changed_by: session?.sub || null,
+      changed_at: new Date().toISOString(),
+      snapshot_json: snapshot,
+    });
+  } catch (e) { console.warn('Certificate history write failed:', e); }
+}
+
+function _createHistorySnapshot(cert) {
+  return {
+    id: cert.id || null,
+    cert_number: cert.cert_number || null,
+    name: cert.name || null,
+    cert_type: cert.cert_type || null,
+    asset_id: cert.asset_id || null,
+    client_id: cert.client_id || null,
+    inspector_id: cert.inspector_id || null,
+    issued_by: cert.issued_by || null,
+    issue_date: cert.issue_date || null,
+    expiry_date: cert.expiry_date || null,
+    file_name: cert.file_name || null,
+    file_url: cert.file_url || null,
+    notes: cert.notes || null,
+    approval_status: cert.approval_status || null,
+    rejection_reason: cert.rejection_reason || null,
+    uploaded_by: cert.uploaded_by || null,
+    reviewed_by: cert.reviewed_by || null,
+    reviewed_at: cert.reviewed_at || null,
+    created_at: cert.created_at || null,
+    updated_at: cert.updated_at || null,
+  };
 }
 
 // ── clients.js ──

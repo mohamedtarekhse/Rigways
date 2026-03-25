@@ -337,12 +337,14 @@
       max-width: 140px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .import-row--ok    { background: #fff; }
-    .import-row--ok:hover { background: #f8fffa; }
+    .import-row--valid    { background: #fff; }
+    .import-row--valid:hover { background: #f8fffa; }
+    .import-row--warning { background: #fffdf0; }
+    .import-row--warning:hover { background: #fff8d6; }
     .import-row--error { background: #fff8f8; }
     .import-row--error:hover { background: #fff0f0; }
-    .import-row--dup   { background: #fffdf0; }
-    .import-row--dup:hover { background: #fff8d6; }
+    .import-row--duplicate   { background: #fffdf0; }
+    .import-row--duplicate:hover { background: #fff8d6; }
     .import-row--skipped { background: #f5f6f7; opacity: .6; }
 
     .row-status {
@@ -2487,6 +2489,10 @@ let _importFile = null;
 
 /* ── Open / close ── */
 function openImportModal() {
+  if (session?.role !== 'admin') {
+    showToast('error','Not Allowed','Only admins can use mass upload.');
+    return;
+  }
   _importRows = [];
   _importStep = 1;
   _importFile = null;
@@ -2639,10 +2645,12 @@ function parseCsvRow(line) {
 /* ── Validate rows ── */
 function validateImportRows(rawRows) {
   const existingNums = new Set(ASSETS.map(a => (a.assetId||a.asset_number||'').toLowerCase()));
+  const existingSerials = new Set(ASSETS.map(a => (a.serial||a.serial_number||'').toLowerCase()).filter(Boolean));
   const seenInBatch  = new Set();
+  const seenSerialInBatch = new Set();
 
   return rawRows.map((row, i) => {
-    const r = { rowNum: i+2, raw: row, errors: [], status: 'ok', dupAction: 'overwrite', skip: false };
+    const r = { rowNum: i+2, raw: row, errors: [], warnings: [], rowState: 'valid', dupAction: 'overwrite', skip: false };
     /* Normalize column names — flexible matching */
     const get = (...keys) => {
       for (const k of keys) {
@@ -2677,16 +2685,47 @@ function validateImportRows(rawRows) {
     if (r.status && !VALID_STATUSES.includes(r.status))
       r.errors.push(`status must be "operation" or "stacked"`);
 
-    if (r.errors.length) { r.status = 'error'; return r; }
+    if (!r.manufacturer) r.warnings.push('manufacturer is empty');
+    if (!r.model)        r.warnings.push('model is empty');
+
+    if (r.errors.length) { r.rowState = 'error'; return r; }
 
     /* Duplicate detection */
     const key = r.asset_number.toLowerCase();
-    if (existingNums.has(key)) { r.status = 'dup'; r.dupAction = 'overwrite'; }
-    else if (seenInBatch.has(key)) { r.status = 'dup'; r.dupAction = 'overwrite'; r.errors.push('Duplicate asset_number within this file'); }
+    const serialKey = (r.serial_number || '').toLowerCase();
+    if (existingNums.has(key) || (serialKey && existingSerials.has(serialKey))) {
+      r.rowState = 'duplicate'; r.dupAction = 'overwrite';
+    }
+    else if (seenInBatch.has(key) || (serialKey && seenSerialInBatch.has(serialKey))) {
+      r.rowState = 'duplicate'; r.dupAction = 'overwrite'; r.errors.push('Duplicate asset_number/serial_number within this file');
+    }
     else seenInBatch.add(key);
+    if (serialKey) seenSerialInBatch.add(serialKey);
+
+    if (r.rowState === 'valid' && r.warnings.length) r.rowState = 'warning';
 
     return r;
   });
+}
+
+async function serverRevalidateRows(rows) {
+  const payloadRows = rows.map(r => ({
+    asset_number: r.asset_number,
+    name: r.name,
+    asset_type: r.asset_type,
+    status: r.status,
+    client_id: r.client_id,
+    functional_location: r.functional_location,
+    serial_number: r.serial_number,
+    manufacturer: r.manufacturer,
+    model: r.model,
+  }));
+  const res = await apiFetch('/api/assets/import/validate', {
+    method: 'POST',
+    body: JSON.stringify({ rows: payloadRows }),
+  });
+  const data = await res.json();
+  return data?.data?.rows || data?.rows || [];
 }
 
 /* ── Build preview table ── */
@@ -2694,7 +2733,7 @@ function buildPreviewTable() {
   const tbody = document.getElementById('importPreviewBody');
   if (!tbody) return;
 
-  const dupRows = _importRows.filter(r => r.status === 'dup');
+  const dupRows = _importRows.filter(r => r.rowState === 'duplicate');
   const dupBar  = document.getElementById('importDupBar');
   if (dupRows.length) {
     dupBar.classList.add('visible');
@@ -2704,22 +2743,26 @@ function buildPreviewTable() {
   }
 
   tbody.innerHTML = _importRows.map((r,i) => {
-    const cls = r.skip ? 'import-row--skipped' : `import-row--${r.status}`;
+    const cls = r.skip ? 'import-row--skipped' : `import-row--${r.rowState}`;
     const statusHtml = r.skip
       ? `<span class="row-status row-status--skipped">Skipped</span>`
-      : r.status === 'ok'
-        ? `<span class="row-status row-status--ok">✓ OK</span>`
-        : r.status === 'dup'
+      : r.rowState === 'valid'
+        ? `<span class="row-status row-status--ok">✓ Valid</span>`
+        : r.rowState === 'warning'
+          ? `<span class="row-status row-status--dup">⚠ Warning</span>`
+        : r.rowState === 'duplicate'
           ? `<span class="row-status row-status--dup">⚠ Duplicate</span>`
           : `<span class="row-status row-status--error">✗ Error</span>`;
 
-    const actionCell = r.status === 'dup'
+    const actionCell = r.rowState === 'duplicate'
       ? `<select class="dup-action-select" onchange="setDupAction(${i},this.value)" title="What to do with this duplicate">
           <option value="overwrite" ${r.dupAction==='overwrite'?'selected':''}>Overwrite</option>
           <option value="skip" ${r.dupAction==='skip'?'selected':''}>Skip</option>
         </select>`
-      : r.status === 'error'
+      : r.rowState === 'error'
         ? `<div class="cell-error">${r.errors.map(e => h(e)).join('<br/>')}</div>`
+        : r.rowState === 'warning'
+          ? `<div class="cell-error" style="color:var(--sap-warning);">${(r.warnings||[]).map(e => h(e)).join('<br/>')}</div>`
         : '';
 
     const cols = ['asset_number','name','asset_type','status','client_id','functional_location','serial_number','manufacturer','model','description','notes'];
@@ -2740,14 +2783,16 @@ function buildPreviewTable() {
 
 function updateImportSummary() {
   const total   = _importRows.length;
-  const errors  = _importRows.filter(r => r.status==='error').length;
-  const dups    = _importRows.filter(r => r.status==='dup').length;
+  const errors  = _importRows.filter(r => r.rowState==='error').length;
+  const warnings= _importRows.filter(r => r.rowState==='warning').length;
+  const dups    = _importRows.filter(r => r.rowState==='duplicate').length;
   const skipped = _importRows.filter(r => r.skip).length;
-  const ok      = total - errors - skipped;
+  const valid   = _importRows.filter(r => r.rowState==='valid').length;
 
   document.getElementById('importSummaryBar').innerHTML = `
     <div class="import-stat import-stat--total">📊 ${total} rows total</div>
-    <div class="import-stat import-stat--ok">✓ ${ok} will import</div>
+    <div class="import-stat import-stat--ok">✓ ${valid} valid</div>
+    ${warnings ? `<div class="import-stat import-stat--dup">⚠ ${warnings} warning</div>` : ''}
     ${errors ? `<div class="import-stat import-stat--error">✗ ${errors} invalid</div>` : ''}
     ${dups   ? `<div class="import-stat import-stat--dup">⚠ ${dups} duplicates</div>` : ''}
     ${skipped? `<div class="import-stat import-stat--skipped">— ${skipped} skipped</div>` : ''}
@@ -2756,7 +2801,7 @@ function updateImportSummary() {
 }
 
 function updateImportFooter() {
-  const importable = _importRows.filter(r => !r.skip && r.status !== 'error').length;
+  const importable = _importRows.filter(r => !r.skip && r.rowState !== 'error').length;
   const btn = document.getElementById('importConfirmBtn');
   const lbl = document.getElementById('importConfirmLabel');
   if (btn && lbl) {
@@ -2776,20 +2821,20 @@ function toggleSkipRow(idx, checked) {
   const rows = document.querySelectorAll('#importPreviewBody tr[data-idx]');
   rows.forEach(tr => {
     if (parseInt(tr.dataset.idx) === idx) {
-      tr.className = checked ? 'import-row--skipped' : `import-row--${_importRows[idx].status}`;
+      tr.className = checked ? 'import-row--skipped' : `import-row--${_importRows[idx].rowState}`;
     }
   });
   updateImportSummary();
 }
 
 function importToggleSelectAll(cb) {
-  _importRows.forEach((r, i) => { if (r.status !== 'error') r.skip = cb.checked; });
+  _importRows.forEach((r, i) => { if (r.rowState !== 'error') r.skip = cb.checked; });
   buildPreviewTable();
   document.getElementById('importSelectAllChk').checked = cb.checked;
 }
 
 function massSetDupAction(action) {
-  _importRows.forEach(r => { if (r.status === 'dup') r.dupAction = action; });
+  _importRows.forEach(r => { if (r.rowState === 'duplicate') r.dupAction = action; });
   buildPreviewTable();
 }
 
@@ -2805,6 +2850,17 @@ async function importGoStep(n) {
       const rawRows = await parseImportFile(_importFile);
       if (!rawRows.length) { showToast('error','Empty File','No data rows found in the file.'); document.getElementById('importNextBtn').disabled=false; document.getElementById('importNextBtn').innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview File'; return; }
       _importRows = validateImportRows(rawRows);
+      const serverRows = await serverRevalidateRows(_importRows);
+      serverRows.forEach(sr => {
+        const row = _importRows[sr.index];
+        if (!row) return;
+        row.errors = [...new Set([...(row.errors || []), ...((sr.errors) || [])])];
+        row.warnings = [...new Set([...(row.warnings || []), ...((sr.warnings) || [])])];
+        if (row.errors.length) row.rowState = 'error';
+        else if (sr.status === 'duplicate') row.rowState = 'duplicate';
+        else if (row.warnings.length || sr.status === 'warning') row.rowState = 'warning';
+        else row.rowState = 'valid';
+      });
     } catch(err) {
       showToast('error','Parse Error', err.message || 'Could not read file.');
       document.getElementById('importNextBtn').disabled=false;
@@ -2839,7 +2895,19 @@ async function importGoStep(n) {
 
 /* ── Run import ── */
 async function runImport() {
-  const toImport = _importRows.filter(r => !r.skip && r.status !== 'error');
+  const freshServerRows = await serverRevalidateRows(_importRows);
+  freshServerRows.forEach(sr => {
+    const row = _importRows[sr.index];
+    if (!row) return;
+    row.errors = [...new Set([...(row.errors || []), ...((sr.errors) || [])])];
+    row.warnings = [...new Set([...(row.warnings || []), ...((sr.warnings) || [])])];
+    if (row.errors.length) row.rowState = 'error';
+    else if (sr.status === 'duplicate') row.rowState = 'duplicate';
+    else if (row.warnings.length || sr.status === 'warning') row.rowState = 'warning';
+    else row.rowState = 'valid';
+  });
+
+  const toImport = _importRows.filter(r => !r.skip && r.rowState !== 'error' && !(r.rowState === 'duplicate' && r.dupAction === 'skip'));
   if (!toImport.length) { showToast('warning','Nothing to Import','All rows are either invalid or skipped.'); return; }
 
   /* Go to step 3 */
@@ -2863,10 +2931,9 @@ async function runImport() {
   const resultMsg = document.getElementById('importResultMsg');
 
   /* Build payload */
-  const overwrite = toImport.filter(r => r.status==='dup' && r.dupAction==='overwrite');
-  const inserts   = toImport.filter(r => r.status!=='dup' || r.dupAction==='overwrite');
+  const inserts   = toImport.filter(r => r.rowState!=='duplicate' || r.dupAction==='overwrite');
 
-  let done = 0; let succeeded = 0; let failed = 0; const failedNums = [];
+  let done = 0; let succeeded = 0; let failed = 0; const failedNums = []; const failedRows = [];
 
   const total = inserts.length;
   label.textContent = `Importing ${total} row${total!==1?'s':''}…`;
@@ -2884,7 +2951,7 @@ async function runImport() {
     model:               r.model || null,
     description:         r.description || null,
     notes:               r.notes || null,
-    _overwrite:          (r.status === 'dup' && r.dupAction === 'overwrite'),
+    _overwrite:          (r.rowState === 'duplicate' && r.dupAction === 'overwrite'),
   }));
 
   /* Send in batches of 50 */
@@ -2944,6 +3011,10 @@ async function runImport() {
       } else {
         failed++;
         failedNums.push(batch[j].asset_number);
+        const errMsg = (res.status === 'fulfilled')
+          ? ((res.value?.data || res.value)?.error || 'Validation failed')
+          : (res.reason?.message || 'Request failed');
+        failedRows.push({ ...batch[j], error_reason: errMsg });
       }
     });
   }
@@ -2954,6 +3025,7 @@ async function runImport() {
   let msg = '';
   if (succeeded > 0) msg += `<div style="color:var(--sap-success);font-weight:700;font-size:16px;margin-bottom:8px;">✓ ${succeeded} asset${succeeded!==1?'s':''} imported successfully.</div>`;
   if (failed > 0)    msg += `<div style="color:var(--sap-error);font-weight:600;font-size:13px;">✗ ${failed} row${failed!==1?'s':''} failed: ${failedNums.slice(0,8).join(', ')}${failedNums.length>8?'…':''}</div>`;
+  if (failedRows.length) msg += `<div style="margin-top:10px;"><button class="btn btn-secondary btn-sm" onclick="downloadImportErrorsCSV()">Download Failed Rows CSV</button></div>`;
   msg += `<div style="margin-top:16px;display:flex;gap:8px;justify-content:center;">
     ${succeeded?`<button class="btn btn-success" onclick="closeImportModal();renderTable();">View Updated Assets</button>`:''}
     <button class="btn btn-ghost" onclick="closeImportModal()">Close</button>
@@ -2964,6 +3036,26 @@ async function runImport() {
   if (succeeded > 0) {
     renderTable();
     showToast('success','Import Complete',`${succeeded} asset${succeeded!==1?'s':''} imported.`);
+  }
+  window._lastImportFailedRows = failedRows;
+}
+
+function downloadImportErrorsCSV() {
+  try {
+    const rows = window._lastImportFailedRows || [];
+    if (!rows.length) { showToast('info','No Failed Rows','Nothing to export.'); return; }
+    const headers = ['asset_number','name','asset_type','status','client_id','functional_location','serial_number','manufacturer','model','description','notes','error_reason'];
+    const body = rows.map(r => headers.map(hd => `"${String(r[hd] || '').replace(/"/g, '""')}"`).join(','));
+    const csv = [headers.join(','), ...body].join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type:'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `asset_import_failed_rows_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    showToast('error','Export Failed','Could not create failed-rows CSV.');
   }
 }
 
@@ -3098,6 +3190,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (role === 'admin' || role === 'manager') {
     document.getElementById('clientFilter').style.display = 'inline-block';
   }
+  const importBtn = document.getElementById('importBtn');
+  if (importBtn && role !== 'admin') importBtn.style.display = 'none';
 
   /* Page subtitle */
   if (session.customerId) {
