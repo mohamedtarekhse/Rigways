@@ -1071,8 +1071,6 @@
           <span style="margin-left:4px;">Set all duplicates to:</span>
           <button class="btn btn-warning btn-sm" onclick="massSetDupAction('overwrite')" style="height:24px;font-size:11px;">Overwrite All</button>
           <button class="btn btn-ghost btn-sm" onclick="massSetDupAction('skip')" style="height:24px;font-size:11px;">Skip All</button>
-          <button class="btn btn-primary btn-sm" onclick="generateAstForSelectedRows()" style="height:24px;font-size:11px;">Generate AST for Selected</button>
-          <button class="btn btn-primary btn-sm" onclick="generateAstForAllEligibleRows()" style="height:24px;font-size:11px;">Generate AST for All Eligible</button>
         </div>
 
         <!-- Preview table -->
@@ -2768,7 +2766,7 @@ function validateImportRows(rawRows) {
   const seenSerialInBatch = new Set();
 
   return rawRows.map((row, i) => {
-    const r = { rowNum: i+2, raw: row, errors: [], warnings: [], rowState: 'valid', dupAction: 'overwrite', selected: false, duplicateReason: null };
+    const r = { rowNum: i+2, raw: row, errors: [], warnings: [], rowState: 'valid', dupAction: 'overwrite', skip: false };
     /* Normalize column names — flexible matching */
     const get = (...keys) => {
       for (const k of keys) {
@@ -2811,20 +2809,13 @@ function validateImportRows(rawRows) {
     /* Duplicate detection */
     const key = r.asset_number.toLowerCase();
     const serialKey = (r.serial_number || '').toLowerCase();
-    const assetDup = existingNums.has(key) || seenInBatch.has(key);
-    const serialDup = Boolean(serialKey && (existingSerials.has(serialKey) || seenSerialInBatch.has(serialKey)));
-    if (assetDup || serialDup) {
-      r.rowState = 'duplicate';
-      r.dupAction = 'overwrite';
-      if (assetDup && serialDup) r.duplicateReason = 'asset_number_and_serial_number';
-      else if (serialDup) r.duplicateReason = 'serial_number';
-      else r.duplicateReason = 'asset_number';
-      if (seenInBatch.has(key) || (serialKey && seenSerialInBatch.has(serialKey))) {
-        r.errors.push('Duplicate values found within this file');
-      }
-    } else {
-      seenInBatch.add(key);
+    if (existingNums.has(key) || (serialKey && existingSerials.has(serialKey))) {
+      r.rowState = 'duplicate'; r.dupAction = 'overwrite';
     }
+    else if (seenInBatch.has(key) || (serialKey && seenSerialInBatch.has(serialKey))) {
+      r.rowState = 'duplicate'; r.dupAction = 'overwrite'; r.errors.push('Duplicate asset_number/serial_number within this file');
+    }
+    else seenInBatch.add(key);
     if (serialKey) seenSerialInBatch.add(serialKey);
 
     if (r.rowState === 'valid' && r.warnings.length) r.rowState = 'warning';
@@ -2853,84 +2844,37 @@ async function serverRevalidateRows(rows) {
   return data?.data?.rows || data?.rows || [];
 }
 
-function isNumberOnlyDuplicate(row) {
-  return row.rowState === 'duplicate' && row.duplicateReason === 'asset_number';
-}
-
-function isSerialDuplicate(row) {
-  return row.rowState === 'duplicate' && (row.duplicateReason === 'serial_number' || row.duplicateReason === 'asset_number_and_serial_number');
-}
-
-function getNextImportAstNumber() {
-  let max = 0;
-  const scan = (value) => {
-    const m = String(value || '').toUpperCase().match(/^AST-(\d+)$/);
-    if (!m) return;
-    const n = parseInt(m[1], 10);
-    if (!isNaN(n) && n > max) max = n;
-  };
-  ASSETS.forEach(a => scan(a.assetId || a.asset_number));
-  _importRows.forEach(r => scan(r.asset_number));
-  return `AST-${String(max + 1).padStart(4, '0')}`;
-}
-
-async function revalidateImportRows() {
-  const serverRows = await serverRevalidateRows(_importRows);
-  serverRows.forEach(sr => {
-    const row = _importRows[sr.index];
-    if (!row) return;
-    row.duplicateReason = sr.duplicate_by || row.duplicateReason || null;
-    row.errors = [...new Set([...(row.errors || []), ...((sr.errors) || [])])];
-    row.warnings = [...new Set([...(row.warnings || []), ...((sr.warnings) || [])])];
-    if (row.errors.length) row.rowState = 'error';
-    else if (sr.status === 'duplicate') row.rowState = 'duplicate';
-    else if (row.warnings.length || sr.status === 'warning') row.rowState = 'warning';
-    else {
-      row.rowState = 'valid';
-      row.duplicateReason = null;
-    }
-  });
-}
-
 /* ── Build preview table ── */
 function buildPreviewTable() {
   const tbody = document.getElementById('importPreviewBody');
   if (!tbody) return;
 
   const dupRows = _importRows.filter(r => r.rowState === 'duplicate');
-  const numberOnlyDups = dupRows.filter(isNumberOnlyDuplicate);
-  const serialDups = dupRows.filter(isSerialDuplicate);
   const dupBar  = document.getElementById('importDupBar');
   if (dupRows.length) {
     dupBar.classList.add('visible');
-    document.getElementById('importDupCount').textContent = `${dupRows.length} duplicate row${dupRows.length>1?'s':''} detected (${numberOnlyDups.length} number-only, ${serialDups.length} serial-related).`;
+    document.getElementById('importDupCount').textContent = `${dupRows.length} duplicate asset number${dupRows.length>1?'s':''} already exist in the system.`;
   } else {
     dupBar.classList.remove('visible');
   }
 
   tbody.innerHTML = _importRows.map((r,i) => {
-    const cls = `import-row--${r.rowState}`;
-    const statusHtml = r.rowState === 'valid'
-      ? `<span class="row-status row-status--ok">✓ Valid</span>`
-      : r.rowState === 'warning'
-        ? `<span class="row-status row-status--dup">⚠ Warning</span>`
-      : r.rowState === 'duplicate'
-        ? `<span class="row-status row-status--dup">⚠ Duplicate</span>`
-        : `<span class="row-status row-status--error">✗ Error</span>`;
+    const cls = r.skip ? 'import-row--skipped' : `import-row--${r.rowState}`;
+    const statusHtml = r.skip
+      ? `<span class="row-status row-status--skipped">Skipped</span>`
+      : r.rowState === 'valid'
+        ? `<span class="row-status row-status--ok">✓ Valid</span>`
+        : r.rowState === 'warning'
+          ? `<span class="row-status row-status--dup">⚠ Warning</span>`
+        : r.rowState === 'duplicate'
+          ? `<span class="row-status row-status--dup">⚠ Duplicate</span>`
+          : `<span class="row-status row-status--error">✗ Error</span>`;
 
     const actionCell = r.rowState === 'duplicate'
-      ? `
-        <div style="display:flex;flex-direction:column;gap:6px;min-width:180px;">
-          <select class="dup-action-select" onchange="setDupAction(${i},this.value)" title="What to do with this duplicate">
-            <option value="overwrite" ${r.dupAction==='overwrite'?'selected':''}>Overwrite</option>
-            <option value="skip" ${r.dupAction==='skip'?'selected':''}>Skip</option>
-          </select>
-          ${isNumberOnlyDuplicate(r)
-            ? `<button class="btn btn-primary btn-sm" onclick="generateAstForRow(${i})" style="height:24px;font-size:11px;">Generate New AST</button>`
-            : `<button class="btn btn-ghost btn-sm" onclick="swapDuplicateRow(${i})" style="height:24px;font-size:11px;">Swap Row</button>
-               <div style="font-size:10px;color:var(--sap-warning);">Serial duplicate detected — cannot auto-generate.</div>`
-          }
-        </div>`
+      ? `<select class="dup-action-select" onchange="setDupAction(${i},this.value)" title="What to do with this duplicate">
+          <option value="overwrite" ${r.dupAction==='overwrite'?'selected':''}>Overwrite</option>
+          <option value="skip" ${r.dupAction==='skip'?'selected':''}>Skip</option>
+        </select>`
       : r.rowState === 'error'
         ? `<div class="cell-error">${r.errors.map(e => h(e)).join('<br/>')}</div>`
         : r.rowState === 'warning'
@@ -2941,7 +2885,7 @@ function buildPreviewTable() {
     const cells = cols.map(c => `<td title="${h(r[c]||'')}">${h(r[c]||'')}</td>`).join('');
 
     return `<tr class="${cls}" data-idx="${i}">
-      <td style="text-align:center;"><input type="checkbox" class="skip-row-chk" title="Select this row" onchange="toggleSkipRow(${i},this.checked)" ${r.selected?'checked':''}></td>
+      <td style="text-align:center;"><input type="checkbox" class="skip-row-chk" title="Skip this row" onchange="toggleSkipRow(${i},this.checked)" ${r.skip?'checked':''}></td>
       <td style="text-align:center;color:var(--sap-text-secondary);font-size:11px;">${r.rowNum}</td>
       <td>${statusHtml}</td>
       ${cells}
@@ -2958,7 +2902,7 @@ function updateImportSummary() {
   const errors  = _importRows.filter(r => r.rowState==='error').length;
   const warnings= _importRows.filter(r => r.rowState==='warning').length;
   const dups    = _importRows.filter(r => r.rowState==='duplicate').length;
-  const selected = _importRows.filter(r => r.selected).length;
+  const skipped = _importRows.filter(r => r.skip).length;
   const valid   = _importRows.filter(r => r.rowState==='valid').length;
 
   document.getElementById('importSummaryBar').innerHTML = `
@@ -2967,13 +2911,13 @@ function updateImportSummary() {
     ${warnings ? `<div class="import-stat import-stat--dup">⚠ ${warnings} warning</div>` : ''}
     ${errors ? `<div class="import-stat import-stat--error">✗ ${errors} invalid</div>` : ''}
     ${dups   ? `<div class="import-stat import-stat--dup">⚠ ${dups} duplicates</div>` : ''}
-    ${selected? `<div class="import-stat import-stat--skipped">☑ ${selected} selected</div>` : ''}
+    ${skipped? `<div class="import-stat import-stat--skipped">— ${skipped} skipped</div>` : ''}
   `;
   updateImportFooter();
 }
 
 function updateImportFooter() {
-  const importable = _importRows.filter(r => r.rowState !== 'error' && !(r.rowState === 'duplicate' && r.dupAction === 'skip')).length;
+  const importable = _importRows.filter(r => !r.skip && r.rowState !== 'error').length;
   const btn = document.getElementById('importConfirmBtn');
   const lbl = document.getElementById('importConfirmLabel');
   if (btn && lbl) {
@@ -2988,12 +2932,19 @@ function setDupAction(idx, val) {
 }
 
 function toggleSkipRow(idx, checked) {
-  _importRows[idx].selected = checked;
+  _importRows[idx].skip = checked;
+  /* Update row styling live */
+  const rows = document.querySelectorAll('#importPreviewBody tr[data-idx]');
+  rows.forEach(tr => {
+    if (parseInt(tr.dataset.idx) === idx) {
+      tr.className = checked ? 'import-row--skipped' : `import-row--${_importRows[idx].rowState}`;
+    }
+  });
   updateImportSummary();
 }
 
 function importToggleSelectAll(cb) {
-  _importRows.forEach((r, i) => { if (r.rowState !== 'error') r.selected = cb.checked; });
+  _importRows.forEach((r, i) => { if (r.rowState !== 'error') r.skip = cb.checked; });
   buildPreviewTable();
   document.getElementById('importSelectAllChk').checked = cb.checked;
 }
@@ -3001,68 +2952,6 @@ function importToggleSelectAll(cb) {
 function massSetDupAction(action) {
   _importRows.forEach(r => { if (r.rowState === 'duplicate') r.dupAction = action; });
   buildPreviewTable();
-}
-
-async function generateAstForRow(idx) {
-  const row = _importRows[idx];
-  if (!row || !isNumberOnlyDuplicate(row)) return;
-  row.asset_number = getNextImportAstNumber();
-  await revalidateImportRows();
-  buildPreviewTable();
-  showToast('success','AST Generated',`Row ${row.rowNum} assigned ${row.asset_number}.`);
-}
-
-async function generateAstForSelectedRows() {
-  const eligible = _importRows.filter(r => r.selected && isNumberOnlyDuplicate(r));
-  if (!eligible.length) {
-    showToast('warning','No Eligible Rows','Select duplicate rows with number-only conflicts first.');
-    return;
-  }
-  eligible.forEach(r => { r.asset_number = getNextImportAstNumber(); });
-  await revalidateImportRows();
-  buildPreviewTable();
-  showToast('success','AST Generated',`${eligible.length} row${eligible.length!==1?'s':''} renumbered.`);
-}
-
-async function generateAstForAllEligibleRows() {
-  const eligible = _importRows.filter(isNumberOnlyDuplicate);
-  if (!eligible.length) {
-    showToast('warning','No Eligible Rows','There are no number-only duplicates to renumber.');
-    return;
-  }
-  eligible.forEach(r => { r.asset_number = getNextImportAstNumber(); });
-  await revalidateImportRows();
-  buildPreviewTable();
-  showToast('success','AST Generated',`${eligible.length} eligible duplicate row${eligible.length!==1?'s':''} renumbered.`);
-}
-
-async function swapDuplicateRow(idx) {
-  const row = _importRows[idx];
-  if (!row || !isSerialDuplicate(row)) return;
-  const labels = [
-    ['asset_number','Asset Number'],
-    ['name','Name'],
-    ['asset_type','Asset Type'],
-    ['status','Status'],
-    ['client_id','Client ID'],
-    ['functional_location','Functional Location'],
-    ['serial_number','Serial Number'],
-  ];
-  for (const [key, label] of labels) {
-    const current = row[key] || '';
-    const next = window.prompt(`Swap Row ${row.rowNum}: ${label}`, current);
-    if (next === null) return;
-    row[key] = String(next).trim();
-  }
-  row.asset_number = String(row.asset_number || '').toUpperCase();
-  row.status = String(row.status || '').toLowerCase();
-  row.client_id = String(row.client_id || '').toUpperCase();
-  row.errors = [];
-  row.warnings = [];
-  row.duplicateReason = null;
-  await revalidateImportRows();
-  buildPreviewTable();
-  showToast('success','Row Swapped',`Row ${row.rowNum} updated and revalidated.`);
 }
 
 /* ── Step 1 → Step 2: parse file ── */
@@ -3077,7 +2966,17 @@ async function importGoStep(n) {
       const rawRows = await parseImportFile(_importFile);
       if (!rawRows.length) { showToast('error','Empty File','No data rows found in the file.'); document.getElementById('importNextBtn').disabled=false; document.getElementById('importNextBtn').innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview File'; return; }
       _importRows = validateImportRows(rawRows);
-      await revalidateImportRows();
+      const serverRows = await serverRevalidateRows(_importRows);
+      serverRows.forEach(sr => {
+        const row = _importRows[sr.index];
+        if (!row) return;
+        row.errors = [...new Set([...(row.errors || []), ...((sr.errors) || [])])];
+        row.warnings = [...new Set([...(row.warnings || []), ...((sr.warnings) || [])])];
+        if (row.errors.length) row.rowState = 'error';
+        else if (sr.status === 'duplicate') row.rowState = 'duplicate';
+        else if (row.warnings.length || sr.status === 'warning') row.rowState = 'warning';
+        else row.rowState = 'valid';
+      });
     } catch(err) {
       showToast('error','Parse Error', err.message || 'Could not read file.');
       document.getElementById('importNextBtn').disabled=false;
@@ -3112,10 +3011,20 @@ async function importGoStep(n) {
 
 /* ── Run import ── */
 async function runImport() {
-  await revalidateImportRows();
+  const freshServerRows = await serverRevalidateRows(_importRows);
+  freshServerRows.forEach(sr => {
+    const row = _importRows[sr.index];
+    if (!row) return;
+    row.errors = [...new Set([...(row.errors || []), ...((sr.errors) || [])])];
+    row.warnings = [...new Set([...(row.warnings || []), ...((sr.warnings) || [])])];
+    if (row.errors.length) row.rowState = 'error';
+    else if (sr.status === 'duplicate') row.rowState = 'duplicate';
+    else if (row.warnings.length || sr.status === 'warning') row.rowState = 'warning';
+    else row.rowState = 'valid';
+  });
 
-  const toImport = _importRows.filter(r => r.rowState !== 'error' && !(r.rowState === 'duplicate' && r.dupAction === 'skip'));
-  if (!toImport.length) { showToast('warning','Nothing to Import','All rows are either invalid or set to skip.'); return; }
+  const toImport = _importRows.filter(r => !r.skip && r.rowState !== 'error' && !(r.rowState === 'duplicate' && r.dupAction === 'skip'));
+  if (!toImport.length) { showToast('warning','Nothing to Import','All rows are either invalid or skipped.'); return; }
 
   /* Go to step 3 */
   _importStep = 3;
