@@ -10,7 +10,7 @@ if ('serviceWorker' in navigator) {
             // Subscribe the user to push notifications
             const subscription = await registration.pushManager.subscribe({
                 userVisibleOnly: true,
-                applicationServerKey: urlB64ToUint8Array('YOUR_PUBLIC_VAPID_KEY_HERE') // Replace with your public VAPID key
+                applicationServerKey: urlB64ToUint8Array('BNkHRry_3w6SjdeQNJbCpV3ouo7s5FHHSzWhAZQ5oja-X9tabOf8gqO7xRQpVBEHNrlSEazJLeqBY1eBhSMTdig') // Replace with your public VAPID key
             });
 
             console.log('User is subscribed:', subscription);
