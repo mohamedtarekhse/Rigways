@@ -465,28 +465,6 @@ async function generateNextAssetNumber(db) {
   return `AST-${String(max + 1).padStart(4, '0')}`;
 }
 
-async function notifyAssetAdded(db, session, asset) {
-  try {
-    const { data: recipients } = await db.from('users', {
-      filters: { 'role.in': ['admin', 'manager'], 'is_active.is': true },
-      select: 'id',
-    });
-    if (!Array.isArray(recipients) || !recipients.length) return;
-    const notifs = recipients
-      .filter(u => u.id && u.id !== session.sub)
-      .map(u => ({
-        user_id: u.id,
-        type: 'asset_added',
-        title: 'New Asset Added',
-        body: `${session.name} added asset "${asset.name}" (${asset.asset_number}).`,
-        ref_type: 'asset',
-        ref_id: asset.id,
-        is_read: false,
-      }));
-    if (notifs.length) await db.insert('notifications', notifs);
-  } catch (e) { console.warn('Asset added notification failed:', e); }
-}
-
 
 async function handleAssets(request, env, path) {
   const session = await getSession(request, env);
@@ -531,20 +509,12 @@ async function handleAssets(request, env, path) {
       if (!String(row.model || '').trim()) warnings.push('model is empty');
       const assetKey = assetNumber.toLowerCase();
       const serialKey = serial.toLowerCase();
-      const hasAssetDup = Boolean((assetKey && byAsset.has(assetKey)) || seenAsset.has(assetKey));
-      const hasSerialDup = Boolean((serialKey && bySerial.has(serialKey)) || seenSerial.has(serialKey));
-      const duplicate = hasAssetDup || hasSerialDup;
-      let duplicateBy = null;
-      if (duplicate) {
-        if (hasAssetDup && hasSerialDup) duplicateBy = 'asset_number_and_serial_number';
-        else if (hasSerialDup) duplicateBy = 'serial_number';
-        else duplicateBy = 'asset_number';
-      }
+      const duplicate = Boolean((assetKey && byAsset.has(assetKey)) || (serialKey && bySerial.has(serialKey)) || seenAsset.has(assetKey) || seenSerial.has(serialKey));
       if (assetKey) seenAsset.add(assetKey);
       if (serialKey) seenSerial.add(serialKey);
 
       const status = errors.length ? 'error' : (duplicate ? 'duplicate' : (warnings.length ? 'warning' : 'valid'));
-      return { index: idx, status, errors, warnings, duplicate, duplicate_by: duplicateBy };
+      return { index: idx, status, errors, warnings, duplicate, duplicate_by: duplicate ? 'asset_number_or_serial_number' : null };
     });
     return ok({ rows: out }, env);
   }
@@ -660,7 +630,6 @@ async function handleAssets(request, env, path) {
     }
     const asset = Array.isArray(data) ? data[0] : data;
     await audit(db, session, 'assets', asset.id, 'create', null, asset);
-    await notifyAssetAdded(db, session, asset);
     return created(asset, env);
   }
 
@@ -1677,70 +1646,6 @@ async function handleNotifications(request, env, path) {
 
 
 async function handleReports(request, env, path) {
-  // ── push-notifications.js ──
-// POST /api/notifications/subscribe   — save user push subscription
-// POST /api/notifications/unsubscribe — remove user push subscription
-
-async function handlePushNotifications(request, env, path) {
-  const session = await getSession(request, env);
-  if (!session) return unauth(env);
-
-  const db = createSupabase(env);
-  const method = request.method;
-
-  /* ── POST /api/notifications/subscribe ── */
-  if (path === '/notifications/subscribe' && method === 'POST') {
-    let body;
-    try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
-
-    if (!body.subscription || !body.subscription.endpoint) {
-      return badReq('Invalid subscription object', 'INVALID_SUB', env);
-    }
-
-    try {
-      const { data, error } = await db.insert('push_subscriptions', {
-        user_id: session.sub,
-        endpoint: body.subscription.endpoint,
-        p256dh: body.subscription.keys?.p256dh || null,
-        auth: body.subscription.keys?.auth || null,
-        user_agent: request.headers.get('User-Agent'),
-      });
-
-      if (error) {
-        console.warn('Failed to save subscription:', error);
-        return serverErr(env, 'Failed to save subscription');
-      }
-
-      return ok({ message: 'Subscription saved', id: Array.isArray(data) ? data[0]?.id : data?.id }, env);
-    } catch (e) {
-      console.error('Subscribe error:', e);
-      return serverErr(env, e.message);
-    }
-  }
-
-  /* ── POST /api/notifications/unsubscribe ── */
-  if (path === '/notifications/unsubscribe' && method === 'POST') {
-    let body;
-    try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
-
-    if (!body.endpoint) {
-      return badReq('endpoint required', 'MISSING_ENDPOINT', env);
-    }
-
-    try {
-      await db.delete('push_subscriptions', {
-        filters: { 'endpoint.eq': body.endpoint, 'user_id.eq': session.sub },
-      });
-
-      return ok({ message: 'Subscription removed' }, env);
-    } catch (e) {
-      console.error('Unsubscribe error:', e);
-      return serverErr(env, e.message);
-    }
-  }
-
-  return badReq('Not found', 'NOT_FOUND', env);
-}
   const session = await getSession(request, env);
   if (!session) return unauth(env);
 
@@ -1825,7 +1730,7 @@ export default {
 
     try {
       const path = url.pathname.replace('/api', '');
-      if (pathname.startsWith('/api/notifications/subscribe') || pathname.startsWith('/api/notifications/unsubscribe')) return handlePushNotifications(request, env, path);
+
       if (path.startsWith('/auth')) return await handleAuth(request, env, path);
       if (path.startsWith('/users')) return await handleUsers(request, env, path);
       if (path.startsWith('/assets')) return await handleAssets(request, env, path);
@@ -1838,7 +1743,6 @@ export default {
       if (path.startsWith('/inspectors')) return await handleInspectors(request, env, path);
       if (path.startsWith('/functional-locations')) return await handleFunctionalLocations(request, env, path);
       if (path.startsWith('/notifications')) return await handleNotifications(request, env, path);
-      if (path.startsWith('/push')) return await handlePushNotifications(request, env, path);
       if (path.startsWith('/reports')) return await handleReports(request, env, path);
 
       return json({ success: false, error: 'Route not found' }, 404, env);

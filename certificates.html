@@ -943,7 +943,6 @@ const INSPECTOR_NAMES = [
 ];
 
 let CERTS = [];
-let _pendingCertOpenId = null;
 
 
 /* ═══════════════════════════════════════════════════════
@@ -2543,13 +2542,6 @@ async function loadCerts() {
     CERTS.forEach(cert => { if (cert.file_url) window._certUrls[cert.id] = cert.file_url; });
   } catch(e) { CERTS = []; }
   renderTable();
-  if (_pendingCertOpenId) {
-    const match = CERTS.find(c => c.id === _pendingCertOpenId || c.certId === _pendingCertOpenId);
-    if (match) {
-      openDrawer(match.certId);
-      _pendingCertOpenId = null;
-    }
-  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -2558,7 +2550,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const role = session.role;
   const lang = 'en';
   applyLang(lang);
-  _pendingCertOpenId = new URLSearchParams(window.location.search).get('open');
 
   /* Shell */
   const initials = session.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
