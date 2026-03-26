@@ -1677,6 +1677,70 @@ async function handleNotifications(request, env, path) {
 
 
 async function handleReports(request, env, path) {
+  // ── push-notifications.js ──
+// POST /api/notifications/subscribe   — save user push subscription
+// POST /api/notifications/unsubscribe — remove user push subscription
+
+async function handlePushNotifications(request, env, path) {
+  const session = await getSession(request, env);
+  if (!session) return unauth(env);
+
+  const db = createSupabase(env);
+  const method = request.method;
+
+  /* ── POST /api/notifications/subscribe ── */
+  if (path === '/notifications/subscribe' && method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+
+    if (!body.subscription || !body.subscription.endpoint) {
+      return badReq('Invalid subscription object', 'INVALID_SUB', env);
+    }
+
+    try {
+      const { data, error } = await db.insert('push_subscriptions', {
+        user_id: session.sub,
+        endpoint: body.subscription.endpoint,
+        p256dh: body.subscription.keys?.p256dh || null,
+        auth: body.subscription.keys?.auth || null,
+        user_agent: request.headers.get('User-Agent'),
+      });
+
+      if (error) {
+        console.warn('Failed to save subscription:', error);
+        return serverErr(env, 'Failed to save subscription');
+      }
+
+      return ok({ message: 'Subscription saved', id: Array.isArray(data) ? data[0]?.id : data?.id }, env);
+    } catch (e) {
+      console.error('Subscribe error:', e);
+      return serverErr(env, e.message);
+    }
+  }
+
+  /* ── POST /api/notifications/unsubscribe ── */
+  if (path === '/notifications/unsubscribe' && method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+
+    if (!body.endpoint) {
+      return badReq('endpoint required', 'MISSING_ENDPOINT', env);
+    }
+
+    try {
+      await db.delete('push_subscriptions', {
+        filters: { 'endpoint.eq': body.endpoint, 'user_id.eq': session.sub },
+      });
+
+      return ok({ message: 'Subscription removed' }, env);
+    } catch (e) {
+      console.error('Unsubscribe error:', e);
+      return serverErr(env, e.message);
+    }
+  }
+
+  return badReq('Not found', 'NOT_FOUND', env);
+}
   const session = await getSession(request, env);
   if (!session) return unauth(env);
 
@@ -1761,7 +1825,7 @@ export default {
 
     try {
       const path = url.pathname.replace('/api', '');
-
+      if (pathname.startsWith('/api/notifications/subscribe') || pathname.startsWith('/api/notifications/unsubscribe')) return handlePushNotifications(request, env, path);
       if (path.startsWith('/auth')) return await handleAuth(request, env, path);
       if (path.startsWith('/users')) return await handleUsers(request, env, path);
       if (path.startsWith('/assets')) return await handleAssets(request, env, path);
