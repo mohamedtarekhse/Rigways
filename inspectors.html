@@ -895,7 +895,7 @@ function renderTable() {
         ${(insp.trainingCerts||[]).length
           ? `<div class="tc-chip-list">
               ${insp.trainingCerts.map(tc => {
-                if (tc.url) {
+                if (tc.url && /^https?:\/\//i.test(tc.url)) {
                   return `<a href="${tc.url}" target="_blank" rel="noopener" class="tc-chip tc-chip--url" title="${h(tc.name)}">
                     <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                     ${tc.name}
@@ -905,6 +905,7 @@ function renderTable() {
                   data-tcfile="${h(tc.file||'')}"
                   data-tcurl="${h(tc.url||'')}"
                   data-tcname="${h(tc.name)}"
+                  data-inspector-uuid="${h(insp._uuid || insp.id || '')}"
                   onclick="openTCLinkFromEl(this)"
                   title="${h(tc.name)}">
                   <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -1105,7 +1106,7 @@ function addTrainingCertRow(certName, existingFile, existingUrl) {
           <button type="button" class="file-url-btn ${mode==='url'?'active':''}" onclick="switchTCMode(this,'url')" data-en="🔗 URL" data-ar="🔗 رابط">🔗 URL</button>
         </div>
         <div class="tc-file-wrap" style="display:${mode==='file'?'block':'none'};">
-          <input type="file" class="sap-input tc-file" accept=".pdf,.jpg,.jpeg,.png" data-existing="${existingFile||''}" style="font-size:12px;"/>
+          <input type="file" class="sap-input tc-file" accept=".pdf,.jpg,.jpeg,.png" data-existing="${existingFile||''}" data-existing-url="${existingUrl||''}" style="font-size:12px;"/>
           ${existingFile ? `<div style="font-size:11px;color:var(--sap-text-secondary);margin-top:3px;">📎 ${existingFile}</div>` : ''}
         </div>
         <div class="tc-url-wrap" style="display:${mode==='url'?'block':'none'};">
@@ -1140,6 +1141,11 @@ function switchCVMode(mode) {
 /* ═══════════════════════════════════════════════════════
    ADD / EDIT MODAL
 ═══════════════════════════════════════════════════════ */
+function inspectorDraftKey(){ const id=document.getElementById('editInspectorId')?.value||''; return id?`inspectors:edit:${id}`:'inspectors:add'; }
+function saveInspectorDraft(){ if(!window.SapDraft) return; SapDraft.save(inspectorDraftKey(), { editInspectorId:document.getElementById('editInspectorId')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_title:document.getElementById('f_title')?.value||'', f_email:document.getElementById('f_email')?.value||'', f_phone:document.getElementById('f_phone')?.value||'', f_status:document.getElementById('f_status')?.value||'', f_expYears:document.getElementById('f_expYears')?.value||'', f_expDesc:document.getElementById('f_expDesc')?.value||'', cv_mode:(document.querySelector('.file-url-btn[data-mode=\"url\"].active')?'url':'file'), cvUrlInput:document.getElementById('cvUrlInput')?.value||'', cvFileExisting:document.getElementById('cvFileInput')?.dataset?.existing||'', cvFileExistingKey:document.getElementById('cvFileInput')?.dataset?.existingKey||'' }); }
+function restoreInspectorDraft(){ if(!window.SapDraft) return; const d=SapDraft.load(inspectorDraftKey(),24*60*60*1000); if(!d) return; if(!confirm('A saved draft was found. Restore it?')) return; Object.entries(d).forEach(([k,v])=>{const el=document.getElementById(k); if(el) el.value=v;}); if(d.cv_mode) switchCVMode(d.cv_mode); const f=document.getElementById('cvFileInput'); if(f){f.dataset.existing=d.cvFileExisting||''; f.dataset.existingKey=d.cvFileExistingKey||'';} }
+function clearInspectorDraft(){ if(!window.SapDraft) return; const id=document.getElementById('editInspectorId')?.value||''; SapDraft.clear('inspectors:add'); if(id) SapDraft.clear(`inspectors:edit:${id}`); }
+function bindInspectorDraft(){ const f=document.getElementById('inspectorForm'); if(!f||f.dataset.draftBound==='1') return; f.addEventListener('input',saveInspectorDraft); f.addEventListener('change',saveInspectorDraft); f.dataset.draftBound='1'; }
 function openAddModal() {
   document.getElementById('editInspectorId').value = '';
   document.getElementById('inspectorForm').reset();
@@ -1147,12 +1153,16 @@ function openAddModal() {
   document.getElementById('trainingContainer').innerHTML = '';
   document.getElementById('trainingCertsContainer').innerHTML = '';
   document.getElementById('cvExistingNote').style.display = 'none';
+  document.getElementById('cvFileInput').dataset.existing = '';
+  document.getElementById('cvFileInput').dataset.existingKey = '';
+  document.getElementById('cvFileInput').value = '';
+  document.getElementById('cvUrlInput').value = '';
   switchCVMode('file');
   document.getElementById('modalTitle').textContent = currentLang==='ar'?'إضافة مفتش جديد':'Add New Inspector';
   document.getElementById('saveBtnLabel').textContent = currentLang==='ar'?'حفظ المفتش':'Save Inspector';
   /* Add one empty row each */
   addEducationRow(); addTrainingRow(); addTrainingCertRow();
-  document.getElementById('inspectorModal').classList.add('open');
+  bindInspectorDraft(); restoreInspectorDraft(); document.getElementById('inspectorModal').classList.add('open');
 }
 
 function openEditModal(id) {
@@ -1182,6 +1192,7 @@ function openEditModal(id) {
   if (insp.cvFile) {
     switchCVMode('file');
     document.getElementById('cvFileInput').dataset.existing = insp.cvFile;
+    document.getElementById('cvFileInput').dataset.existingKey = insp.cvKey || '';
     const note = document.getElementById('cvExistingNote');
     note.style.display = 'block';
     note.textContent = (currentLang==='ar'?'📎 الملف الحالي: ':'📎 Current file: ') + insp.cvFile;
@@ -1201,10 +1212,15 @@ function openEditModal(id) {
 
   document.getElementById('modalTitle').textContent  = currentLang==='ar'?'تعديل المفتش':'Edit Inspector';
   document.getElementById('saveBtnLabel').textContent= currentLang==='ar'?'حفظ التعديلات':'Save Changes';
-  document.getElementById('inspectorModal').classList.add('open');
+  bindInspectorDraft(); restoreInspectorDraft(); document.getElementById('inspectorModal').classList.add('open');
 }
 
-function closeModal() { document.getElementById('inspectorModal').classList.remove('open'); }
+function closeModal(force) {
+  if (!force && (document.getElementById('f_name')?.value || '').trim() &&
+      !confirm('Close this modal? Draft will be kept for 24 hours and can be restored.')) return;
+  saveInspectorDraft();
+  document.getElementById('inspectorModal').classList.remove('open');
+}
 
 async function saveInspector() {
   const editId = document.getElementById('editInspectorId')?.value || '';
@@ -1226,16 +1242,55 @@ async function saveInspector() {
   })).filter(t => t.name);
 
   // Collect training certs rows
-  const training_certs = [...document.querySelectorAll('#trainingCertsContainer .dynamic-row')].map(row => ({
+  const training_certs_raw = [...document.querySelectorAll('#trainingCertsContainer .dynamic-row')].map(row => ({
+    row,
     name: row.querySelector('.tc-name')?.value?.trim() || '',
-    file: row.querySelector('.tc-file')?.dataset?.existing || (row.querySelector('.tc-file')?.files?.[0]?.name) || '',
-    url:  row.querySelector('.tc-url')?.value?.trim() || '',
   })).filter(t => t.name);
+  const training_certs = [];
+  for (const t of training_certs_raw) {
+    const mode = t.row.dataset.tcMode || (t.row.querySelector('.tc-url-wrap')?.style.display !== 'none' ? 'url' : 'file');
+    const tcFileInput = t.row.querySelector('.tc-file');
+    if (mode === 'file') {
+      const selected = tcFileInput?.files?.[0];
+      if (selected) {
+        const uploadedTc = await uploadInspectorFile(selected, { category: 'training', label: t.name });
+        if (tcFileInput) {
+          tcFileInput.dataset.existing = uploadedTc.file_name || selected.name;
+          tcFileInput.dataset.existingUrl = uploadedTc.file_url || '';
+          tcFileInput.value = '';
+        }
+        training_certs.push({ name: t.name, file: uploadedTc.file_name || selected.name, url: uploadedTc.file_url || '' });
+      } else {
+        training_certs.push({ name: t.name, file: tcFileInput?.dataset?.existing || '', url: tcFileInput?.dataset?.existingUrl || '' });
+      }
+    } else {
+      training_certs.push({ name: t.name, file: '', url: t.row.querySelector('.tc-url')?.value?.trim() || '' });
+    }
+  }
 
   // CV
   const cvMode = document.querySelector('.file-url-btn[data-mode="url"].active') ? 'url' : 'file';
-  const cvFile = cvMode === 'file' ? (document.getElementById('cvFileInput')?.dataset?.existing || '') : '';
-  const cvUrl  = cvMode === 'url'  ? (document.getElementById('cvUrlInput')?.value?.trim() || '') : '';
+  const cvInput = document.getElementById('cvFileInput');
+  let cvFile = '';
+  let cvUrl = '';
+  if (cvMode === 'file') {
+    const selectedFile = cvInput?.files?.[0];
+    if (selectedFile) {
+      const uploaded = await uploadInspectorCV(selectedFile, document.getElementById('f_name')?.value?.trim() || 'inspector_cv');
+      cvFile = uploaded.cv_file || selectedFile.name;
+      cvUrl = uploaded.cv_url || '';
+      if (cvInput) {
+        cvInput.dataset.existing = cvFile;
+        cvInput.dataset.existingKey = cvUrl;
+        cvInput.value = '';
+      }
+    } else {
+      cvFile = cvInput?.dataset?.existing || '';
+      cvUrl = cvInput?.dataset?.existingKey || '';
+    }
+  } else {
+    cvUrl  = document.getElementById('cvUrlInput')?.value?.trim() || '';
+  }
 
   const payload = {
     name,
@@ -1262,7 +1317,8 @@ async function saveInspector() {
     const data   = await res.json();
     if (!data.success) { showToast('error','Save Failed',(data.data||data).error||'Could not save.'); return; }
     showToast('success', editId ? 'Updated' : 'Added', '"' + name + '" saved successfully.');
-    document.getElementById('inspectorModal')?.classList.remove('open');
+    clearInspectorDraft();
+    closeModal(true);
     await loadInspectors();
   } catch(e) { showToast('error','Network Error','Could not save inspector. Please try again.'); }
   finally { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Inspector'; } }
@@ -1433,6 +1489,7 @@ function openDrawer(id) {
                   data-tcfile="${h(tc.file)}"
                   data-tcurl=""
                   data-tcname="${h(tc.name)}"
+                  data-inspector-uuid="${h(insp._uuid || insp.id || '')}"
                   onclick="openTCLinkFromEl(this)"
                   style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
                          color:var(--sap-success);background:#f0faf0;border:1px solid var(--sap-success-border);
@@ -1472,23 +1529,74 @@ document.getElementById('drawerOverlay').addEventListener('click', function(e) {
 function openCV(id) {
   const insp = INSPECTORS.find(i => i.inspectorId === id);
   if (!insp) return;
-  if (insp.cvUrl) { safeOpen(insp.cvUrl); return; }  // FIX #4: scheme validation
+  if (insp.cvKey && insp._uuid) {
+    openProtectedInspectorFile(insp._uuid, insp.cvKey, insp.cvFile || 'cv');
+    return;
+  }
+  if (insp.cvUrl && /^https?:\/\//i.test(insp.cvUrl)) { safeOpen(insp.cvUrl); return; }
   if (insp.cvFile) {
-    showToast('info',
-      currentLang==='ar'?'فتح السيرة الذاتية':'Opening CV',
-      currentLang==='ar'?`سيتم فتح "${insp.cvFile}" — نظام مباشر يحتاج رابط حقيقي.`:`"${insp.cvFile}" — In production this opens the stored file.`);
+    showToast('warning',
+      currentLang==='ar'?'الملف غير متاح':'CV unavailable',
+      currentLang==='ar'?'ملف السيرة الذاتية غير متاح. يرجى إعادة الرفع.':'CV file is unavailable. Please upload it again.');
     return;
   }
   showToast('warning', currentLang==='ar'?'لا يوجد ملف':'No CV', currentLang==='ar'?'لم يُرفع ملف سيرة ذاتية لهذا المفتش.':'No CV has been uploaded for this inspector.');
 }
 
+async function uploadInspectorCV(file, label) {
+  const out = await uploadInspectorFile(file, { category: 'cv', label: label || 'inspector_cv' });
+  return { cv_file: out.file_name, cv_url: out.file_url };
+}
+
+async function uploadInspectorFile(file, { category, label }) {
+  const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('category', category || 'training');
+  fd.append('label', label || file.name.replace(/\.[^.]+$/, ''));
+  const res = await fetch('/api/inspectors/upload-file', {
+    method: 'POST',
+    headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+    body: fd,
+  });
+  const out = await res.json();
+  if (!out.success) throw new Error((out.data || out).error || 'File upload failed');
+  return out.data || out;
+}
+
+async function openProtectedInspectorFile(inspectorUuid, key, fileName) {
+  try {
+    const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
+    const res = await fetch('/api/inspectors/file/' + encodeURIComponent(inspectorUuid) + '?key=' + encodeURIComponent(key) + '&name=' + encodeURIComponent(fileName || 'file'), {
+      headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+    });
+    if (!res.ok) {
+      let msg = 'Could not open file.';
+      try { const j = await res.json(); msg = (j.data || j).error || msg; } catch(e) {}
+      showToast('error', 'Open Failed', msg);
+      return;
+    }
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank', 'noopener');
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch (e) {
+    showToast('error', 'Open Failed', 'Could not open file. Please try again.');
+  }
+}
+
 /* FIX #3 + #4: Read from data attributes (no user data in JS strings) + validate URL scheme */
-function openTCLinkFromEl(el) {
+async function openTCLinkFromEl(el) {
   const url  = el.dataset.tcurl  || '';
   const file = el.dataset.tcfile || '';
   const name = el.dataset.tcname || '';
+  const inspectorUuid = el.dataset.inspectorUuid || '';
   if (url) {
-    safeOpen(url);   // FIX #4: safeOpen validates http/https only
+    if (/^https?:\/\//i.test(url)) { safeOpen(url); return; }
+    if (inspectorUuid) {
+      await openProtectedInspectorFile(inspectorUuid, url, file || name || 'certificate');
+      return;
+    }
     return;
   }
   // file: in production, fetch from R2 via the API
@@ -1582,6 +1690,9 @@ async function loadInspectors() {
       ...i,
       inspectorId:     i.inspector_number || i.id,
       _uuid:           i.id,                        // real UUID for API calls
+      cvKey:           i.cv_url || '',
+      cvFile:          i.cv_file || '',
+      cvUrl:           i.cv_url || '',
       experienceYears: i.experience_years,
       experienceDesc:  i.experience_desc,
       education:       typeof i.education === 'string' ? JSON.parse(i.education||'[]') : (i.education||[]),
