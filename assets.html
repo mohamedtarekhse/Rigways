@@ -1538,6 +1538,7 @@ const TYPE_COLORS = {
 };
 
 let ASSETS = []; // populated from API by loadAssets()
+let _pendingAssetOpenId = null;
 
 
 /* ═══════════════════════════════════════════════════════
@@ -3397,6 +3398,13 @@ async function loadAssets() {
     ASSETS = [];
   }
   renderTable();
+  if (_pendingAssetOpenId) {
+    const match = ASSETS.find(a => a.id === _pendingAssetOpenId || a.assetId === _pendingAssetOpenId);
+    if (match) {
+      openDrawer(match.assetId);
+      _pendingAssetOpenId = null;
+    }
+  }
   syncAssetsToStorage();
 }
 
@@ -3410,6 +3418,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const role = session.role;
   const lang = 'en';
   applyLang(lang);
+  _pendingAssetOpenId = new URLSearchParams(window.location.search).get('open');
 
   /* Shell */
   const initials = session.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();

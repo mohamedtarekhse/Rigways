@@ -20,6 +20,30 @@ async function generateNextAssetNumber(db) {
   return `AST-${String(max + 1).padStart(4, '0')}`;
 }
 
+async function notifyAssetAdded(db, session, asset) {
+  try {
+    const { data: recipients } = await db.from('users', {
+      filters: { 'role.in': ['admin','manager'], 'is_active.is': true },
+      select: 'id',
+    });
+    if (!Array.isArray(recipients) || !recipients.length) return;
+    const payload = recipients
+      .filter(u => u.id && u.id !== session.sub)
+      .map(u => ({
+        user_id: u.id,
+        type: 'asset_added',
+        title: 'New Asset Added',
+        body: `${session.name} added asset "${asset.name}" (${asset.asset_number}).`,
+        ref_type: 'asset',
+        ref_id: asset.id,
+        is_read: false,
+      }));
+    if (payload.length) await db.insert('notifications', payload);
+  } catch (e) {
+    console.warn('Asset added notification failed:', e);
+  }
+}
+
 export async function handleAssets(request, env, path) {
   const session = await getSession(request, env);
   if (!session) return unauth(env);
@@ -180,6 +204,7 @@ export async function handleAssets(request, env, path) {
     }
     const asset = Array.isArray(data) ? data[0] : data;
     await audit(db, session, 'assets', asset.id, 'create', null, asset);
+    await notifyAssetAdded(db, session, asset);
     return created(asset, env);
   }
 
