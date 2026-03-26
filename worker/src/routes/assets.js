@@ -81,19 +81,11 @@ export async function handleAssets(request, env, path) {
 
       const assetKey = assetNumber.toLowerCase();
       const serialKey = serial.toLowerCase();
-      const hasAssetDup = Boolean((assetKey && byAsset.has(assetKey)) || seenAsset.has(assetKey));
-      const hasSerialDup = Boolean((serialKey && bySerial.has(serialKey)) || seenSerial.has(serialKey));
-      const duplicate = hasAssetDup || hasSerialDup;
-      let duplicateBy = null;
-      if (duplicate) {
-        if (hasAssetDup && hasSerialDup) duplicateBy = 'asset_number_and_serial_number';
-        else if (hasSerialDup) duplicateBy = 'serial_number';
-        else duplicateBy = 'asset_number';
-      }
+      const duplicate = Boolean((assetKey && byAsset.has(assetKey)) || (serialKey && bySerial.has(serialKey)) || seenAsset.has(assetKey) || seenSerial.has(serialKey));
       if (assetKey) seenAsset.add(assetKey);
       if (serialKey) seenSerial.add(serialKey);
       const status = errors.length ? 'error' : (duplicate ? 'duplicate' : (warnings.length ? 'warning' : 'valid'));
-      return { index: idx, status, errors, warnings, duplicate, duplicate_by: duplicateBy };
+      return { index: idx, status, errors, warnings, duplicate, duplicate_by: duplicate ? 'asset_number_or_serial_number' : null };
     });
     return ok({ rows: out }, env);
   }
