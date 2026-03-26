@@ -15,6 +15,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Notifications – Rigways Group</title>
   <script src="app.js"></script>
+  <script src="push-notifications.js"></script>
   <link rel="stylesheet" href="styles.css"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
   <style>
@@ -303,7 +304,21 @@
   </style>
 </head>
 <body>
-
+<!-- ═══════════════════════ PUSH NOTIFICATIONS ═══════════════════════ -->
+<div id="pushNotificationPanel" style="padding: var(--sp-md) var(--sp-lg); background: var(--sap-page-bg); border-bottom: 1px solid var(--sap-table-border); display: flex; align-items: center; gap: var(--sp-md);">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+    <path d="M13.73 21a2 2 0 01-3.46 0"></path>
+  </svg>
+  <div style="flex: 1;">
+    <strong style="display: block; font-size: 13px;">Push Notifications</strong>
+    <small style="color: var(--sap-text-secondary); font-size: 11px;">Receive real-time alerts on your device</small>
+  </div>
+  <label class="toggle-switch" style="margin: 0;">
+    <input type="checkbox" id="pushNotificationToggle" onchange="togglePushNotifications(this.checked)">
+    <span class="toggle-slider"></span>
+  </label>
+</div>
 <!-- ═══════════════════════ SHELL ═══════════════════════ -->
 <header class="sap-shell">
   <a href="dashboard.html" class="sap-shell__logo">
@@ -1465,6 +1480,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* unread toast shown by loadNotifications after data loads */
 });
+</script>
+  <script>
+  // Initialize push notifications
+  document.addEventListener('DOMContentLoaded', async () => {
+    const toggle = document.getElementById('pushNotificationToggle');
+    
+    // Check if user is already subscribed
+    if (typeof SapPushNotifications !== 'undefined') {
+      await SapPushNotifications.init();
+      const isSubscribed = await SapPushNotifications.isSubscribed();
+      toggle.checked = isSubscribed;
+    }
+  });
+
+  // Handle push notification toggle
+  async function togglePushNotifications(enabled) {
+    if (typeof SapPushNotifications === 'undefined') {
+      SapToast.error('Error', 'Push notifications not available');
+      return;
+    }
+
+    if (enabled) {
+      await SapPushNotifications.subscribe();
+    } else {
+      await SapPushNotifications.unsubscribe();
+    }
+  }
 </script>
 </body>
 </html>
