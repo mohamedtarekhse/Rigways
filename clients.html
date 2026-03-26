@@ -849,6 +849,29 @@ function renderTableView(data) {
 /* ═══════════════════════════════════════════════════════
    ADD / EDIT MODAL
 ═══════════════════════════════════════════════════════ */
+function clientDraftKey(){ const id=document.getElementById('editClientId')?.value||''; return id?`clients:edit:${id}`:'clients:add'; }
+function collectClientDraft(){
+  return {
+    editClientId: document.getElementById('editClientId')?.value || '',
+    f_name: document.getElementById('f_name')?.value || '',
+    f_industry: document.getElementById('f_industry')?.value || '',
+    f_contact: document.getElementById('f_contact')?.value || '',
+    f_email: document.getElementById('f_email')?.value || '',
+    f_phone: document.getElementById('f_phone')?.value || '',
+    f_country: document.getElementById('f_country')?.value || '',
+    f_city: document.getElementById('f_city')?.value || '',
+    f_status: document.getElementById('f_status')?.value || '',
+    f_contractStart: document.getElementById('f_contractStart')?.value || '',
+    f_contractEnd: document.getElementById('f_contractEnd')?.value || '',
+    f_notes: document.getElementById('f_notes')?.value || '',
+    f_color: document.getElementById('f_color')?.value || '',
+  };
+}
+function saveClientDraft(){ if(window.SapDraft) SapDraft.save(clientDraftKey(), collectClientDraft()); }
+function restoreClientDraft(){ if(!window.SapDraft) return; const d=SapDraft.load(clientDraftKey(),24*60*60*1000); if(d && confirm('A saved draft was found. Restore it?')) Object.entries(d).forEach(([k,v])=>{const el=document.getElementById(k); if(el) el.value=v;}); }
+function clearClientDraft(){ if(!window.SapDraft) return; const id=document.getElementById('editClientId')?.value||''; SapDraft.clear('clients:add'); if(id) SapDraft.clear(`clients:edit:${id}`); }
+function bindClientDraft(){ const f=document.getElementById('clientForm'); if(!f||f.dataset.draftBound==='1') return; f.addEventListener('input',saveClientDraft); f.addEventListener('change',saveClientDraft); f.dataset.draftBound='1'; }
+
 function openAddModal() {
   document.getElementById('editClientId').value = '';
   document.getElementById('clientForm').reset();
@@ -863,7 +886,7 @@ function openAddModal() {
   document.getElementById('customerIdNoteText').textContent =
       `Customer ID will be auto-assigned: ${nextId}`;
 
-  document.getElementById('clientModal').classList.add('open');
+  bindClientDraft(); restoreClientDraft(); document.getElementById('clientModal').classList.add('open');
 }
 
 function openEditModal(id) {
@@ -890,10 +913,15 @@ function openEditModal(id) {
   document.getElementById('customerIdNoteText').innerHTML =
       `<strong>Customer ID (locked):</strong> ${id} — Cannot be changed after creation`;
 
-  document.getElementById('clientModal').classList.add('open');
+  bindClientDraft(); restoreClientDraft(); document.getElementById('clientModal').classList.add('open');
 }
 
-function closeModal() { document.getElementById('clientModal').classList.remove('open'); }
+function closeModal(force) {
+  if (!force && (document.getElementById('f_name')?.value || '').trim() &&
+      !confirm('Close this modal? Draft will be kept for 24 hours and can be restored.')) return;
+  saveClientDraft();
+  document.getElementById('clientModal').classList.remove('open');
+}
 
 async function saveClient() {
   const editId = document.getElementById('editClientId')?.value || '';
@@ -923,7 +951,8 @@ async function saveClient() {
     const data   = await res.json();
     if (!data.success) { showToast('error','Save Failed',(data.data||data).error||'Could not save.'); return; }
     showToast('success', editId ? 'Updated' : 'Added', '"' + name + '" saved.');
-    document.getElementById('clientModal')?.classList.remove('open');
+    clearClientDraft();
+    closeModal(true);
     await loadClients();
   } catch(e) { showToast('error','Network Error','Could not save client.'); }
 }

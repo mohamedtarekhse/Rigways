@@ -1141,6 +1141,11 @@ function switchCVMode(mode) {
 /* ═══════════════════════════════════════════════════════
    ADD / EDIT MODAL
 ═══════════════════════════════════════════════════════ */
+function inspectorDraftKey(){ const id=document.getElementById('editInspectorId')?.value||''; return id?`inspectors:edit:${id}`:'inspectors:add'; }
+function saveInspectorDraft(){ if(!window.SapDraft) return; SapDraft.save(inspectorDraftKey(), { editInspectorId:document.getElementById('editInspectorId')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_title:document.getElementById('f_title')?.value||'', f_email:document.getElementById('f_email')?.value||'', f_phone:document.getElementById('f_phone')?.value||'', f_status:document.getElementById('f_status')?.value||'', f_expYears:document.getElementById('f_expYears')?.value||'', f_expDesc:document.getElementById('f_expDesc')?.value||'', cv_mode:(document.querySelector('.file-url-btn[data-mode=\"url\"].active')?'url':'file'), cvUrlInput:document.getElementById('cvUrlInput')?.value||'', cvFileExisting:document.getElementById('cvFileInput')?.dataset?.existing||'', cvFileExistingKey:document.getElementById('cvFileInput')?.dataset?.existingKey||'' }); }
+function restoreInspectorDraft(){ if(!window.SapDraft) return; const d=SapDraft.load(inspectorDraftKey(),24*60*60*1000); if(!d) return; if(!confirm('A saved draft was found. Restore it?')) return; Object.entries(d).forEach(([k,v])=>{const el=document.getElementById(k); if(el) el.value=v;}); if(d.cv_mode) switchCVMode(d.cv_mode); const f=document.getElementById('cvFileInput'); if(f){f.dataset.existing=d.cvFileExisting||''; f.dataset.existingKey=d.cvFileExistingKey||'';} }
+function clearInspectorDraft(){ if(!window.SapDraft) return; const id=document.getElementById('editInspectorId')?.value||''; SapDraft.clear('inspectors:add'); if(id) SapDraft.clear(`inspectors:edit:${id}`); }
+function bindInspectorDraft(){ const f=document.getElementById('inspectorForm'); if(!f||f.dataset.draftBound==='1') return; f.addEventListener('input',saveInspectorDraft); f.addEventListener('change',saveInspectorDraft); f.dataset.draftBound='1'; }
 function openAddModal() {
   document.getElementById('editInspectorId').value = '';
   document.getElementById('inspectorForm').reset();
@@ -1157,7 +1162,7 @@ function openAddModal() {
   document.getElementById('saveBtnLabel').textContent = currentLang==='ar'?'حفظ المفتش':'Save Inspector';
   /* Add one empty row each */
   addEducationRow(); addTrainingRow(); addTrainingCertRow();
-  document.getElementById('inspectorModal').classList.add('open');
+  bindInspectorDraft(); restoreInspectorDraft(); document.getElementById('inspectorModal').classList.add('open');
 }
 
 function openEditModal(id) {
@@ -1207,10 +1212,15 @@ function openEditModal(id) {
 
   document.getElementById('modalTitle').textContent  = currentLang==='ar'?'تعديل المفتش':'Edit Inspector';
   document.getElementById('saveBtnLabel').textContent= currentLang==='ar'?'حفظ التعديلات':'Save Changes';
-  document.getElementById('inspectorModal').classList.add('open');
+  bindInspectorDraft(); restoreInspectorDraft(); document.getElementById('inspectorModal').classList.add('open');
 }
 
-function closeModal() { document.getElementById('inspectorModal').classList.remove('open'); }
+function closeModal(force) {
+  if (!force && (document.getElementById('f_name')?.value || '').trim() &&
+      !confirm('Close this modal? Draft will be kept for 24 hours and can be restored.')) return;
+  saveInspectorDraft();
+  document.getElementById('inspectorModal').classList.remove('open');
+}
 
 async function saveInspector() {
   const editId = document.getElementById('editInspectorId')?.value || '';
@@ -1307,7 +1317,8 @@ async function saveInspector() {
     const data   = await res.json();
     if (!data.success) { showToast('error','Save Failed',(data.data||data).error||'Could not save.'); return; }
     showToast('success', editId ? 'Updated' : 'Added', '"' + name + '" saved successfully.');
-    document.getElementById('inspectorModal')?.classList.remove('open');
+    clearInspectorDraft();
+    closeModal(true);
     await loadInspectors();
   } catch(e) { showToast('error','Network Error','Could not save inspector. Please try again.'); }
   finally { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Inspector'; } }
