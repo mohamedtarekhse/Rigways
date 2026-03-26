@@ -85,6 +85,48 @@ function apiFetch(path, options = {}) {
 }
 
 /* ================================================================
+   DRAFT STORAGE (sessionStorage)
+================================================================ */
+const SapDraft = (() => {
+  const PREFIX = 'sap_draft:';
+  const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+  function _fullKey(key) { return PREFIX + key; }
+
+  function save(key, payload) {
+    try {
+      sessionStorage.setItem(_fullKey(key), JSON.stringify({
+        ts: Date.now(),
+        payload: payload || {},
+      }));
+    } catch (e) {}
+  }
+
+  function load(key, ttlMs = DEFAULT_TTL_MS) {
+    try {
+      const raw = sessionStorage.getItem(_fullKey(key));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.ts || (Date.now() - parsed.ts) > ttlMs) {
+        clear(key);
+        return null;
+      }
+      return parsed.payload || null;
+    } catch (e) {
+      clear(key);
+      return null;
+    }
+  }
+
+  function clear(key) {
+    try { sessionStorage.removeItem(_fullKey(key)); } catch (e) {}
+  }
+
+  return { save, load, clear, DEFAULT_TTL_MS };
+})();
+if (typeof window !== 'undefined') window.SapDraft = SapDraft;
+
+/* ================================================================
    2. SESSION MANAGER
 ================================================================ */
 const SapSession = (() => {
