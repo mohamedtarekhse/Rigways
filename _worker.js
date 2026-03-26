@@ -1774,6 +1774,7 @@ export default {
       if (path.startsWith('/inspectors')) return await handleInspectors(request, env, path);
       if (path.startsWith('/functional-locations')) return await handleFunctionalLocations(request, env, path);
       if (path.startsWith('/notifications')) return await handleNotifications(request, env, path);
+      if (path.startsWith('/push')) return await handlePushNotifications(request, env, path);
       if (path.startsWith('/reports')) return await handleReports(request, env, path);
 
       return json({ success: false, error: 'Route not found' }, 404, env);
