@@ -1033,7 +1033,7 @@ async function handleCertificates(request, env, path) {
     await _recordCertificateHistory(db, cert, session, 'create');
 
     // Notify managers/admins about pending certs
-    if (cert.approval_status === 'pending') await _notifyApprovers(db, session, cert);
+    if (cert.approval_status === 'pending') await _notifyApprovers(db, env, session, cert);
     return created(cert, env);
   }
 
@@ -1068,8 +1068,26 @@ async function handleCertificates(request, env, path) {
 
     // Notify uploader of decision
     if (body.approval_status && body.approval_status !== existing.approval_status && existing.uploaded_by)
-      await _notifyUser(db, existing.uploaded_by, 'cert_reviewed', `Certificate ${body.approval_status}`,
+      await _notifyUser(db, env, existing.uploaded_by, 'cert_reviewed', `Certificate ${body.approval_status}`,
         `Your certificate "${updated.name}" has been ${body.approval_status}.`, 'certificate', certId);
+
+    // Instant notification for manual expiry status change
+    if (body.expiry_date && body.expiry_date !== existing.expiry_date && updated.approval_status !== 'rejected') {
+      const today = new Date().toISOString().split('T')[0];
+      const in7d = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+      let expiryPayload = null;
+      if (body.expiry_date < today) {
+        expiryPayload = { title: 'Certificate Expired', body: `"${updated.name}" is now expired (${body.expiry_date}).`, url: '/notifications.html', tag: 'instant-expire-' + certId };
+      } else if (body.expiry_date <= in7d) {
+        expiryPayload = { title: 'Certificate Expiring Soon', body: `"${updated.name}" will expire on ${body.expiry_date}.`, url: '/notifications.html', tag: 'instant-expiring-' + certId };
+      }
+      if (expiryPayload) {
+        await sendPushToRoles(db, env, ['admin', 'manager'], expiryPayload, session.sub);
+        if (existing.uploaded_by && existing.uploaded_by !== session.sub) {
+          await sendPushToUser(db, env, existing.uploaded_by, expiryPayload);
+        }
+      }
+    }
 
     return ok(updated || existing, env);
   }
@@ -1164,26 +1182,40 @@ async function handleCertificates(request, env, path) {
   return badReq('Not found', 'NOT_FOUND', env);
 }
 
-async function _notifyApprovers(db, session, cert) {
+async function _notifyApprovers(db, env, session, cert) {
   try {
     const { data: approvers } = await db.from('users', {
       filters: { 'role.in': ['admin', 'manager'], 'is_active.is': true }, select: 'id',
     });
     if (!Array.isArray(approvers)) return;
-    const notifs = approvers.filter(u => u.id !== session.sub).map(u => ({
+    const eligible = approvers.filter(u => u.id !== session.sub);
+    const notifs = eligible.map(u => ({
       user_id: u.id, type: 'cert_uploaded',
       title: 'Certificate Pending Approval',
       body: `${session.name} uploaded "${cert.name}" — awaiting review.`,
       ref_type: 'certificate', ref_id: cert.id, is_read: false,
     }));
-    if (notifs.length) await db.insert('notifications', notifs);
-  } catch (e) { console.warn('Notify failed:', e); }
+    if (notifs.length) {
+      await db.insert('notifications', notifs);
+      // Web Push
+      const payload = { 
+        title: 'New Certificate Uploaded', 
+        body: `${session.name} uploaded "${cert.name || 'document'}"`, 
+        url: '/notifications.html', 
+        tag: 'cert-pending-' + cert.id 
+      };
+      await sendPushToRoles(db, env, ['admin', 'manager'], payload, session.sub);
+    }
+  } catch (e) { console.warn('_notifyApprovers failed:', e); }
 }
 
-async function _notifyUser(db, userId, type, title, body, refType, refId) {
+async function _notifyUser(db, env, userId, type, title, body, refType, refId) {
   try {
     await db.insert('notifications', { user_id: userId, type, title, body, ref_type: refType, ref_id: refId, is_read: false });
-  } catch (e) { console.warn('Notify failed:', e); }
+    // Web Push
+    const payload = { title, body, url: '/notifications.html', tag: type + '-' + (refId || 'null') };
+    await sendPushToUser(db, env, userId, payload);
+  } catch (e) { console.warn('_notifyUser failed:', e); }
 }
 
 async function _withUploaderUsername(db, rows, field = 'uploaded_by') {
