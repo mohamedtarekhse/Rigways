@@ -1447,13 +1447,18 @@ async function togglePushNotif(cb) {
 
       // Send subscription to server
       const subJson = subscription.toJSON();
-      await apiFetch('/api/push/subscribe', {
+      const subRes = await apiFetch('/api/push/subscribe', {
         method: 'POST',
         body: JSON.stringify({
           endpoint: subJson.endpoint,
           keys: subJson.keys,
         }),
       });
+
+      if (!subRes.ok) {
+        const errorData = await subRes.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server Error ${subRes.status}`);
+      }
 
       pushStatus.textContent = 'Push notifications active';
       showToast('success', 'Push Enabled', 'You will receive browser notifications for certificate events.');
