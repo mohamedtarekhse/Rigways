@@ -3,12 +3,16 @@
 
 // ── Push Event — show notification ──────────────────
 self.addEventListener('push', (event) => {
+  console.log('[Service Worker] Push Received.');
   let data = { title: 'Rigways ACM', body: 'You have a new notification.', url: '/notifications.html' };
 
   if (event.data) {
     try {
-      data = { ...data, ...event.data.json() };
+      const json = event.data.json();
+      console.log('[Service Worker] Push Data:', json);
+      data = { ...data, ...json };
     } catch (e) {
+      console.log('[Service Worker] Push Text:', event.data.text());
       data.body = event.data.text() || data.body;
     }
   }
