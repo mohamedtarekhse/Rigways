@@ -465,28 +465,6 @@ async function generateNextAssetNumber(db) {
   return `AST-${String(max + 1).padStart(4, '0')}`;
 }
 
-async function notifyAssetAdded(db, session, asset) {
-  try {
-    const { data: recipients } = await db.from('users', {
-      filters: { 'role.in': ['admin', 'manager'], 'is_active.is': true },
-      select: 'id',
-    });
-    if (!Array.isArray(recipients) || !recipients.length) return;
-    const notifs = recipients
-      .filter(u => u.id && u.id !== session.sub)
-      .map(u => ({
-        user_id: u.id,
-        type: 'asset_added',
-        title: 'New Asset Added',
-        body: `${session.name} added asset "${asset.name}" (${asset.asset_number}).`,
-        ref_type: 'asset',
-        ref_id: asset.id,
-        is_read: false,
-      }));
-    if (notifs.length) await db.insert('notifications', notifs);
-  } catch (e) { console.warn('Asset added notification failed:', e); }
-}
-
 
 async function handleAssets(request, env, path) {
   const session = await getSession(request, env);
@@ -531,20 +509,12 @@ async function handleAssets(request, env, path) {
       if (!String(row.model || '').trim()) warnings.push('model is empty');
       const assetKey = assetNumber.toLowerCase();
       const serialKey = serial.toLowerCase();
-      const hasAssetDup = Boolean((assetKey && byAsset.has(assetKey)) || seenAsset.has(assetKey));
-      const hasSerialDup = Boolean((serialKey && bySerial.has(serialKey)) || seenSerial.has(serialKey));
-      const duplicate = hasAssetDup || hasSerialDup;
-      let duplicateBy = null;
-      if (duplicate) {
-        if (hasAssetDup && hasSerialDup) duplicateBy = 'asset_number_and_serial_number';
-        else if (hasSerialDup) duplicateBy = 'serial_number';
-        else duplicateBy = 'asset_number';
-      }
+      const duplicate = Boolean((assetKey && byAsset.has(assetKey)) || (serialKey && bySerial.has(serialKey)) || seenAsset.has(assetKey) || seenSerial.has(serialKey));
       if (assetKey) seenAsset.add(assetKey);
       if (serialKey) seenSerial.add(serialKey);
 
       const status = errors.length ? 'error' : (duplicate ? 'duplicate' : (warnings.length ? 'warning' : 'valid'));
-      return { index: idx, status, errors, warnings, duplicate, duplicate_by: duplicateBy };
+      return { index: idx, status, errors, warnings, duplicate, duplicate_by: duplicate ? 'asset_number_or_serial_number' : null };
     });
     return ok({ rows: out }, env);
   }
@@ -660,7 +630,6 @@ async function handleAssets(request, env, path) {
     }
     const asset = Array.isArray(data) ? data[0] : data;
     await audit(db, session, 'assets', asset.id, 'create', null, asset);
-    await notifyAssetAdded(db, session, asset);
     return created(asset, env);
   }
 
@@ -1746,185 +1715,6 @@ async function handleReports(request, env, path) {
   return ok({}, env);
 }
 
-// ── push.js ──
-// Bodyless Web Push — VAPID JWT only, zero ECDH/AES crypto.
-// The Service Worker wakes on an empty push, fetches /api/notifications
-// itself using a token it stored in IndexedDB at subscribe-time.
-//
-// Supabase table (run once):
-//   CREATE TABLE push_subscriptions (
-//     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-//     user_id     uuid REFERENCES users(id) ON DELETE CASCADE,
-//     endpoint    text NOT NULL UNIQUE,
-//     created_at  timestamptz DEFAULT now()
-//   );
-//
-// Cloudflare env vars (set as Secrets in Pages → Settings):
-//   VAPID_PUBLIC_KEY   — URL-safe base64 P-256 public key
-//   VAPID_PRIVATE_KEY  — URL-safe base64 P-256 private key
-//   VAPID_SUBJECT      — mailto:admin@your-domain.com
-
-// ── Minimal VAPID JWT (ES256) using Web Crypto ──────────────────────
-
-function b64url(buf) {
-  return btoa(String.fromCharCode(...new Uint8Array(buf)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function strToB64url(str) {
-  return b64url(new TextEncoder().encode(str));
-}
-
-function b64urlDecode(s) {
-  s = s.replace(/-/g, '+').replace(/_/g, '/');
-  while (s.length % 4) s += '=';
-  return Uint8Array.from(atob(s), c => c.charCodeAt(0));
-}
-
-async function makeVapidJwt(endpoint, vapidPublicKey, vapidPrivateKey, vapidSubject) {
-  const url = new URL(endpoint);
-  const aud = `${url.protocol}//${url.host}`;
-  const exp = Math.floor(Date.now() / 1000) + 43200; // 12 h
-
-  const header  = strToB64url(JSON.stringify({ typ: 'JWT', alg: 'ES256' }));
-  const payload = strToB64url(JSON.stringify({ aud, exp, sub: vapidSubject }));
-  const toSign  = `${header}.${payload}`;
-
-  const rawKey = b64urlDecode(vapidPrivateKey);
-  const sigKey = await crypto.subtle.importKey(
-    'raw', rawKey,
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    false, ['sign']
-  );
-  const sigBuf = await crypto.subtle.sign(
-    { name: 'ECDSA', hash: 'SHA-256' },
-    sigKey,
-    new TextEncoder().encode(toSign)
-  );
-  return `${toSign}.${b64url(sigBuf)}`;
-}
-
-// ── Send a bodyless (zero-byte) push to one endpoint ────────────────
-
-async function sendBodylessPush(endpoint, vapidPublicKey, vapidPrivateKey, vapidSubject) {
-  const jwt = await makeVapidJwt(endpoint, vapidPublicKey, vapidPrivateKey, vapidSubject);
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization:  `vapid t=${jwt},k=${vapidPublicKey}`,
-      TTL:            '86400',
-      Urgency:        'high',
-      // No Content-Type, no body — bodyless push
-    },
-  });
-  return { ok: res.ok, status: res.status, gone: res.status === 410 || res.status === 404 };
-}
-
-// ── Route handler ────────────────────────────────────────────────────
-
-async function handlePush(request, env, path) {
-  const session = await getSession(request, env);
-  if (!session) return unauth(env);
-
-  const db     = createSupabase(env);
-  const method = request.method;
-
-  // GET /api/push/vapid-public-key  — client needs this to call subscribe()
-  if (path === '/push/vapid-public-key' && method === 'GET') {
-    return ok({ vapidPublicKey: env.VAPID_PUBLIC_KEY || '' }, env);
-  }
-
-  // POST /api/push/subscribe  — save endpoint (no keys needed for bodyless)
-  if (path === '/push/subscribe' && method === 'POST') {
-    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
-    const { endpoint } = body || {};
-    if (!endpoint) return badReq('endpoint is required', 'VALIDATION', env);
-
-    // Upsert by endpoint
-    const { data: existing } = await db.from('push_subscriptions', {
-      filters: { 'endpoint.eq': endpoint }, select: 'id', limit: 1,
-    });
-    const row = Array.isArray(existing) ? existing[0] : existing;
-    if (row) {
-      await db.update('push_subscriptions', { user_id: session.sub }, { filters: { 'id.eq': row.id } });
-    } else {
-      const { error } = await db.insert('push_subscriptions', { user_id: session.sub, endpoint });
-      if (error && error.code !== '23505') return serverErr(env, error.message);
-    }
-    return ok({ subscribed: true }, env);
-  }
-
-  // POST /api/push/unsubscribe  — remove endpoint
-  if (path === '/push/unsubscribe' && method === 'POST') {
-    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
-    const { endpoint } = body || {};
-    if (!endpoint) return badReq('endpoint is required', 'VALIDATION', env);
-    await db.delete('push_subscriptions', { filters: { 'endpoint.eq': endpoint } });
-    return ok({ unsubscribed: true }, env);
-  }
-
-  // POST /api/push/send-test  — fire a bodyless push to your own devices
-  if (path === '/push/send-test' && method === 'POST') {
-    const { data: subs } = await db.from('push_subscriptions', {
-      filters: { 'user_id.eq': session.sub }, select: 'id,endpoint', limit: 20,
-    });
-    const list = Array.isArray(subs) ? subs : [];
-    if (!list.length) return ok({ sent: 0, message: 'No subscriptions on file for your account.' }, env);
-
-    const vapidPublicKey  = env.VAPID_PUBLIC_KEY;
-    const vapidPrivateKey = env.VAPID_PRIVATE_KEY;
-    const vapidSubject    = env.VAPID_SUBJECT || 'mailto:admin@rigways.com';
-    if (!vapidPublicKey || !vapidPrivateKey)
-      return serverErr(env, 'VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY env vars not set.');
-
-    let sent = 0;
-    for (const sub of list) {
-      const result = await sendBodylessPush(sub.endpoint, vapidPublicKey, vapidPrivateKey, vapidSubject);
-      if (result.gone) {
-        await db.delete('push_subscriptions', { filters: { 'endpoint.eq': sub.endpoint } });
-      } else if (result.ok) {
-        sent++;
-      }
-    }
-    return ok({ sent, total: list.length }, env);
-  }
-
-  // POST /api/push/broadcast  — admin: push to all (or one user's) devices
-  if (path === '/push/broadcast' && method === 'POST') {
-    if (!requireRole(session, ['admin'])) return forbidden(env);
-    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
-    const { user_id } = body || {};
-
-    const filters = user_id ? { 'user_id.eq': user_id } : {};
-    const { data: subs } = await db.from('push_subscriptions', {
-      filters, select: 'id,endpoint', limit: 2000,
-    });
-    const list = Array.isArray(subs) ? subs : [];
-
-    const vapidPublicKey  = env.VAPID_PUBLIC_KEY;
-    const vapidPrivateKey = env.VAPID_PRIVATE_KEY;
-    const vapidSubject    = env.VAPID_SUBJECT || 'mailto:admin@rigways.com';
-    if (!vapidPublicKey || !vapidPrivateKey)
-      return serverErr(env, 'VAPID keys not configured.');
-
-    let sent = 0, failed = 0;
-    for (const sub of list) {
-      const result = await sendBodylessPush(sub.endpoint, vapidPublicKey, vapidPrivateKey, vapidSubject);
-      if (result.gone) {
-        await db.delete('push_subscriptions', { filters: { 'endpoint.eq': sub.endpoint } });
-        failed++;
-      } else if (result.ok) {
-        sent++;
-      } else {
-        failed++;
-      }
-    }
-    return ok({ sent, failed, total: list.length }, env);
-  }
-
-  return badReq('Not found', 'NOT_FOUND', env);
-}
-
 // ── Entry point ──
 export default {
   async fetch(request, env, ctx) {
@@ -1941,20 +1731,19 @@ export default {
     try {
       const path = url.pathname.replace('/api', '');
 
-      if (path.startsWith('/auth'))   return await handleAuth(request, env, path);
-      if (path.startsWith('/users'))  return await handleUsers(request, env, path);
+      if (path.startsWith('/auth')) return await handleAuth(request, env, path);
+      if (path.startsWith('/users')) return await handleUsers(request, env, path);
       if (path.startsWith('/assets')) return await handleAssets(request, env, path);
       if (path.startsWith('/certificates/upload') || path.startsWith('/certificates/file/')) {
-        const uploadResult = await handleCertUpload(request, env, path);
-        if (uploadResult) return uploadResult;
-      }
-      if (path.startsWith('/certificates'))        return await handleCertificates(request, env, path);
-      if (path.startsWith('/clients'))             return await handleClients(request, env, path);
-      if (path.startsWith('/inspectors'))          return await handleInspectors(request, env, path);
-      if (path.startsWith('/functional-locations'))return await handleFunctionalLocations(request, env, path);
-      if (path.startsWith('/notifications'))       return await handleNotifications(request, env, path);
-      if (path.startsWith('/push'))                return await handlePush(request, env, path);
-      if (path.startsWith('/reports'))             return await handleReports(request, env, path);
+      const uploadResult = await handleCertUpload(request, env, path);
+      if (uploadResult) return uploadResult;
+    }
+    if (path.startsWith('/certificates')) return await handleCertificates(request, env, path);
+      if (path.startsWith('/clients')) return await handleClients(request, env, path);
+      if (path.startsWith('/inspectors')) return await handleInspectors(request, env, path);
+      if (path.startsWith('/functional-locations')) return await handleFunctionalLocations(request, env, path);
+      if (path.startsWith('/notifications')) return await handleNotifications(request, env, path);
+      if (path.startsWith('/reports')) return await handleReports(request, env, path);
 
       return json({ success: false, error: 'Route not found' }, 404, env);
     } catch (err) {
