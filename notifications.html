@@ -1536,14 +1536,28 @@ async function runDiagnostic() {
   let report = '--- BROWSER STATUS ---\n';
   report += `Service Worker Support: ${'serviceWorker' in navigator}\n`;
   report += `Push Manager Support: ${'PushManager' in window}\n`;
+  report += `Notification Permission: ${Notification.permission}\n`;
   
   try {
     const registrations = await navigator.serviceWorker.getRegistrations();
     report += `Active Registrations: ${registrations.length}\n`;
     registrations.forEach(r => report += ` - Scope: ${r.scope}\n`);
     
-    const swFile = await fetch('/sw.js');
-    report += `SW file exists (/sw.js): ${swFile.ok} (${swFile.status})\n\n`;
+    report += 'Attempting to reach /sw.js file... ';
+    const swFile = await fetch('/sw.js', { cache: 'no-store' });
+    report += `${swFile.ok ? '✅ FOUND' : '❌ FAILED'} (${swFile.status} ${swFile.statusText})\n`;
+    
+    if (registrations.length === 0) {
+      report += '\nTrying to FORCE register /sw.js now... ';
+      try {
+        const newReg = await navigator.serviceWorker.register('/sw.js');
+        report += `✅ SUCCESS (Scope: ${newReg.scope})\n`;
+        swRegistration = newReg;
+      } catch (regErr) {
+        report += `❌ REGISTRATION FAILED: ${regErr.message}\n`;
+      }
+    }
+    report += '\n';
   } catch (e) {
     report += `Browser Error: ${e.message}\n\n`;
   }

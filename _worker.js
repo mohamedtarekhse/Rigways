@@ -1949,6 +1949,7 @@ async function handlePush(request, env, path) {
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
     const { endpoint, keys } = body || {};
     if (!endpoint || !keys?.p256dh || !keys?.auth) return badReq('Missing subscription fields', 'VALIDATION', env);
+    if (!endpoint.startsWith('https://')) return badReq('Invalid push endpoint (HTTPS required)', 'VALIDATION', env);
     const { data: existing } = await db.from('push_subscriptions', { filters: { 'user_id.eq': session.sub, 'endpoint.eq': endpoint }, select: 'id', limit: 1 });
     const existingRow = Array.isArray(existing) ? existing[0] : existing;
     if (existingRow) {
@@ -2035,10 +2036,24 @@ async function handleCheckExpiry(env) {
   if (criticalList.length > 0) {
     const payload = { title: `🔴 ${criticalList.length} Certs Expiring (7d)`, body: criticalList.slice(0, 3).map(c => `${c.name || c.cert_number} (${c.expiry_date})`).join(', '), url: '/notifications.html', tag: 'cert-expiring-critical' };
     await sendPushToRoles(db, env, ['admin', 'manager'], payload); pushCount++;
+
+    const uploaderIds = [...new Set(criticalList.map(c => c.uploaded_by).filter(Boolean))];
+    for (const uid of uploaderIds) {
+      const userCerts = criticalList.filter(c => c.uploaded_by === uid);
+      await sendPushToUser(db, env, uid, { title: `🔴 ${userCerts.length} of your certs expiring (≤7d)`, body: userCerts.map(c => `${c.name || c.cert_number} (${c.expiry_date})`).join(', '), url: '/certificates.html', tag: 'cert-critical-user' });
+      pushCount++;
+    }
   }
   if (warningList.length > 0 && new Date().getUTCDay() === 1) {
     await sendPushToRoles(db, env, ['admin', 'manager'], { title: `🟡 ${warningList.length} Certs Expiring (30d)`, body: `${warningList.length} certificates due soon.`, url: '/notifications.html', tag: 'cert-expiring-warning' });
     pushCount++;
+
+    const uploaderIds = [...new Set(warningList.map(c => c.uploaded_by).filter(Boolean))];
+    for (const uid of uploaderIds) {
+      const userCerts = warningList.filter(c => c.uploaded_by === uid);
+      await sendPushToUser(db, env, uid, { title: `🟡 ${userCerts.length} of your certs expiring soon (≤30d)`, body: `${userCerts.length} certificates due soon.`, url: '/certificates.html', tag: 'cert-warning-user' });
+      pushCount++;
+    }
   }
   return { checked: true, expired: expiredList.length, critical: criticalList.length, warning: warningList.length, pushesSent: pushCount };
 }
