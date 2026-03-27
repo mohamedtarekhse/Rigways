@@ -885,6 +885,42 @@ async function handleCertificates(request, env, path) {
     return ok({ history: withNames }, env);
   }
 
+  if (path === '/diag' && method === 'GET') {
+    const checks = {
+      SUPABASE_URL: !!env.SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY: !!env.SUPABASE_SERVICE_ROLE_KEY,
+      JWT_SECRET: !!env.JWT_SECRET,
+      VAPID_PRIVATE_KEY: !!env.VAPID_PRIVATE_KEY,
+      VAPID_PUBLIC_KEY: !!env.VAPID_PUBLIC_KEY,
+      CRON_SECRET: !!env.CRON_SECRET,
+      CERT_BUCKET: !!env.CERT_BUCKET
+    };
+    
+    // Crypto Self-Test
+    let cryptoTest = { ok: false };
+    try {
+      if (env.VAPID_PRIVATE_KEY && env.VAPID_PUBLIC_KEY) {
+        const dummySub = { endpoint: 'https://updates.push.services.mozilla.com/wpush/v2/dummy', keys: { p256dh: 'BNkHRry_3w6SjdeQNJbCpV3ouo7s5FHHSzWhAZQ5oja-X9tabOf8gqO7xRQpVBEHNrlSEazJLeqBY1eBhSMTdig', auth: '8eByt89o4J9v-02e3K5IYA' } };
+        const vapid = { publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY, subject: 'mailto:test@test.com' };
+        await buildVapidHeaders(dummySub.endpoint, vapid.subject, vapid.publicKey, vapid.privateKey);
+        await encryptPayload(dummySub.keys.p256dh, dummySub.keys.auth, new TextEncoder().encode('test'));
+        cryptoTest.ok = true;
+      } else {
+        cryptoTest.error = 'Keys missing';
+      }
+    } catch (e) {
+      cryptoTest.error = e.message || String(e);
+    }
+
+    return ok({ 
+      success: true, 
+      checks, 
+      cryptoTest,
+      deployment: 'worker_v2_diag',
+      timestamp: new Date().toISOString() 
+    }, env);
+  }
+
   /* ── GET /api/certificates/expiring?days=30 — dashboard widget ── */
   if (path === '/certificates/expiring' && method === 'GET') {
     const days = parseInt(url.searchParams.get('days') || '30');
