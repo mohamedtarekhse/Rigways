@@ -1756,17 +1756,20 @@ async function sendPushToUser(db, env, userId, payload) {
       if (result.gone) { await db.delete('push_subscriptions', { filters: { 'id.eq': sub.id } }).catch(() => {}); }
       return result;
     })));
-    return results;
-  } catch (e) { console.warn('sendPushToUser failed:', e); }
+    return { sent: results.filter(r => r.status === 'fulfilled' && r.value.ok).length, total: subs.length };
+  } catch (e) { console.warn('sendPushToUser failed:', e); return { sent: 0, total: 0 }; }
 }
 
 async function sendPushToRoles(db, env, roles, payload, excludeUserId = null) {
-  if (!env.VAPID_PRIVATE_KEY) return;
+  if (!env.VAPID_PRIVATE_KEY) return { users: 0, sent: 0 };
   try {
     const { data: users } = await db.from('users', { filters: { 'role.in': roles, 'is_active.is': true }, select: 'id' });
-    if (!Array.isArray(users) || !users.length) return;
-    await Promise.allSettled(users.filter(u => u.id !== excludeUserId).map(u => sendPushToUser(db, env, u.id, payload)));
-  } catch (e) { console.warn('sendPushToRoles failed:', e); }
+    if (!Array.isArray(users) || !users.length) return { users: 0, sent: 0 };
+    const eligible = users.filter(u => u.id !== excludeUserId);
+    const results = await Promise.allSettled(eligible.map(u => sendPushToUser(db, env, u.id, payload)));
+    const sent = results.reduce((acc, r) => acc + (r.status === 'fulfilled' ? (r.value?.sent || 0) : 0), 0);
+    return { users: eligible.length, sent };
+  } catch (e) { console.warn('sendPushToRoles failed:', e); return { users: 0, sent: 0 }; }
 }
 
 async function buildVapidHeaders(endpoint, subject, publicKeyBase64, privateKeyBase64) {
@@ -1905,16 +1908,16 @@ async function handlePush(request, env, path) {
   /* ── GET /api/push/test ── Send a test notification to yourself */
   if (path === '/push/test' && method === 'GET') {
     const payload = { title: 'Test Notification', body: 'Push notifications are working correctly!', url: '/notifications.html', tag: 'test-push' };
-    const results = await sendPushToUser(db, env, session.sub, payload);
-    return ok({ success: true, results }, env);
+    const stats = await sendPushToUser(db, env, session.sub, payload);
+    return ok({ success: true, stats, message: stats.total > 0 ? `Sent to ${stats.sent} of your ${stats.total} devices.` : "You don't have any active push subscriptions. Did you enable them in this browser?" }, env);
   }
 
   /* ── GET /api/push/test-all ── Send a test notification to all admins/managers */
   if (path === '/push/test-all' && method === 'GET') {
     if (!isAdminOrManager(session)) return forbidden(env);
     const payload = { title: 'Global Test', body: `Broadcasting test from ${session.username}`, url: '/notifications.html', tag: 'global-test' };
-    await sendPushToRoles(db, env, ['admin', 'manager'], payload);
-    return ok({ success: true, message: 'Global test sent to all admins/managers.' }, env);
+    const stats = await sendPushToRoles(db, env, ['admin', 'manager'], payload);
+    return ok({ success: true, stats, message: `Broadcasting to ${stats.users} qualified users. ${stats.sent} notifications triggered.` }, env);
   }
   return badReq('Not found', 'NOT_FOUND', env);
 }
