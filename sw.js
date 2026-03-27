@@ -1,5 +1,50 @@
-// sw.js — Service Worker for Rigways ACM Push Notifications
+// sw.js — Service Worker for Rigways ACM (Optimized)
 // Must be at root for maximum scope
+
+const CACHE_NAME = 'rigways-static-v1';
+const STATIC_ASSETS = [
+  '/',
+  '/index.html',
+  '/styles.css',
+  '/favicon.ico',
+  '/manifest.json'
+];
+
+// ── Install — cache core assets ──────────────────
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      console.log('[Service Worker] Caching static environment...');
+      return cache.addAll(STATIC_ASSETS);
+    })
+  );
+});
+
+// ── Activate — cleanup old caches ───────────────────
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    Promise.all([
+      clients.claim(),
+      caches.keys().then((keys) => {
+        return Promise.all(
+          keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+        );
+      })
+    ])
+  );
+});
+
+// ── Fetch — serve cached static assets ──────────────
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  // Cache-first for core static icons/css/js
+  if (STATIC_ASSETS.includes(url.pathname)) {
+    event.respondWith(
+      caches.match(event.request).then(res => res || fetch(event.request))
+    );
+  }
+});
 
 // ── Push Event — show notification ──────────────────
 self.addEventListener('push', (event) => {
@@ -43,30 +88,32 @@ self.addEventListener('notificationclick', (event) => {
   if (event.action === 'dismiss') return;
 
   const urlPath = event.notification.data?.url || '/notifications.html';
+  const fullDestUrl = new URL(urlPath, self.location.origin).href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Focus existing tab if open
+      // 1. Search for a tab already on this exact page
       for (const client of clientList) {
-        const clientUrl = new URL(client.url);
-        if (clientUrl.pathname === urlPath || clientUrl.pathname.endsWith(urlPath)) {
-          client.focus();
-          return client.navigate(client.url);
+        if (client.url === fullDestUrl) {
+          if ('focus' in client) return client.focus();
         }
       }
-      // Open new tab
-      const fullUrl = new URL(urlPath, self.location.origin).href;
-      return clients.openWindow(fullUrl);
+
+      // 2. Search for a tab from our app (same origin) to reuse
+      for (const client of clientList) {
+        const clientUrl = new URL(client.url);
+        if (clientUrl.origin === self.location.origin) {
+          if ('navigate' in client && 'focus' in client) {
+            client.navigate(fullDestUrl);
+            return client.focus();
+          }
+        }
+      }
+
+      // 3. Last fallback: Open a new window
+      if (clients.openWindow) {
+        return clients.openWindow(fullDestUrl);
+      }
     })
   );
-});
-
-// ── Activate — claim control immediately ────────────
-self.addEventListener('activate', (event) => {
-  event.waitUntil(clients.claim());
-});
-
-// ── Install — skip waiting ──────────────────────────
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
 });
