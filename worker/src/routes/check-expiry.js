@@ -81,9 +81,22 @@ export async function handleCheckExpiry(env) {
     };
     await sendPushToRoles(db, env, ['admin', 'manager'], payload);
     pushCount++;
+
+    // Also notify uploaders of critical expiry
+    const uploaderIds = [...new Set(critical.map(c => c.uploaded_by).filter(Boolean))];
+    for (const uid of uploaderIds) {
+      const userCerts = critical.filter(c => c.uploaded_by === uid);
+      await sendPushToUser(db, env, uid, {
+        title: `🔴 ${userCerts.length} of your certificate${userCerts.length !== 1 ? 's' : ''} expiring in ≤7 days`,
+        body: userCerts.map(c => `${c.name || c.cert_number} (${c.expiry_date})`).join(', '),
+        url: '/certificates.html',
+        tag: 'cert-critical-user',
+      });
+      pushCount++;
+    }
   }
 
-  // ── Send push for warning (8-30 days) — only to admins weekly ──
+  // ── Send push for warning (8-30 days) — only on Monday ──
   if (warning.length > 0) {
     const dayOfWeek = new Date().getUTCDay(); // 0=Sun
     if (dayOfWeek === 1) { // Monday only
@@ -95,6 +108,19 @@ export async function handleCheckExpiry(env) {
       };
       await sendPushToRoles(db, env, ['admin', 'manager'], payload);
       pushCount++;
+
+      // Also notify uploaders of weekly warning
+      const uploaderIds = [...new Set(warning.map(c => c.uploaded_by).filter(Boolean))];
+      for (const uid of uploaderIds) {
+        const userCerts = warning.filter(c => c.uploaded_by === uid);
+        await sendPushToUser(db, env, uid, {
+          title: `🟡 ${userCerts.length} of your certificate${userCerts.length !== 1 ? 's' : ''} expiring soon (≤30 days)`,
+          body: `${userCerts.length} certificates due soon: ${userCerts.slice(0, 2).map(c => c.name || c.cert_number).join(', ')}...`,
+          url: '/certificates.html',
+          tag: 'cert-warning-user',
+        });
+        pushCount++;
+      }
     }
   }
 

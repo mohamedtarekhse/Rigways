@@ -9,6 +9,6 @@ API_BASE_URL = "https://rigways.pages.dev"
 
 # CRON_SECRET must be set as an encrypted secret:
 # wrangler secret put CRON_SECRET
-
+CRON_SECRET = "acPF080P5DjTPf0DDX0QHOwUmyg9gnvfPo1MlDgKZ7U"
 [triggers]
 crons = ["0 0 * * *"] # Every day at midnight UTC

@@ -2135,7 +2135,10 @@ export default {
 
         if (!isSecretMatch) {
           const session = await getSession(request, env);
-          if (!session || !requireRole(session, ['admin'])) return forbidden(env);
+          if (!session || !requireRole(session, ['admin'])) {
+            const reason = !cronSecret ? 'CRON_SECRET_NOT_CONFIGURED' : 'INVALID_SECRET_PROVIDED';
+            return json({ success: false, error: `Forbidden: ${reason}`, code: 'FORBIDDEN' }, 403, env);
+          }
         }
 
         const result = await handleCheckExpiry(env);
