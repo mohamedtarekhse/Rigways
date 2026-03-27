@@ -1,6 +1,6 @@
 # wrangler.toml — Rigways ACM
 
-name                   = "rigways-acm"
+name                   = "rigways"
 pages_build_output_dir = "."
 compatibility_date     = "2024-09-23"
 compatibility_flags    = ["nodejs_compat"]
@@ -19,7 +19,7 @@ JWT_EXPIRES_SEC       = "86400"
 # Set VAPID_PUBLIC_KEY below, then set these as secrets:
 #   wrangler secret put VAPID_PRIVATE_KEY
 #   wrangler secret put VAPID_SUBJECT    (e.g. "mailto:admin@rigways.com")
-VAPID_PUBLIC_KEY      = ""
+VAPID_PUBLIC_KEY      = "BNkHRry_3w6SjdeQNJbCpV3ouo7s5FHHSzWhAZQ5oja-X9tabOf8gqO7xRQpVBEHNrlSEazJLeqBY1eBhSMTdig"
 
 # ── Cron Trigger — daily certificate expiry check at 8 AM UTC ──
 [triggers]
