@@ -2053,13 +2053,31 @@ export default {
           SUPABASE_URL: !!env.SUPABASE_URL,
           SUPABASE_SERVICE_ROLE_KEY: !!env.SUPABASE_SERVICE_ROLE_KEY,
           JWT_SECRET: !!env.JWT_SECRET,
-          VAPID_PUBLIC_KEY: !!env.VAPID_PUBLIC_KEY,
           VAPID_PRIVATE_KEY: !!env.VAPID_PRIVATE_KEY,
-          CERT_BUCKET: !!env.CERT_BUCKET,
-          CRON_SECRET: !!env.CRON_SECRET
+          VAPID_PUBLIC_KEY: !!env.VAPID_PUBLIC_KEY,
+          CRON_SECRET: !!env.CRON_SECRET,
+          CERT_BUCKET: !!env.CERT_BUCKET
         };
-        const allOk = Object.values(checks).every(v => v);
-        return ok({ success: allOk, checks, note: 'Values are hidden for security. "false" means the secret is missing in Cloudflare Dashboard.' }, env);
+        
+        let cryptoTest = { ok: false };
+        try {
+          if (env.VAPID_PRIVATE_KEY && env.VAPID_PUBLIC_KEY) {
+            const dummySub = { endpoint: 'https://updates.push.services.mozilla.com/wpush/v2/dummy', keys: { p256dh: 'BNkHRry_3w6SjdeQNJbCpV3ouo7s5FHHSzWhAZQ5oja-X9tabOf8gqO7xRQpVBEHNrlSEazJLeqBY1eBhSMTdig', auth: '8eByt89o4J9v-02e3K5IYA' } };
+            const vapid = { publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY, subject: env.VAPID_SUBJECT || 'mailto:admin@rigways.com' };
+            await buildVapidHeaders(dummySub.endpoint, vapid.subject, vapid.publicKey, vapid.privateKey);
+            await encryptPayload(dummySub.keys.p256dh, dummySub.keys.auth, new TextEncoder().encode('test-diag'));
+            cryptoTest.ok = true;
+          } else { cryptoTest.error = 'Keys missing'; }
+        } catch (e) { cryptoTest.error = e.message || String(e); }
+
+        return ok({ 
+          success: true, 
+          checks, 
+          cryptoTest,
+          deployment: 'worker_v2_diag',
+          version: '2.0.5',
+          timestamp: new Date().toISOString() 
+        }, env);
       }
 
       // Cron manual trigger (Admin or Secret)
