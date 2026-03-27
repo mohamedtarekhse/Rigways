@@ -1437,9 +1437,11 @@ async function sendTestPush(global = false) {
   try {
     const endpoint = global ? '/api/push/test-all' : '/api/push/test';
     const res = await apiFetch(endpoint);
-    const data = await res.json();
-    if (data.success) {
-      showToast('success', global ? 'Global Test Sent' : 'Test Sent', data.message || 'Notification triggered successfully.');
+    const raw = await res.json();
+    const data = raw.data || raw; 
+    if (raw.success) {
+      const msg = data.message || 'Notification triggered successfully.';
+      showToast('success', global ? 'Global Test Sent' : 'Test Sent', msg);
     } else {
       showToast('error', 'Test Failed', data.error || 'Failed to trigger notification.');
     }
