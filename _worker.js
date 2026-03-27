@@ -1856,7 +1856,7 @@ async function handlePush(request, env, path) {
       return ok({ subscribed: true, updated: true }, env);
     }
     const { error } = await db.insert('push_subscriptions', { user_id: session.sub, endpoint, p256dh: keys.p256dh, auth: keys.auth, user_agent: request.headers.get('User-Agent') || null });
-    if (error) return serverErr(env);
+    if (error) return serverErr(env, error.message || JSON.stringify(error));
     return created({ subscribed: true }, env);
   }
 
