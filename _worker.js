@@ -1908,6 +1908,14 @@ async function handlePush(request, env, path) {
     const results = await sendPushToUser(db, env, session.sub, payload);
     return ok({ success: true, results }, env);
   }
+
+  /* ── GET /api/push/test-all ── Send a test notification to all admins/managers */
+  if (path === '/push/test-all' && method === 'GET') {
+    if (!isAdminOrManager(session)) return forbidden(env);
+    const payload = { title: 'Global Test', body: `Broadcasting test from ${session.username}`, url: '/notifications.html', tag: 'global-test' };
+    await sendPushToRoles(db, env, ['admin', 'manager'], payload);
+    return ok({ success: true, message: 'Global test sent to all admins/managers.' }, env);
+  }
   return badReq('Not found', 'NOT_FOUND', env);
 }
 
