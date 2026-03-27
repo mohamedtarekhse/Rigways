@@ -68,9 +68,12 @@ const compact = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) =
 // Thin Supabase REST wrapper — service key never leaves the Worker
 
 function createSupabase(env) {
-  // Falls back to hardcoded values if env vars not set
-  const base = env.SUPABASE_URL || 'https://rsrwcimpeeulwvweupla.supabase.co';
-  const key = env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzcndjaW1wZWV1bHd2d2V1cGxhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDA3MjY2NCwiZXhwIjoyMDg5NjQ4NjY0fQ.hgIrf05XlM4soC97Imw7Wg7fYeW84ldHOw3Daanf_Ek';
+  const base = env.SUPABASE_URL;
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!base || !key) {
+    throw new Error('Critical Configuration Error: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set in Cloudflare Environment Variables.');
+  }
 
   async function _fetch(path, options = {}) {
     const prefer = options._prefer || 'return=representation';
@@ -203,7 +206,11 @@ async function verifyJwt(token, secret) {
 async function getSession(request, env) {
   const auth = request.headers.get('Authorization') || '';
   if (!auth.startsWith('Bearer ')) return null;
-  const jwtSecret = env.JWT_SECRET || 'RpqWYICUJpGoAPqmRhbaY2OW9repND0gRtqzCOedMvvVD/wT0hld52zEAXYDQdLdXwqa0WxO9wpaDbm4e1QTjQ==';
+  const jwtSecret = env.JWT_SECRET;
+  if (!jwtSecret) {
+    console.error('JWT_SECRET missing in environment');
+    return null;
+  }
   try { return await verifyJwt(auth.slice(7), jwtSecret); }
   catch { return null; }
 }
@@ -262,7 +269,9 @@ async function handleAuth(request, env, path) {
     db.update('users', { last_login_at: new Date().toISOString() }, { filters: { 'id.eq': user.id }, select: 'id' }).catch(() => { });
 
     const expiresIn = parseInt(env.JWT_EXPIRES_SEC || '86400', 10);
-    const jwtSecret = env.JWT_SECRET || 'RpqWYICUJpGoAPqmRhbaY2OW9repND0gRtqzCOedMvvVD/wT0hld52zEAXYDQdLdXwqa0WxO9wpaDbm4e1QTjQ==';
+    const jwtSecret = env.JWT_SECRET;
+    if (!jwtSecret) return serverErr(env, 'JWT_SECRET is missing in Cloudflare dashboard');
+
     const token = await signJwt({
       sub: user.id,
       username: user.username,
@@ -1977,6 +1986,21 @@ export default {
       if (path.startsWith('/notifications')) return await handleNotifications(request, env, path);
       if (path.startsWith('/reports')) return await handleReports(request, env, path);
       if (path.startsWith('/push')) return await handlePush(request, env, path);
+
+      /* ── GET /api/diag ── Configuration Diagnostics */
+      if (path === '/diag' && request.method === 'GET') {
+        const checks = {
+          SUPABASE_URL: !!env.SUPABASE_URL,
+          SUPABASE_SERVICE_ROLE_KEY: !!env.SUPABASE_SERVICE_ROLE_KEY,
+          JWT_SECRET: !!env.JWT_SECRET,
+          VAPID_PUBLIC_KEY: !!env.VAPID_PUBLIC_KEY,
+          VAPID_PRIVATE_KEY: !!env.VAPID_PRIVATE_KEY,
+          CERT_BUCKET: !!env.CERT_BUCKET,
+          CRON_SECRET: !!env.CRON_SECRET
+        };
+        const allOk = Object.values(checks).every(v => v);
+        return ok({ success: allOk, checks, note: 'Values are hidden for security. "false" means the secret is missing in Cloudflare Dashboard.' }, env);
+      }
 
       // Cron manual trigger (Admin or Secret)
       if (path === '/cron/check-expiry' && request.method === 'GET') {
