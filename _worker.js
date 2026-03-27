@@ -1840,10 +1840,16 @@ function derToRaw(der) {
 // worker/src/routes/push.js
 
 async function handlePush(request, env, path) {
-  const session = await getSession(request, env);
-  if (!session) return unauth(env);
   const method = request.method;
   const db = createSupabase(env);
+
+  /* ── GET /api/push/vapid-key ── public key needed by frontend to subscribe */
+  if (path === '/push/vapid-key' && method === 'GET') {
+    return ok({ publicKey: env.VAPID_PUBLIC_KEY || '' }, env);
+  }
+
+  const session = await getSession(request, env);
+  if (!session) return unauth(env);
 
   if (path === '/push/subscribe' && method === 'POST') {
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
