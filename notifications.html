@@ -1532,20 +1532,37 @@ async function runDiagnostic() {
   if (!panel || !content) return;
   panel.style.display = 'block';
   content.textContent = 'Running diagnostics...';
+  
+  let report = '--- BROWSER STATUS ---\n';
+  report += `Service Worker Support: ${'serviceWorker' in navigator}\n`;
+  report += `Push Manager Support: ${'PushManager' in window}\n`;
+  
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    report += `Active Registrations: ${registrations.length}\n`;
+    registrations.forEach(r => report += ` - Scope: ${r.scope}\n`);
+    
+    const swFile = await fetch('/sw.js');
+    report += `SW file exists (/sw.js): ${swFile.ok} (${swFile.status})\n\n`;
+  } catch (e) {
+    report += `Browser Error: ${e.message}\n\n`;
+  }
+
+  report += '--- SERVER STATUS ---\n';
   try {
     const res = await apiFetch('/api/diag');
     const data = await res.json();
     const result = data.data || data;
-    content.textContent = JSON.stringify(result, null, 2);
+    report += JSON.stringify(result, null, 2);
+    content.textContent = report;
+    
     if (!result.cryptoTest) {
       content.innerHTML += '\n\n<span style="color:#d32f2f; font-weight:bold;">⚠️ WARNING: Live Worker version is old. Please redeploy.</span>';
     } else if (result.cryptoTest.ok) {
       content.innerHTML += '\n\n<span style="color:#2e7d32; font-weight:bold;">✅ SUCCESS: Push engine is healthy and modern.</span>';
-    } else {
-      content.innerHTML += '\n\n<span style="color:#d32f2f; font-weight:bold;">❌ ERROR: Push engine configuration failed. See logs above.</span>';
     }
   } catch (e) {
-    content.textContent = 'Failed to run diagnostics: ' + e.message;
+    content.textContent = report + '\nFailed to run server diagnostics: ' + e.message;
   }
 }
 
