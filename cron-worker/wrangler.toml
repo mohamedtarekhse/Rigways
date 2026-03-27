@@ -1,0 +1,14 @@
+# cron-worker/wrangler.toml
+
+name = "rigways-cron"
+main = "index.js"
+compatibility_date = "2024-09-23"
+
+[vars]
+API_BASE_URL = "https://rigways.pages.dev"
+
+# CRON_SECRET must be set as an encrypted secret:
+# wrangler secret put CRON_SECRET
+
+[triggers]
+crons = ["0 0 * * *"] # Every day at midnight UTC

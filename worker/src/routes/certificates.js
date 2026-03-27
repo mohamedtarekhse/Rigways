@@ -3,6 +3,7 @@ import { createSupabase }                    from '../lib/supabase.js';
 import { getSession, requireRole }           from '../middleware/jwt.js';
 import { ok, created, badReq, unauth, forbidden, notFound, serverErr } from '../utils/response.js';
 import { validate, pick, compact }           from '../utils/validate.js';
+import { sendPushToUser, sendPushToRoles }   from '../lib/web-push.js';
 
 const TYPES    = ['Quality','Safety','Inspection','Compliance','Technical','Environmental','Other'];
 const STATUSES = ['pending','approved','rejected'];
@@ -132,7 +133,16 @@ export async function handleCertificates(request, env, path) {
     await _recordCertificateHistory(db, cert, session, 'create');
 
     // Notify managers/admins about pending certs
-    if (cert.approval_status === 'pending') await _notifyApprovers(db, session, cert);
+    if (cert.approval_status === 'pending') {
+      await _notifyApprovers(db, session, cert);
+      // Push notification to admins/managers
+      sendPushToRoles(db, env, ['admin', 'manager'], {
+        title: 'Certificate Pending Approval',
+        body: `${session.name} uploaded "${cert.name}" — awaiting review.`,
+        url: '/certificates.html',
+        tag: 'cert-pending-' + cert.id,
+      }, session.sub).catch(() => {});
+    }
     return created(cert, env);
   }
 
@@ -166,9 +176,17 @@ export async function handleCertificates(request, env, path) {
     await _recordCertificateHistory(db, updated || existing, session, 'update');
 
     // Notify uploader of decision
-    if (body.approval_status && body.approval_status !== existing.approval_status && existing.uploaded_by)
+    if (body.approval_status && body.approval_status !== existing.approval_status && existing.uploaded_by) {
       await _notifyUser(db, existing.uploaded_by, 'cert_reviewed', `Certificate ${body.approval_status}`,
         `Your certificate "${updated.name}" has been ${body.approval_status}.`, 'certificate', certId);
+      // Push notification to uploader
+      sendPushToUser(db, env, existing.uploaded_by, {
+        title: `Certificate ${body.approval_status === 'approved' ? 'Approved ✅' : 'Rejected ❌'}`,
+        body: `Your certificate "${updated.name}" has been ${body.approval_status}.`,
+        url: '/certificates.html',
+        tag: 'cert-review-' + certId,
+      }).catch(() => {});
+    }
 
     return ok(updated || existing, env);
   }

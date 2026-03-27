@@ -1715,6 +1715,224 @@ async function handleReports(request, env, path) {
   return ok({}, env);
 }
 
+// ── web-push.js ──
+// worker/src/lib/web-push.js — Web Push via Web Crypto (VAPID)
+
+async function sendPushNotification(subscription, payload, vapid) {
+  try {
+    const payloadStr = JSON.stringify(payload);
+    const payloadBytes = new TextEncoder().encode(payloadStr);
+    const { ciphertext, headers } = await encryptPayload(subscription.keys.p256dh, subscription.keys.auth, payloadBytes);
+    const vapidHeaders = await buildVapidHeaders(subscription.endpoint, vapid.subject, vapid.publicKey, vapid.privateKey);
+    const response = await fetch(subscription.endpoint, {
+      method: 'POST',
+      headers: { ...headers, ...vapidHeaders, 'TTL': '86400' },
+      body: ciphertext,
+    });
+    return { ok: response.ok || response.status === 201, status: response.status, gone: response.status === 410 || response.status === 404 };
+  } catch (e) {
+    console.error('sendPushNotification error:', e);
+    return { ok: false, status: 0, gone: false };
+  }
+}
+
+async function sendPushToUser(db, env, userId, payload) {
+  if (!userId || !env.VAPID_PRIVATE_KEY) return;
+  try {
+    const { data: subs } = await db.from('push_subscriptions', { filters: { 'user_id.eq': userId }, select: '*', limit: 20 });
+    if (!Array.isArray(subs) || !subs.length) return;
+    const vapid = { publicKey: env.VAPID_PUBLIC_KEY || '', privateKey: env.VAPID_PRIVATE_KEY || '', subject: env.VAPID_SUBJECT || 'mailto:admin@rigways.com' };
+    const results = await Promise.allSettled(subs.map(sub => sendPushNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload, vapid).then(async (result) => {
+      if (result.gone) { await db.delete('push_subscriptions', { filters: { 'id.eq': sub.id } }).catch(() => {}); }
+      return result;
+    })));
+    return results;
+  } catch (e) { console.warn('sendPushToUser failed:', e); }
+}
+
+async function sendPushToRoles(db, env, roles, payload, excludeUserId = null) {
+  if (!env.VAPID_PRIVATE_KEY) return;
+  try {
+    const { data: users } = await db.from('users', { filters: { 'role.in': roles, 'is_active.is': true }, select: 'id' });
+    if (!Array.isArray(users) || !users.length) return;
+    await Promise.allSettled(users.filter(u => u.id !== excludeUserId).map(u => sendPushToUser(db, env, u.id, payload)));
+  } catch (e) { console.warn('sendPushToRoles failed:', e); }
+}
+
+async function buildVapidHeaders(endpoint, subject, publicKeyBase64, privateKeyBase64) {
+  const audience = new URL(endpoint).origin;
+  const expiration = Math.floor(Date.now() / 1000) + (12 * 60 * 60);
+  const headerB64 = b64(enc.encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
+  const claimsB64 = b64(enc.encode(JSON.stringify({ aud: audience, exp: expiration, sub: subject })));
+  const unsignedToken = `${headerB64}.${claimsB64}`;
+  const privateKeyBytes = unb64(privateKeyBase64);
+  const publicKeyBytes = unb64(publicKeyBase64);
+  const jwk = { kty: 'EC', crv: 'P-256', x: b64(publicKeyBytes.slice(1, 33)), y: b64(publicKeyBytes.slice(33, 65)), d: b64(privateKeyBytes) };
+  const key = await crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, enc.encode(unsignedToken));
+  const rawSig = derToRaw(new Uint8Array(signature));
+  const token = `${unsignedToken}.${b64(rawSig)}`;
+  return { 'Authorization': `vapid t=${token}, k=${publicKeyBase64}` };
+}
+
+async function encryptPayload(p256dhBase64, authBase64, payload) {
+  const clientPublicKeyBytes = unb64(p256dhBase64);
+  const authSecret = unb64(authBase64);
+  const clientPublicKey = await crypto.subtle.importKey('raw', clientPublicKeyBytes, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const serverKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const sharedSecret = await crypto.subtle.deriveBits({ name: 'ECDH', public: clientPublicKey }, serverKeys.privateKey, 256);
+  const serverPublicKeyBytes = new Uint8Array(await crypto.subtle.exportKey('raw', serverKeys.publicKey));
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const prk = await hkdfExtract(authSecret, new Uint8Array(sharedSecret));
+  const cek = await hkdfExpand(prk, createWebPushInfo('Content-Encoding: aes128gcm\0', salt, clientPublicKeyBytes, serverPublicKeyBytes), 16);
+  const nonce = await hkdfExpand(prk, createWebPushInfo('Content-Encoding: nonce\0', salt, clientPublicKeyBytes, serverPublicKeyBytes), 12);
+  const cryptoKey = await crypto.subtle.importKey('raw', cek, { name: 'AES-GCM' }, false, ['encrypt']);
+  const padded = new Uint8Array(payload.length + 1);
+  padded.set(payload); padded[payload.length] = 2;
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, cryptoKey, padded);
+  const header = new Uint8Array(16 + 4 + 1 + serverPublicKeyBytes.length);
+  header.set(salt, 0);
+  new DataView(header.buffer).setUint32(16, 4096, false);
+  header[20] = serverPublicKeyBytes.length;
+  header.set(serverPublicKeyBytes, 21);
+  const ciphertext = new Uint8Array(header.length + encrypted.byteLength);
+  ciphertext.set(header, 0); ciphertext.set(new Uint8Array(encrypted), header.length);
+  return { ciphertext, headers: { 'Content-Type': 'application/octet-stream', 'Content-Encoding': 'aes128gcm', 'Content-Length': String(ciphertext.length) } };
+}
+
+async function hkdfExtract(salt, ikm) {
+  const key = await crypto.subtle.importKey('raw', salt, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', key, ikm));
+}
+
+async function hkdfExpand(prk, info, length) {
+  const key = await crypto.subtle.importKey('raw', prk, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const infoWithCounter = new Uint8Array(info.length + 1);
+  infoWithCounter.set(info, 0); infoWithCounter[info.length] = 1;
+  const result = new Uint8Array(await crypto.subtle.sign('HMAC', key, infoWithCounter));
+  return result.slice(0, length);
+}
+
+function createWebPushInfo(type, salt, clientPublicKey, serverPublicKey) {
+  const typeBytes = new TextEncoder().encode(type);
+  const wpInfo = new TextEncoder().encode('WebPush: info\0');
+  const info = new Uint8Array(wpInfo.length + clientPublicKey.length + serverPublicKey.length);
+  info.set(wpInfo, 0); info.set(clientPublicKey, wpInfo.length); info.set(serverPublicKey, wpInfo.length + clientPublicKey.length);
+  const combined = new Uint8Array(salt.length + info.length);
+  combined.set(salt, 0); combined.set(info, salt.length);
+  return combined;
+}
+
+function derToRaw(der) {
+  if (der.length === 64) return der;
+  if (der[0] !== 0x30) return der;
+  let offset = 2; if (der[1] === 0x81) offset = 3;
+  if (der[offset] !== 0x02) return der;
+  offset++; const rLen = der[offset++]; let r = der.slice(offset, offset + rLen); offset += rLen;
+  if (der[offset] !== 0x02) return der;
+  offset++; const sLen = der[offset++]; let s = der.slice(offset, offset + sLen);
+  if (r.length > 32) r = r.slice(r.length - 32); if (s.length > 32) s = s.slice(s.length - 32);
+  const raw = new Uint8Array(64); raw.set(r, 32 - r.length); raw.set(s, 64 - s.length);
+  return raw;
+}
+
+// ── push.js ──
+// worker/src/routes/push.js
+
+async function handlePush(request, env, path) {
+  const session = await getSession(request, env);
+  if (!session) return unauth(env);
+  const method = request.method;
+  const db = createSupabase(env);
+
+  if (path === '/push/subscribe' && method === 'POST') {
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    const { endpoint, keys } = body || {};
+    if (!endpoint || !keys?.p256dh || !keys?.auth) return badReq('Missing subscription fields', 'VALIDATION', env);
+    const { data: existing } = await db.from('push_subscriptions', { filters: { 'user_id.eq': session.sub, 'endpoint.eq': endpoint }, select: 'id', limit: 1 });
+    const existingRow = Array.isArray(existing) ? existing[0] : existing;
+    if (existingRow) {
+      await db.update('push_subscriptions', { p256dh: keys.p256dh, auth: keys.auth, user_agent: request.headers.get('User-Agent') || null }, { filters: { 'id.eq': existingRow.id } });
+      return ok({ subscribed: true, updated: true }, env);
+    }
+    const { error } = await db.insert('push_subscriptions', { user_id: session.sub, endpoint, p256dh: keys.p256dh, auth: keys.auth, user_agent: request.headers.get('User-Agent') || null });
+    if (error) return serverErr(env);
+    return created({ subscribed: true }, env);
+  }
+
+  if (path === '/push/unsubscribe' && method === 'DELETE') {
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    if (!body?.endpoint) return badReq('Missing endpoint', 'VALIDATION', env);
+    await db.delete('push_subscriptions', { filters: { 'user_id.eq': session.sub, 'endpoint.eq': body.endpoint } });
+    return ok({ unsubscribed: true }, env);
+  }
+
+  if (path === '/push/status' && method === 'GET') {
+    const { count } = await db.count('push_subscriptions', { filters: { 'user_id.eq': session.sub } });
+    return ok({ subscribed: (count || 0) > 0, count: count || 0 }, env);
+  }
+
+  if (path === '/push/vapid-key' && method === 'GET') {
+    return ok({ publicKey: env.VAPID_PUBLIC_KEY || '' }, env);
+  }
+
+  if (path === '/push/batch-notify' && method === 'POST') {
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    const count = parseInt(body.count) || 0;
+    if (count < 1) return badReq('Count must be at least 1', 'VALIDATION', env);
+    const payload = { title: 'Certificates Uploaded', body: body.message || `${count} certificate uploaded.`, url: '/certificates.html', tag: 'batch-cert-upload' };
+    await sendPushToUser(db, env, session.sub, payload);
+    await sendPushToRoles(db, env, ['admin', 'manager'], payload, session.sub);
+    return ok({ notified: true, count }, env);
+  }
+  return badReq('Not found', 'NOT_FOUND', env);
+}
+
+// ── check-expiry.js ──
+// worker/src/routes/check-expiry.js — Cron logic
+
+async function handleCheckExpiry(env) {
+  const db = createSupabase(env);
+  const today = new Date().toISOString().split('T')[0];
+  const in7d = datePlusDays(7);
+  const in14d = datePlusDays(14);
+  const in30d = datePlusDays(30);
+
+  const { data: expired } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved', 'expiry_date.lt': today }, select: 'id,name,cert_number,expiry_date,uploaded_by,client_id', limit: 500 });
+  const { data: crit7 } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved', 'expiry_date.gte': today, 'expiry_date.lte': in7d }, select: 'id,name,cert_number,expiry_date,uploaded_by,client_id', limit: 500 });
+  const { data: warn30 } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved', 'expiry_date.gt': in7d, 'expiry_date.lte': in30d }, select: 'id,name,cert_number,expiry_date,uploaded_by,client_id', limit: 500 });
+
+  const expiredList = Array.isArray(expired) ? expired : [];
+  const criticalList = Array.isArray(crit7) ? crit7 : [];
+  const warningList = Array.isArray(warn30) ? warn30 : [];
+
+  let pushCount = 0;
+  if (expiredList.length > 0) {
+    const payload = { title: `⚠️ ${expiredList.length} Certs Expired`, body: expiredList.slice(0, 3).map(c => c.name || c.cert_number).join(', '), url: '/notifications.html', tag: 'cert-expired' };
+    await sendPushToRoles(db, env, ['admin', 'manager'], payload); pushCount++;
+    const uploaderIds = [...new Set(expiredList.map(c => c.uploaded_by).filter(Boolean))];
+    for (const uid of uploaderIds) {
+      const userCerts = expiredList.filter(c => c.uploaded_by === uid);
+      await sendPushToUser(db, env, uid, { title: `⚠️ ${userCerts.length} of your certs expired`, body: userCerts.map(c => c.name || c.cert_number).join(', '), url: '/certificates.html', tag: 'cert-expired-user' });
+      pushCount++;
+    }
+  }
+  if (criticalList.length > 0) {
+    const payload = { title: `🔴 ${criticalList.length} Certs Expiring (7d)`, body: criticalList.slice(0, 3).map(c => `${c.name || c.cert_number} (${c.expiry_date})`).join(', '), url: '/notifications.html', tag: 'cert-expiring-critical' };
+    await sendPushToRoles(db, env, ['admin', 'manager'], payload); pushCount++;
+  }
+  if (warningList.length > 0 && new Date().getUTCDay() === 1) {
+    await sendPushToRoles(db, env, ['admin', 'manager'], { title: `🟡 ${warningList.length} Certs Expiring (30d)`, body: `${warningList.length} certificates due soon.`, url: '/notifications.html', tag: 'cert-expiring-warning' });
+    pushCount++;
+  }
+  return { checked: true, expired: expiredList.length, critical: criticalList.length, warning: warningList.length, pushesSent: pushCount };
+}
+
+function datePlusDays(days) {
+  const d = new Date(); d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
 // ── Entry point ──
 export default {
   async fetch(request, env, ctx) {
@@ -1744,6 +1962,22 @@ export default {
       if (path.startsWith('/functional-locations')) return await handleFunctionalLocations(request, env, path);
       if (path.startsWith('/notifications')) return await handleNotifications(request, env, path);
       if (path.startsWith('/reports')) return await handleReports(request, env, path);
+      if (path.startsWith('/push')) return await handlePush(request, env, path);
+
+      // Cron manual trigger (Admin or Secret)
+      if (path === '/cron/check-expiry' && request.method === 'GET') {
+        const cronSecret = env.CRON_SECRET;
+        const authHeader = request.headers.get('Authorization');
+        const isSecretMatch = cronSecret && (authHeader === `Bearer ${cronSecret}` || url.searchParams.get('secret') === cronSecret);
+
+        if (!isSecretMatch) {
+          const session = await getSession(request, env);
+          if (!session || !requireRole(session, ['admin'])) return forbidden(env);
+        }
+
+        const result = await handleCheckExpiry(env);
+        return json({ success: true, data: result }, 200, env);
+      }
 
       return json({ success: false, error: 'Route not found' }, 404, env);
     } catch (err) {

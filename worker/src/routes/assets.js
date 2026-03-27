@@ -20,30 +20,6 @@ async function generateNextAssetNumber(db) {
   return `AST-${String(max + 1).padStart(4, '0')}`;
 }
 
-async function notifyAssetAdded(db, session, asset) {
-  try {
-    const { data: recipients } = await db.from('users', {
-      filters: { 'role.in': ['admin','manager'], 'is_active.is': true },
-      select: 'id',
-    });
-    if (!Array.isArray(recipients) || !recipients.length) return;
-    const payload = recipients
-      .filter(u => u.id && u.id !== session.sub)
-      .map(u => ({
-        user_id: u.id,
-        type: 'asset_added',
-        title: 'New Asset Added',
-        body: `${session.name} added asset "${asset.name}" (${asset.asset_number}).`,
-        ref_type: 'asset',
-        ref_id: asset.id,
-        is_read: false,
-      }));
-    if (payload.length) await db.insert('notifications', payload);
-  } catch (e) {
-    console.warn('Asset added notification failed:', e);
-  }
-}
-
 export async function handleAssets(request, env, path) {
   const session = await getSession(request, env);
   if (!session) return unauth(env);
@@ -81,11 +57,19 @@ export async function handleAssets(request, env, path) {
 
       const assetKey = assetNumber.toLowerCase();
       const serialKey = serial.toLowerCase();
-      const duplicate = Boolean((assetKey && byAsset.has(assetKey)) || (serialKey && bySerial.has(serialKey)) || seenAsset.has(assetKey) || seenSerial.has(serialKey));
+      const hasAssetDup = Boolean((assetKey && byAsset.has(assetKey)) || seenAsset.has(assetKey));
+      const hasSerialDup = Boolean((serialKey && bySerial.has(serialKey)) || seenSerial.has(serialKey));
+      const duplicate = hasAssetDup || hasSerialDup;
+      let duplicateBy = null;
+      if (duplicate) {
+        if (hasAssetDup && hasSerialDup) duplicateBy = 'asset_number_and_serial_number';
+        else if (hasSerialDup) duplicateBy = 'serial_number';
+        else duplicateBy = 'asset_number';
+      }
       if (assetKey) seenAsset.add(assetKey);
       if (serialKey) seenSerial.add(serialKey);
       const status = errors.length ? 'error' : (duplicate ? 'duplicate' : (warnings.length ? 'warning' : 'valid'));
-      return { index: idx, status, errors, warnings, duplicate, duplicate_by: duplicate ? 'asset_number_or_serial_number' : null };
+      return { index: idx, status, errors, warnings, duplicate, duplicate_by: duplicateBy };
     });
     return ok({ rows: out }, env);
   }
@@ -196,7 +180,6 @@ export async function handleAssets(request, env, path) {
     }
     const asset = Array.isArray(data) ? data[0] : data;
     await audit(db, session, 'assets', asset.id, 'create', null, asset);
-    await notifyAssetAdded(db, session, asset);
     return created(asset, env);
   }
 
