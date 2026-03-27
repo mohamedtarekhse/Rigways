@@ -483,6 +483,10 @@
           <strong>Push Notifications</strong>
           <span id="pushStatusText">Enable browser push alerts</span>
         </div>
+        <div style="display: flex; gap: 8px; margin-left: 10px;">
+          <button class="sap-btn-outline btn-sm" onclick="sendTestPush(false)" title="Test this device only" style="font-size: 11px; padding: 4px 8px;">Test Me</button>
+          <button class="sap-btn-outline btn-sm" onclick="sendTestPush(true)" title="Broadcast to all admins" style="font-size: 11px; padding: 4px 8px;" id="btnTestGlobal">Test All</button>
+        </div>
       </div>
 
       <div style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-sm);">
