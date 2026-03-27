@@ -465,6 +465,28 @@ async function generateNextAssetNumber(db) {
   return `AST-${String(max + 1).padStart(4, '0')}`;
 }
 
+async function notifyAssetAdded(db, session, asset) {
+  try {
+    const { data: recipients } = await db.from('users', {
+      filters: { 'role.in': ['admin', 'manager'], 'is_active.is': true },
+      select: 'id',
+    });
+    if (!Array.isArray(recipients) || !recipients.length) return;
+    const notifs = recipients
+      .filter(u => u.id && u.id !== session.sub)
+      .map(u => ({
+        user_id: u.id,
+        type: 'asset_added',
+        title: 'New Asset Added',
+        body: `${session.name} added asset "${asset.name}" (${asset.asset_number}).`,
+        ref_type: 'asset',
+        ref_id: asset.id,
+        is_read: false,
+      }));
+    if (notifs.length) await db.insert('notifications', notifs);
+  } catch (e) { console.warn('Asset added notification failed:', e); }
+}
+
 
 async function handleAssets(request, env, path) {
   const session = await getSession(request, env);
@@ -509,12 +531,20 @@ async function handleAssets(request, env, path) {
       if (!String(row.model || '').trim()) warnings.push('model is empty');
       const assetKey = assetNumber.toLowerCase();
       const serialKey = serial.toLowerCase();
-      const duplicate = Boolean((assetKey && byAsset.has(assetKey)) || (serialKey && bySerial.has(serialKey)) || seenAsset.has(assetKey) || seenSerial.has(serialKey));
+      const hasAssetDup = Boolean((assetKey && byAsset.has(assetKey)) || seenAsset.has(assetKey));
+      const hasSerialDup = Boolean((serialKey && bySerial.has(serialKey)) || seenSerial.has(serialKey));
+      const duplicate = hasAssetDup || hasSerialDup;
+      let duplicateBy = null;
+      if (duplicate) {
+        if (hasAssetDup && hasSerialDup) duplicateBy = 'asset_number_and_serial_number';
+        else if (hasSerialDup) duplicateBy = 'serial_number';
+        else duplicateBy = 'asset_number';
+      }
       if (assetKey) seenAsset.add(assetKey);
       if (serialKey) seenSerial.add(serialKey);
 
       const status = errors.length ? 'error' : (duplicate ? 'duplicate' : (warnings.length ? 'warning' : 'valid'));
-      return { index: idx, status, errors, warnings, duplicate, duplicate_by: duplicate ? 'asset_number_or_serial_number' : null };
+      return { index: idx, status, errors, warnings, duplicate, duplicate_by: duplicateBy };
     });
     return ok({ rows: out }, env);
   }
@@ -630,6 +660,7 @@ async function handleAssets(request, env, path) {
     }
     const asset = Array.isArray(data) ? data[0] : data;
     await audit(db, session, 'assets', asset.id, 'create', null, asset);
+    await notifyAssetAdded(db, session, asset);
     return created(asset, env);
   }
 
@@ -1715,6 +1746,284 @@ async function handleReports(request, env, path) {
   return ok({}, env);
 }
 
+// ── push.js ──
+// Web Push (VAPID) subscription storage & send helper
+// Subscriptions are stored in the push_subscriptions table:
+//   CREATE TABLE push_subscriptions (
+//     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+//     user_id uuid REFERENCES users(id) ON DELETE CASCADE,
+//     endpoint text NOT NULL UNIQUE,
+//     p256dh text NOT NULL,
+//     auth text NOT NULL,
+//     created_at timestamptz DEFAULT now()
+//   );
+
+/* ── VAPID helpers (pure Web Crypto — no npm) ── */
+
+function b64ToUint8(base64) {
+  const b64 = base64.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64 + '=='.slice(0, (4 - b64.length % 4) % 4);
+  const raw = atob(padded);
+  return Uint8Array.from(raw, c => c.charCodeAt(0));
+}
+
+function uint8ToB64(arr) {
+  return btoa(String.fromCharCode(...arr))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function vapidSign(payload, privateKeyB64) {
+  const rawKey = b64ToUint8(privateKeyB64);
+  const key = await crypto.subtle.importKey(
+    'raw', rawKey,
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false, ['sign']
+  );
+  const enc = new TextEncoder();
+  const sig = await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    key,
+    enc.encode(payload)
+  );
+  return uint8ToB64(new Uint8Array(sig));
+}
+
+async function buildVapidHeaders(endpoint, vapidPublicKey, vapidPrivateKey, vapidSubject) {
+  const url = new URL(endpoint);
+  const aud = `${url.protocol}//${url.host}`;
+  const exp = Math.floor(Date.now() / 1000) + 12 * 3600;
+  const header = uint8ToB64(new TextEncoder().encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
+  const payload = uint8ToB64(new TextEncoder().encode(JSON.stringify({ aud, exp, sub: vapidSubject })));
+  const sig = await vapidSign(`${header}.${payload}`, vapidPrivateKey);
+  const jwt = `${header}.${payload}.${sig}`;
+  return {
+    Authorization: `vapid t=${jwt},k=${vapidPublicKey}`,
+    'Content-Type': 'application/octet-stream',
+    'Content-Encoding': 'aes128gcm',
+    'TTL': '86400',
+  };
+}
+
+/* Encrypt push payload using ECDH + HKDF + AES-128-GCM per RFC 8291 */
+async function encryptPushPayload(plaintext, subscriptionKeys) {
+  const enc = new TextEncoder();
+  const data = enc.encode(typeof plaintext === 'string' ? plaintext : JSON.stringify(plaintext));
+
+  const serverKeyPair = await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']
+  );
+
+  const serverPublicRaw = await crypto.subtle.exportKey('raw', serverKeyPair.publicKey);
+  const receiverPublic  = await crypto.subtle.importKey(
+    'raw', b64ToUint8(subscriptionKeys.p256dh),
+    { name: 'ECDH', namedCurve: 'P-256' }, false, []
+  );
+
+  const sharedBits = await crypto.subtle.deriveBits(
+    { name: 'ECDH', public: receiverPublic }, serverKeyPair.privateKey, 256
+  );
+
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const authSecret = b64ToUint8(subscriptionKeys.auth);
+
+  // HKDF extract then expand (simplified for Web Push)
+  const hkdfKey = await crypto.subtle.importKey('raw', sharedBits, { name: 'HKDF' }, false, ['deriveBits']);
+
+  const prk = await crypto.subtle.deriveBits({
+    name: 'HKDF', hash: 'SHA-256',
+    salt: authSecret,
+    info: enc.encode('Content-Encoding: auth\0'),
+  }, hkdfKey, 256);
+
+  const prkKey = await crypto.subtle.importKey('raw', prk, { name: 'HKDF' }, false, ['deriveBits']);
+  const serverPublicArr = new Uint8Array(serverPublicRaw);
+  const receiverPublicArr = b64ToUint8(subscriptionKeys.p256dh);
+
+  const keyInfoData = new Uint8Array([
+    ...enc.encode('Content-Encoding: aesgcm\0'), 0,
+    0, 65, ...receiverPublicArr,
+    0, 65, ...serverPublicArr,
+  ]);
+  const ivInfoData = new Uint8Array([
+    ...enc.encode('Content-Encoding: nonce\0'), 0,
+    0, 65, ...receiverPublicArr,
+    0, 65, ...serverPublicArr,
+  ]);
+
+  const cekBits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt, info: keyInfoData }, prkKey, 128
+  );
+  const ivBits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt, info: ivInfoData }, prkKey, 96
+  );
+
+  const cek = await crypto.subtle.importKey('raw', cekBits, { name: 'AES-GCM' }, false, ['encrypt']);
+  const iv  = new Uint8Array(ivBits);
+
+  const padded = new Uint8Array([0, 0, ...data]);
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cek, padded);
+
+  // Build aesgcm payload
+  const payload = new Uint8Array(salt.length + 4 + 1 + serverPublicArr.length + ciphertext.byteLength);
+  let offset = 0;
+  payload.set(salt, offset); offset += salt.length;
+  const view = new DataView(payload.buffer);
+  view.setUint32(offset, 4096, false); offset += 4;
+  payload[offset++] = 65;
+  payload.set(serverPublicArr, offset); offset += serverPublicArr.length;
+  payload.set(new Uint8Array(ciphertext), offset);
+
+  return payload;
+}
+
+async function sendWebPush(subscription, payloadObj, env) {
+  const vapidPublicKey  = env.VAPID_PUBLIC_KEY;
+  const vapidPrivateKey = env.VAPID_PRIVATE_KEY;
+  const vapidSubject    = env.VAPID_SUBJECT || 'mailto:admin@rigways.com';
+
+  if (!vapidPublicKey || !vapidPrivateKey) {
+    console.warn('VAPID keys not configured — skipping push');
+    return { ok: false, reason: 'VAPID keys not configured' };
+  }
+
+  let cipherBuf;
+  try {
+    cipherBuf = await encryptPushPayload(payloadObj, subscription.keys);
+  } catch (e) {
+    console.warn('Push encrypt failed — sending without body:', e.message);
+    cipherBuf = null;
+  }
+
+  const headers = await buildVapidHeaders(subscription.endpoint, vapidPublicKey, vapidPrivateKey, vapidSubject);
+
+  const res = await fetch(subscription.endpoint, {
+    method: 'POST',
+    headers,
+    body: cipherBuf || null,
+  });
+
+  if (res.status === 410 || res.status === 404) {
+    return { ok: false, gone: true, status: res.status };
+  }
+  return { ok: res.ok, status: res.status };
+}
+
+/* ── Push subscription CRUD routes ── */
+async function handlePush(request, env, path) {
+  const session = await getSession(request, env);
+  if (!session) return unauth(env);
+
+  const db = createSupabase(env);
+  const method = request.method;
+
+  /* POST /api/push/subscribe — save or upsert a subscription */
+  if (path === '/push/subscribe' && method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+
+    const { endpoint, keys } = body || {};
+    if (!endpoint || !keys?.p256dh || !keys?.auth) {
+      return badReq('endpoint, keys.p256dh and keys.auth are required', 'VALIDATION', env);
+    }
+
+    // Upsert: if endpoint already exists, update user_id; otherwise insert.
+    const { data: existing } = await db.from('push_subscriptions', {
+      filters: { 'endpoint.eq': endpoint }, select: 'id', limit: 1,
+    });
+    const row = Array.isArray(existing) ? existing[0] : existing;
+
+    if (row) {
+      await db.update('push_subscriptions', {
+        user_id: session.sub, p256dh: keys.p256dh, auth: keys.auth,
+      }, { filters: { 'id.eq': row.id } });
+    } else {
+      const { error } = await db.insert('push_subscriptions', {
+        user_id: session.sub, endpoint, p256dh: keys.p256dh, auth: keys.auth,
+      });
+      if (error && error.code !== '23505') return serverErr(env);
+    }
+    return ok({ subscribed: true }, env);
+  }
+
+  /* DELETE /api/push/unsubscribe — remove a subscription */
+  if (path === '/push/unsubscribe' && method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    const { endpoint } = body || {};
+    if (!endpoint) return badReq('endpoint is required', 'VALIDATION', env);
+    await db.delete('push_subscriptions', { filters: { 'endpoint.eq': endpoint } });
+    return ok({ unsubscribed: true }, env);
+  }
+
+  /* POST /api/push/send-test — admin: send a test push to yourself */
+  if (path === '/push/send-test' && method === 'POST') {
+    const { data: subs } = await db.from('push_subscriptions', {
+      filters: { 'user_id.eq': session.sub }, select: '*', limit: 10,
+    });
+    const list = Array.isArray(subs) ? subs : [];
+    if (!list.length) return ok({ sent: 0, message: 'No subscriptions found for your account' }, env);
+
+    const payload = {
+      title: 'Rigways ACM — Test Push',
+      body:  'Push notifications are working correctly.',
+      icon:  '/favicon.ico',
+      tag:   'rigways-test',
+      url:   '/notifications.html',
+    };
+
+    let sent = 0;
+    for (const sub of list) {
+      const result = await sendWebPush({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload, env);
+      if (result.gone) {
+        await db.delete('push_subscriptions', { filters: { 'endpoint.eq': sub.endpoint } });
+      } else if (result.ok) {
+        sent++;
+      }
+    }
+    return ok({ sent, total: list.length }, env);
+  }
+
+  /* POST /api/push/broadcast — admin: send push to all subscribers (or a specific user) */
+  if (path === '/push/broadcast' && method === 'POST') {
+    if (!requireRole(session, ['admin'])) return forbidden(env);
+    let body;
+    try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+
+    const { title, message, url: targetUrl, user_id } = body || {};
+    if (!title || !message) return badReq('title and message are required', 'VALIDATION', env);
+
+    const filters = user_id ? { 'user_id.eq': user_id } : {};
+    const { data: subs } = await db.from('push_subscriptions', {
+      filters, select: '*', limit: 1000,
+    });
+    const list = Array.isArray(subs) ? subs : [];
+
+    const payload = { title, body: message, icon: '/favicon.ico', tag: 'rigways-alert', url: targetUrl || '/notifications.html' };
+
+    let sent = 0; const failed = [];
+    for (const sub of list) {
+      const result = await sendWebPush({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload, env);
+      if (result.gone) {
+        await db.delete('push_subscriptions', { filters: { 'endpoint.eq': sub.endpoint } });
+        failed.push(sub.endpoint);
+      } else if (result.ok) {
+        sent++;
+      } else {
+        failed.push(sub.endpoint);
+      }
+    }
+    return ok({ sent, failed: failed.length, total: list.length }, env);
+  }
+
+  /* GET /api/push/vapid-public-key — return the VAPID public key for the client */
+  if (path === '/push/vapid-public-key' && method === 'GET') {
+    const key = env.VAPID_PUBLIC_KEY || '';
+    return ok({ vapidPublicKey: key }, env);
+  }
+
+  return badReq('Not found', 'NOT_FOUND', env);
+}
+
 // ── Entry point ──
 export default {
   async fetch(request, env, ctx) {
@@ -1743,6 +2052,7 @@ export default {
       if (path.startsWith('/inspectors')) return await handleInspectors(request, env, path);
       if (path.startsWith('/functional-locations')) return await handleFunctionalLocations(request, env, path);
       if (path.startsWith('/notifications')) return await handleNotifications(request, env, path);
+      if (path.startsWith('/push')) return await handlePush(request, env, path);
       if (path.startsWith('/reports')) return await handleReports(request, env, path);
 
       return json({ success: false, error: 'Route not found' }, 404, env);

@@ -314,6 +314,9 @@
   <span class="sap-shell__app-title">Notifications &amp; Alerts</span>
   <div class="sap-shell__spacer"></div>
   <div class="sap-shell__actions">
+    <button class="sap-shell__btn" onclick="openPushSetup()" title="Enable Push Notifications">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="16" height="16"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+    </button>
     <div class="sap-shell__avatar" id="shellAvatar" onclick="toggleUserMenu()">AD</div>
   </div>
   <div class="sap-user-menu" id="userMenu">
@@ -434,6 +437,10 @@
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         <span>Save Config</span>
       </button>
+      <button class="config-save-btn" type="button" onclick="sendPushTestNotification()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        <span>Test Notification</span>
+      </button>
     </div>
   </div>
 
@@ -467,6 +474,14 @@
       <div class="digest-label">
         <strong>Email Notifications</strong>
         <span>Receive digest emails for expiry alerts</span>
+      </div>
+      <label class="toggle-switch" title="Enable web push notifications">
+        <input type="checkbox" id="pushToggle" onchange="togglePushNotif(this)"/>
+        <span class="toggle-slider"></span>
+      </label>
+      <div class="digest-label">
+        <strong>Web Push Notifications</strong>
+        <span>Browser alerts for unread updates</span>
       </div>
       <div style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-sm);">
         <div class="sap-search-box" style="width:200px;">
@@ -620,6 +635,8 @@ let session = null;
 let currentTab  = 'all';
 let config = { critDays: 7, warnDays: 14, noticeDays: 30, digestFreq: 'daily' };
 let lastVisibleData = [];  /* tracks whatever is currently rendered — used by email builder */
+let pushEnabled = false;
+const pushSeenKey = 'sap_push_seen_ids';
 
 /* ── fmtCertId: format cert ID as YYYY-NNN/SEQ for display ── */
 function fmtCertId(certId, jobNumber) {
@@ -706,6 +723,232 @@ function toggleEmailNotif(cb) {
       ? ('Email notifications enabled.')
       : ('Email notifications disabled.')
   );
+}
+
+/* ═══════════════════════════════════════════════════════
+   PUSH NOTIFICATIONS — Service Worker + VAPID
+   ───────────────────────────────────────────────────────
+   Architecture:
+   1. Register sw.js as a Service Worker
+   2. Fetch VAPID public key from /api/push/vapid-public-key
+   3. Subscribe via pushManager.subscribe()
+   4. Save subscription to /api/push/subscribe
+   5. Test via /api/push/send-test
+═══════════════════════════════════════════════════════ */
+
+/* Convert a URL-safe base64 string to a Uint8Array (for VAPID key) */
+function urlB64ToUint8Array(base64String) {
+  const padding  = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64   = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData  = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+let _swRegistration = null;  /* cached SW registration */
+let _vapidPublicKey  = null;  /* cached VAPID public key from server */
+
+/* Register the service worker and cache the registration */
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return null;
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    _swRegistration = reg;
+    /* Listen for messages from sw.js (e.g. PUSH_SUBSCRIPTION_CHANGED) */
+    navigator.serviceWorker.addEventListener('message', event => {
+      if (event.data?.type === 'PUSH_SUBSCRIPTION_CHANGED') {
+        savePushSubscription(event.data.subscription).catch(console.warn);
+      }
+    });
+    return reg;
+  } catch (err) {
+    console.warn('Service Worker registration failed:', err);
+    return null;
+  }
+}
+
+/* Fetch the VAPID public key from the backend (once per page load) */
+async function fetchVapidPublicKey() {
+  if (_vapidPublicKey) return _vapidPublicKey;
+  try {
+    const res  = await apiFetch('/api/push/vapid-public-key');
+    const data = await res.json();
+    _vapidPublicKey = (data.data || data).vapidPublicKey || '';
+    return _vapidPublicKey;
+  } catch (e) {
+    console.warn('fetchVapidPublicKey failed:', e);
+    return '';
+  }
+}
+
+/* Save a PushSubscription object to the backend */
+async function savePushSubscription(sub) {
+  if (!sub) return;
+  const json = sub.toJSON ? sub.toJSON() : sub;
+  try {
+    await apiFetch('/api/push/subscribe', {
+      method: 'POST',
+      body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+    });
+  } catch (e) { console.warn('savePushSubscription failed:', e); }
+}
+
+/* Remove a PushSubscription from the backend */
+async function removePushSubscription(endpoint) {
+  if (!endpoint) return;
+  try {
+    await apiFetch('/api/push/unsubscribe', {
+      method: 'POST',
+      body: JSON.stringify({ endpoint }),
+    });
+  } catch (e) { console.warn('removePushSubscription failed:', e); }
+}
+
+async function loadPushState() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    pushEnabled = false;
+    const t = document.getElementById('pushToggle');
+    if (t) { t.checked = false; t.disabled = true; t.closest('.digest-toggle')?.setAttribute('title', 'Push not supported in this browser'); }
+    return;
+  }
+
+  /* Register SW on every page load — idempotent */
+  await registerServiceWorker();
+
+  /* Check if there's already an active subscription */
+  try {
+    const reg = _swRegistration || await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if (existing && Notification.permission === 'granted') {
+      pushEnabled = true;
+      localStorage.setItem('sap_push_enabled', 'true');
+    } else {
+      pushEnabled = false;
+      localStorage.setItem('sap_push_enabled', 'false');
+    }
+  } catch (e) {
+    pushEnabled = false;
+  }
+
+  const toggle = document.getElementById('pushToggle');
+  if (toggle) toggle.checked = pushEnabled;
+}
+
+function openPushSetup() {
+  const toggle = document.getElementById('pushToggle');
+  if (!toggle) return;
+  if (toggle.disabled) {
+    showToast('error', 'Not Supported', 'Push notifications are not supported in this browser.');
+    return;
+  }
+  toggle.checked = true;
+  togglePushNotif(toggle);
+}
+
+async function togglePushNotif(cb) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    cb.checked = false;
+    showToast('error', 'Not Supported', 'Push notifications require a modern browser with Service Worker support.');
+    return;
+  }
+
+  if (cb.checked) {
+    /* ── Enable push ── */
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      cb.checked = false;
+      pushEnabled = false;
+      localStorage.setItem('sap_push_enabled', 'false');
+      showToast('warning', 'Permission Denied', 'Please allow notifications in your browser settings and try again.');
+      return;
+    }
+
+    try {
+      const vapidKey = await fetchVapidPublicKey();
+      if (!vapidKey) throw new Error('VAPID key not available. Check VAPID_PUBLIC_KEY env var.');
+
+      const reg = _swRegistration || await navigator.serviceWorker.ready;
+      let sub   = await reg.pushManager.getSubscription();
+
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly:      true,
+          applicationServerKey: urlB64ToUint8Array(vapidKey),
+        });
+      }
+
+      await savePushSubscription(sub);
+      pushEnabled = true;
+      localStorage.setItem('sap_push_enabled', 'true');
+      showToast('success', 'Push Enabled', 'Web push notifications are now active on this device.');
+    } catch (err) {
+      cb.checked = false;
+      pushEnabled = false;
+      localStorage.setItem('sap_push_enabled', 'false');
+      console.error('Push subscription failed:', err);
+      showToast('error', 'Subscription Failed', err.message || 'Could not subscribe to push notifications. Check VAPID configuration.');
+    }
+  } else {
+    /* ── Disable push ── */
+    try {
+      const reg = _swRegistration || await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await removePushSubscription(sub.endpoint);
+        await sub.unsubscribe();
+      }
+    } catch (e) { console.warn('Unsubscribe error:', e); }
+    pushEnabled = false;
+    localStorage.setItem('sap_push_enabled', 'false');
+    showToast('info', 'Push Disabled', 'Web push notifications disabled for this device.');
+  }
+}
+
+async function sendPushTestNotification() {
+  if (!pushEnabled) {
+    showToast('warning', 'Push Disabled', 'Enable web push first using the toggle above.');
+    return;
+  }
+  try {
+    const res  = await apiFetch('/api/push/send-test', { method: 'POST' });
+    const data = await res.json();
+    const d    = data.data || data;
+    if (data.success && d.sent > 0) {
+      showToast('success', 'Test Sent', `Push notification sent to ${d.sent} device(s). Check your browser.`);
+    } else if (data.success) {
+      showToast('info', 'No Devices', d.message || 'No subscriptions found. Enable push and try again.');
+    } else {
+      showToast('error', 'Send Failed', d.error || 'Could not send test push.');
+    }
+  } catch (e) {
+    showToast('error', 'Network Error', 'Could not send test push notification.');
+  }
+}
+
+function maybeShowPushForUnread(notifs) {
+  /* With a service worker in place, background push is handled server-side.
+     This fallback fires in-tab Notifications for new unread items when the
+     user already has the page open (no SW push needed). */
+  if (!pushEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+  const seen = new Set(JSON.parse(sessionStorage.getItem(pushSeenKey) || '[]'));
+  const freshUnread = (notifs || []).filter(n => !seen.has(n.id) && !(n.read || n.is_read || n.isRead));
+  freshUnread.slice(0, 3).forEach(n => {
+    /* Use SW notification if available (richer, persistent) */
+    if (_swRegistration && _swRegistration.active) {
+      _swRegistration.showNotification(n.titleEn || 'Rigways Notification', {
+        body:  n.descEn || '',
+        icon:  '/favicon.ico',
+        tag:   `rigways-${n.id}`,
+        data:  { url: n.link || '/notifications.html' },
+      });
+    } else {
+      const p = new Notification(n.titleEn || 'Rigways Notification', { body: n.descEn || '', tag: `rigways-${n.id}` });
+      p.onclick = () => { window.focus(); p.close(); onNotificationClick(n.id); };
+    }
+    seen.add(n.id);
+  });
+  sessionStorage.setItem(pushSeenKey, JSON.stringify([...seen]));
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -859,7 +1102,7 @@ function renderNotifItem(n, role) {
   const canApprove = (role==='admin'||role==='manager') && n.type==='approval' && n.titleEn.includes('pending');
 
   return `
-    <div class="notif-item ${(n.read||n.is_read||n.isRead)?'':'unread'}" id="notif-${n.id}" onclick="markRead('${n.id}')">
+    <div class="notif-item ${(n.read||n.is_read||n.isRead)?'':'unread'}" id="notif-${n.id}" onclick="onNotificationClick('${n.id}')">
       <div class="notif-icon ${ic.cls}">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${ic.path}</svg>
       </div>
@@ -882,7 +1125,7 @@ function renderNotifItem(n, role) {
         </div>
         ${canApprove ? `
           <div style="display:flex;gap:6px;margin-top:8px;">
-            <a href="${n.link}" class="btn btn-success btn-sm">Review Certificate</a>
+            <a href="${n.link}" class="btn btn-success btn-sm" onclick="event.stopPropagation()">Review Certificate</a>
           </div>` : ''}
         ${n.link && !canApprove ? `
           <div style="margin-top:6px;">
@@ -920,6 +1163,12 @@ async function markRead(id) {
     try { await apiFetch('/api/notifications/' + id, { method:'PATCH', body: JSON.stringify({ is_read: true }) }); }
     catch(e) {}
   }
+}
+
+async function onNotificationClick(id) {
+  const n = NOTIFICATIONS.find(x => x.id === id);
+  await markRead(id);
+  if (n?.link) window.location.href = n.link;
 }
 
 async function dismissNotif(id, e) {
@@ -1171,6 +1420,8 @@ function showToast(type, title, msg) {
 
 async function loadNotifications() {
   try {
+    const role = session?.role;
+    const customerId = session?.customerId || null;
     // Load DB notifications + expiring certs + expired certs in parallel
     const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
 
@@ -1198,14 +1449,19 @@ async function loadNotifications() {
     // ── Derive expiry notifications from certificate data ──────────────
     const expiryNotifs = [];
 
-    // Certs expiring within 30 days
+    // Certs expiring within 30 days: notify once at day 30, then every 10 days (20,10,0), then expired.
     expiring.forEach(cert => {
       const expiryMs = new Date(cert.expiry_date).setHours(0,0,0,0);
       const days     = Math.ceil((expiryMs - todayMs) / 86400000);
+      const isMilestone = [30,20,10,0].includes(days);
+      const canSeeExpiry =
+        role === 'admin' ||
+        (role === 'user' && customerId && cert.client_id === customerId);
+      if (!canSeeExpiry || !isMilestone) return;
       const priority = days <= 7 ? 'critical' : days <= 14 ? 'high' : 'medium';
       const assetLabel = assetNumberById.get(cert.asset_id) || cert.asset_id || '—';
       expiryNotifs.push({
-        id:        'exp-' + cert.id,
+        id:        `exp-${cert.id}-${days}`,
         type:      'expiry',
         titleEn:   `Certificate Expiring: ${cert.name || cert.cert_number || cert.id}`,
         descEn:    `Expires on ${cert.expiry_date} — ${days} day${days !== 1 ? 's' : ''} remaining. Asset: ${assetLabel}`,
@@ -1219,7 +1475,7 @@ async function loadNotifications() {
         isRead:    false,
         dismissed: false,
         time:      cert.expiry_date,
-        link:      'certificates.html',
+        link:      `certificates.html?open=${encodeURIComponent(cert.id)}`,
       });
     });
 
@@ -1227,10 +1483,14 @@ async function loadNotifications() {
     allCerts.forEach(cert => {
       const expiryMs = new Date(cert.expiry_date).setHours(0,0,0,0);
       const days     = Math.ceil((expiryMs - todayMs) / 86400000);
+      const canSeeExpiry =
+        role === 'admin' ||
+        (role === 'user' && customerId && cert.client_id === customerId);
+      if (!canSeeExpiry) return;
       if (days < 0) {
         const assetLabel = assetNumberById.get(cert.asset_id) || cert.asset_id || '—';
         expiryNotifs.push({
-          id:        'expired-' + cert.id,
+          id:        `expired-${cert.id}`,
           type:      'expiry',
           titleEn:   `Certificate EXPIRED: ${cert.name || cert.cert_number || cert.id}`,
           descEn:    `Expired on ${cert.expiry_date} — ${Math.abs(days)} day${Math.abs(days) !== 1 ? 's' : ''} overdue. Asset: ${assetLabel}. Immediate renewal required.`,
@@ -1244,7 +1504,7 @@ async function loadNotifications() {
           isRead:    false,
           dismissed: false,
           time:      cert.expiry_date,
-          link:      'certificates.html',
+          link:      `certificates.html?open=${encodeURIComponent(cert.id)}`,
         });
       }
     });
@@ -1275,7 +1535,11 @@ async function loadNotifications() {
         isRead:    n.is_read,
         dismissed: false,
         time:      n.created_at ? new Date(n.created_at).toLocaleString() : '',
-        link:      n.ref_type === 'certificate' ? 'certificates.html' : 'dashboard.html',
+        link:      n.ref_type === 'certificate'
+          ? `certificates.html?open=${encodeURIComponent(n.ref_id || '')}`
+          : n.ref_type === 'asset'
+            ? `assets.html?open=${encodeURIComponent(n.ref_id || '')}`
+            : 'dashboard.html',
       };
     });
 
@@ -1293,6 +1557,7 @@ async function loadNotifications() {
   }
   renderNotifs();
   updateBadge();
+  maybeShowPushForUnread(NOTIFICATIONS);
 }
 
 function updateBadge() {
@@ -1304,7 +1569,7 @@ function updateBadge() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   session = getSession();
   if (!session) return;
 
@@ -1340,6 +1605,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   loadConfig();
+
+  /* Register SW and restore push state (async — does not block UI) */
+  loadPushState().catch(console.warn);
+
+  /* Prefetch VAPID key in background so it's ready when user enables push */
+  fetchVapidPublicKey().catch(console.warn);
+
   loadNotifications();
 
   /* Close email modal on overlay click */
@@ -1348,8 +1620,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   /* Refresh preview when subject changes */
   document.getElementById('emailSubject').addEventListener('input', refreshEmailPreview);
-
-  /* unread toast shown by loadNotifications after data loads */
 });
 </script>
 </body>
