@@ -14,6 +14,17 @@ JWT_EXPIRES_SEC       = "86400"
 # are set as encrypted secrets via Cloudflare Dashboard
 # Pages → Settings → Environment Variables → Add as "Secret" type
 
+# ── Web Push (VAPID) ──
+# Generate keys:  npx web-push generate-vapid-keys
+# Set VAPID_PUBLIC_KEY below, then set these as secrets:
+#   wrangler secret put VAPID_PRIVATE_KEY
+#   wrangler secret put VAPID_SUBJECT    (e.g. "mailto:admin@rigways.com")
+VAPID_PUBLIC_KEY      = ""
+
+# ── Cron Trigger — daily certificate expiry check at 8 AM UTC ──
+[triggers]
+crons = ["0 8 * * *"]
+
 # ── R2 Bucket — certificate file storage ──
 [[r2_buckets]]
 binding     = "CERT_BUCKET"

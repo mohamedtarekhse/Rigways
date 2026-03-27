@@ -10,9 +10,12 @@
     img-src 'self' data: blob:;
     connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787;
     object-src 'none';
+    worker-src 'self';
     base-uri 'self';
   "/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="manifest" href="manifest.json"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
   <title>Assets – Rigways Group</title>
   <script src="app.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -3471,5 +3474,6 @@ document.addEventListener('DOMContentLoaded', () => {
   Promise.all([loadClients(), loadFuncLocsFromAPI()]).then(() => loadAssets());
 });
 </script>
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{});}</script>
 </body>
 </html>

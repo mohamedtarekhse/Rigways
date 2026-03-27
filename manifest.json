@@ -1,0 +1,17 @@
+{
+  "name": "Rigways ACM",
+  "short_name": "Rigways",
+  "description": "Rigways Group Asset & Certificate Management",
+  "start_url": "/dashboard.html",
+  "display": "standalone",
+  "background_color": "#0a1628",
+  "theme_color": "#0070f2",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}

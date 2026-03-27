@@ -9,10 +9,14 @@
     font-src 'self' https://fonts.gstatic.com;
     img-src 'self' data: blob:;
     connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787;
+    worker-src 'self';
     object-src 'none';
     base-uri 'self';
   "/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="manifest" href="manifest.json"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <title>Notifications – Rigways Group</title>
   <script src="app.js"></script>
   <link rel="stylesheet" href="styles.css"/>
@@ -468,6 +472,19 @@
         <strong>Email Notifications</strong>
         <span>Receive digest emails for expiry alerts</span>
       </div>
+
+      <!-- Push Notification Toggle -->
+      <div style="margin-left:24px;display:flex;align-items:center;gap:10px;" id="pushToggleArea">
+        <label class="toggle-switch">
+          <input type="checkbox" id="pushToggle" onchange="togglePushNotif(this)"/>
+          <span class="toggle-slider"></span>
+        </label>
+        <div class="digest-label">
+          <strong>Push Notifications</strong>
+          <span id="pushStatusText">Enable browser push alerts</span>
+        </div>
+      </div>
+
       <div style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-sm);">
         <div class="sap-search-box" style="width:200px;">
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -1342,6 +1359,9 @@ document.addEventListener('DOMContentLoaded', () => {
   loadConfig();
   loadNotifications();
 
+  /* ── Service Worker + Push Registration ── */
+  initPushNotifications();
+
   /* Close email modal on overlay click */
   document.getElementById('emailModal').addEventListener('click', function(e) {
     if (e.target === this) closeEmailModal();
@@ -1351,6 +1371,127 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* unread toast shown by loadNotifications after data loads */
 });
+
+/* ═══════════════════════════════════════════════════════
+   PUSH NOTIFICATIONS
+═══════════════════════════════════════════════════════ */
+let swRegistration = null;
+
+async function initPushNotifications() {
+  const pushToggle = document.getElementById('pushToggle');
+  const pushStatus = document.getElementById('pushStatusText');
+
+  // Check browser support
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    pushStatus.textContent = 'Not supported in this browser';
+    pushToggle.disabled = true;
+    return;
+  }
+
+  try {
+    // Register service worker
+    swRegistration = await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.ready;
+
+    // Check current subscription state
+    const existingSub = await swRegistration.pushManager.getSubscription();
+    if (existingSub) {
+      pushToggle.checked = true;
+      pushStatus.textContent = 'Push notifications active';
+    } else if (Notification.permission === 'denied') {
+      pushToggle.disabled = true;
+      pushStatus.textContent = 'Blocked by browser — check site settings';
+    } else {
+      pushToggle.checked = false;
+      pushStatus.textContent = 'Enable browser push alerts';
+    }
+  } catch (e) {
+    console.warn('SW registration failed:', e);
+    pushStatus.textContent = 'Service worker error';
+    pushToggle.disabled = true;
+  }
+}
+
+async function togglePushNotif(cb) {
+  const pushStatus = document.getElementById('pushStatusText');
+
+  if (cb.checked) {
+    // Subscribe
+    try {
+      // Get VAPID public key from server
+      const keyRes = await apiFetch('/api/push/vapid-key');
+      const keyData = await keyRes.json();
+      const vapidPublicKey = (keyData.data || keyData).publicKey;
+
+      if (!vapidPublicKey) {
+        showToast('error', 'Push Not Configured', 'VAPID key not set on server. Contact administrator.');
+        cb.checked = false;
+        return;
+      }
+
+      // Request notification permission
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        showToast('warning', 'Permission Denied', 'You need to allow notifications in your browser settings.');
+        cb.checked = false;
+        pushStatus.textContent = permission === 'denied' ? 'Blocked by browser — check site settings' : 'Permission not granted';
+        return;
+      }
+
+      // Subscribe to push
+      const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+      const subscription = await swRegistration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      });
+
+      // Send subscription to server
+      const subJson = subscription.toJSON();
+      await apiFetch('/api/push/subscribe', {
+        method: 'POST',
+        body: JSON.stringify({
+          endpoint: subJson.endpoint,
+          keys: subJson.keys,
+        }),
+      });
+
+      pushStatus.textContent = 'Push notifications active';
+      showToast('success', 'Push Enabled', 'You will receive browser notifications for certificate events.');
+    } catch (e) {
+      console.error('Push subscribe error:', e);
+      cb.checked = false;
+      showToast('error', 'Subscribe Failed', e.message || 'Could not enable push notifications.');
+    }
+  } else {
+    // Unsubscribe
+    try {
+      const subscription = await swRegistration.pushManager.getSubscription();
+      if (subscription) {
+        const endpoint = subscription.endpoint;
+        await subscription.unsubscribe();
+        await apiFetch('/api/push/unsubscribe', {
+          method: 'DELETE',
+          body: JSON.stringify({ endpoint }),
+        });
+      }
+      pushStatus.textContent = 'Enable browser push alerts';
+      showToast('info', 'Push Disabled', 'You will no longer receive browser push notifications.');
+    } catch (e) {
+      console.error('Push unsubscribe error:', e);
+      showToast('error', 'Unsubscribe Failed', e.message || 'Could not disable push notifications.');
+    }
+  }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
 </script>
 </body>
 </html>

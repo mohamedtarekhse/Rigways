@@ -9,10 +9,14 @@
     font-src 'self' https://fonts.gstatic.com;
     img-src 'self' data: blob:;
     connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787;
+    worker-src 'self';
     object-src 'none';
     base-uri 'self';
   "/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="manifest" href="manifest.json"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <title>Dashboard – Rigways Group</title>
   <script src="app.js"></script>
   <link rel="stylesheet" href="styles.css"/>
@@ -1097,6 +1101,11 @@ document.addEventListener('DOMContentLoaded', () => {
     showToast('success', `Welcome back, ${session.name}`, 'Dashboard loaded successfully.');
   }, 600);
 });
+
+/* ── Service Worker Registration (for push notifications) ── */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>
