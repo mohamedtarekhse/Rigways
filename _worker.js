@@ -1747,233 +1747,139 @@ async function handleReports(request, env, path) {
 }
 
 // ── push.js ──
-// Web Push (VAPID) subscription storage & send helper
-// Subscriptions are stored in the push_subscriptions table:
+// Bodyless Web Push — VAPID JWT only, zero ECDH/AES crypto.
+// The Service Worker wakes on an empty push, fetches /api/notifications
+// itself using a token it stored in IndexedDB at subscribe-time.
+//
+// Supabase table (run once):
 //   CREATE TABLE push_subscriptions (
-//     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-//     user_id uuid REFERENCES users(id) ON DELETE CASCADE,
-//     endpoint text NOT NULL UNIQUE,
-//     p256dh text NOT NULL,
-//     auth text NOT NULL,
-//     created_at timestamptz DEFAULT now()
+//     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+//     user_id     uuid REFERENCES users(id) ON DELETE CASCADE,
+//     endpoint    text NOT NULL UNIQUE,
+//     created_at  timestamptz DEFAULT now()
 //   );
+//
+// Cloudflare env vars (set as Secrets in Pages → Settings):
+//   VAPID_PUBLIC_KEY   — URL-safe base64 P-256 public key
+//   VAPID_PRIVATE_KEY  — URL-safe base64 P-256 private key
+//   VAPID_SUBJECT      — mailto:admin@your-domain.com
 
-/* ── VAPID helpers (pure Web Crypto — no npm) ── */
+// ── Minimal VAPID JWT (ES256) using Web Crypto ──────────────────────
 
-function b64ToUint8(base64) {
-  const b64 = base64.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = b64 + '=='.slice(0, (4 - b64.length % 4) % 4);
-  const raw = atob(padded);
-  return Uint8Array.from(raw, c => c.charCodeAt(0));
-}
-
-function uint8ToB64(arr) {
-  return btoa(String.fromCharCode(...arr))
+function b64url(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-async function vapidSign(payload, privateKeyB64) {
-  const rawKey = b64ToUint8(privateKeyB64);
-  const key = await crypto.subtle.importKey(
+function strToB64url(str) {
+  return b64url(new TextEncoder().encode(str));
+}
+
+function b64urlDecode(s) {
+  s = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  return Uint8Array.from(atob(s), c => c.charCodeAt(0));
+}
+
+async function makeVapidJwt(endpoint, vapidPublicKey, vapidPrivateKey, vapidSubject) {
+  const url = new URL(endpoint);
+  const aud = `${url.protocol}//${url.host}`;
+  const exp = Math.floor(Date.now() / 1000) + 43200; // 12 h
+
+  const header  = strToB64url(JSON.stringify({ typ: 'JWT', alg: 'ES256' }));
+  const payload = strToB64url(JSON.stringify({ aud, exp, sub: vapidSubject }));
+  const toSign  = `${header}.${payload}`;
+
+  const rawKey = b64urlDecode(vapidPrivateKey);
+  const sigKey = await crypto.subtle.importKey(
     'raw', rawKey,
     { name: 'ECDSA', namedCurve: 'P-256' },
     false, ['sign']
   );
-  const enc = new TextEncoder();
-  const sig = await crypto.subtle.sign(
+  const sigBuf = await crypto.subtle.sign(
     { name: 'ECDSA', hash: 'SHA-256' },
-    key,
-    enc.encode(payload)
+    sigKey,
+    new TextEncoder().encode(toSign)
   );
-  return uint8ToB64(new Uint8Array(sig));
+  return `${toSign}.${b64url(sigBuf)}`;
 }
 
-async function buildVapidHeaders(endpoint, vapidPublicKey, vapidPrivateKey, vapidSubject) {
-  const url = new URL(endpoint);
-  const aud = `${url.protocol}//${url.host}`;
-  const exp = Math.floor(Date.now() / 1000) + 12 * 3600;
-  const header = uint8ToB64(new TextEncoder().encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
-  const payload = uint8ToB64(new TextEncoder().encode(JSON.stringify({ aud, exp, sub: vapidSubject })));
-  const sig = await vapidSign(`${header}.${payload}`, vapidPrivateKey);
-  const jwt = `${header}.${payload}.${sig}`;
-  return {
-    Authorization: `vapid t=${jwt},k=${vapidPublicKey}`,
-    'Content-Type': 'application/octet-stream',
-    'Content-Encoding': 'aes128gcm',
-    'TTL': '86400',
-  };
-}
+// ── Send a bodyless (zero-byte) push to one endpoint ────────────────
 
-/* Encrypt push payload using ECDH + HKDF + AES-128-GCM per RFC 8291 */
-async function encryptPushPayload(plaintext, subscriptionKeys) {
-  const enc = new TextEncoder();
-  const data = enc.encode(typeof plaintext === 'string' ? plaintext : JSON.stringify(plaintext));
-
-  const serverKeyPair = await crypto.subtle.generateKey(
-    { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']
-  );
-
-  const serverPublicRaw = await crypto.subtle.exportKey('raw', serverKeyPair.publicKey);
-  const receiverPublic  = await crypto.subtle.importKey(
-    'raw', b64ToUint8(subscriptionKeys.p256dh),
-    { name: 'ECDH', namedCurve: 'P-256' }, false, []
-  );
-
-  const sharedBits = await crypto.subtle.deriveBits(
-    { name: 'ECDH', public: receiverPublic }, serverKeyPair.privateKey, 256
-  );
-
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const authSecret = b64ToUint8(subscriptionKeys.auth);
-
-  // HKDF extract then expand (simplified for Web Push)
-  const hkdfKey = await crypto.subtle.importKey('raw', sharedBits, { name: 'HKDF' }, false, ['deriveBits']);
-
-  const prk = await crypto.subtle.deriveBits({
-    name: 'HKDF', hash: 'SHA-256',
-    salt: authSecret,
-    info: enc.encode('Content-Encoding: auth\0'),
-  }, hkdfKey, 256);
-
-  const prkKey = await crypto.subtle.importKey('raw', prk, { name: 'HKDF' }, false, ['deriveBits']);
-  const serverPublicArr = new Uint8Array(serverPublicRaw);
-  const receiverPublicArr = b64ToUint8(subscriptionKeys.p256dh);
-
-  const keyInfoData = new Uint8Array([
-    ...enc.encode('Content-Encoding: aesgcm\0'), 0,
-    0, 65, ...receiverPublicArr,
-    0, 65, ...serverPublicArr,
-  ]);
-  const ivInfoData = new Uint8Array([
-    ...enc.encode('Content-Encoding: nonce\0'), 0,
-    0, 65, ...receiverPublicArr,
-    0, 65, ...serverPublicArr,
-  ]);
-
-  const cekBits = await crypto.subtle.deriveBits(
-    { name: 'HKDF', hash: 'SHA-256', salt, info: keyInfoData }, prkKey, 128
-  );
-  const ivBits = await crypto.subtle.deriveBits(
-    { name: 'HKDF', hash: 'SHA-256', salt, info: ivInfoData }, prkKey, 96
-  );
-
-  const cek = await crypto.subtle.importKey('raw', cekBits, { name: 'AES-GCM' }, false, ['encrypt']);
-  const iv  = new Uint8Array(ivBits);
-
-  const padded = new Uint8Array([0, 0, ...data]);
-  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cek, padded);
-
-  // Build aesgcm payload
-  const payload = new Uint8Array(salt.length + 4 + 1 + serverPublicArr.length + ciphertext.byteLength);
-  let offset = 0;
-  payload.set(salt, offset); offset += salt.length;
-  const view = new DataView(payload.buffer);
-  view.setUint32(offset, 4096, false); offset += 4;
-  payload[offset++] = 65;
-  payload.set(serverPublicArr, offset); offset += serverPublicArr.length;
-  payload.set(new Uint8Array(ciphertext), offset);
-
-  return payload;
-}
-
-async function sendWebPush(subscription, payloadObj, env) {
-  const vapidPublicKey  = env.VAPID_PUBLIC_KEY;
-  const vapidPrivateKey = env.VAPID_PRIVATE_KEY;
-  const vapidSubject    = env.VAPID_SUBJECT || 'mailto:admin@rigways.com';
-
-  if (!vapidPublicKey || !vapidPrivateKey) {
-    console.warn('VAPID keys not configured — skipping push');
-    return { ok: false, reason: 'VAPID keys not configured' };
-  }
-
-  let cipherBuf;
-  try {
-    cipherBuf = await encryptPushPayload(payloadObj, subscription.keys);
-  } catch (e) {
-    console.warn('Push encrypt failed — sending without body:', e.message);
-    cipherBuf = null;
-  }
-
-  const headers = await buildVapidHeaders(subscription.endpoint, vapidPublicKey, vapidPrivateKey, vapidSubject);
-
-  const res = await fetch(subscription.endpoint, {
+async function sendBodylessPush(endpoint, vapidPublicKey, vapidPrivateKey, vapidSubject) {
+  const jwt = await makeVapidJwt(endpoint, vapidPublicKey, vapidPrivateKey, vapidSubject);
+  const res = await fetch(endpoint, {
     method: 'POST',
-    headers,
-    body: cipherBuf || null,
+    headers: {
+      Authorization:  `vapid t=${jwt},k=${vapidPublicKey}`,
+      TTL:            '86400',
+      Urgency:        'high',
+      // No Content-Type, no body — bodyless push
+    },
   });
-
-  if (res.status === 410 || res.status === 404) {
-    return { ok: false, gone: true, status: res.status };
-  }
-  return { ok: res.ok, status: res.status };
+  return { ok: res.ok, status: res.status, gone: res.status === 410 || res.status === 404 };
 }
 
-/* ── Push subscription CRUD routes ── */
+// ── Route handler ────────────────────────────────────────────────────
+
 async function handlePush(request, env, path) {
   const session = await getSession(request, env);
   if (!session) return unauth(env);
 
-  const db = createSupabase(env);
+  const db     = createSupabase(env);
   const method = request.method;
 
-  /* POST /api/push/subscribe — save or upsert a subscription */
+  // GET /api/push/vapid-public-key  — client needs this to call subscribe()
+  if (path === '/push/vapid-public-key' && method === 'GET') {
+    return ok({ vapidPublicKey: env.VAPID_PUBLIC_KEY || '' }, env);
+  }
+
+  // POST /api/push/subscribe  — save endpoint (no keys needed for bodyless)
   if (path === '/push/subscribe' && method === 'POST') {
-    let body;
-    try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    const { endpoint } = body || {};
+    if (!endpoint) return badReq('endpoint is required', 'VALIDATION', env);
 
-    const { endpoint, keys } = body || {};
-    if (!endpoint || !keys?.p256dh || !keys?.auth) {
-      return badReq('endpoint, keys.p256dh and keys.auth are required', 'VALIDATION', env);
-    }
-
-    // Upsert: if endpoint already exists, update user_id; otherwise insert.
+    // Upsert by endpoint
     const { data: existing } = await db.from('push_subscriptions', {
       filters: { 'endpoint.eq': endpoint }, select: 'id', limit: 1,
     });
     const row = Array.isArray(existing) ? existing[0] : existing;
-
     if (row) {
-      await db.update('push_subscriptions', {
-        user_id: session.sub, p256dh: keys.p256dh, auth: keys.auth,
-      }, { filters: { 'id.eq': row.id } });
+      await db.update('push_subscriptions', { user_id: session.sub }, { filters: { 'id.eq': row.id } });
     } else {
-      const { error } = await db.insert('push_subscriptions', {
-        user_id: session.sub, endpoint, p256dh: keys.p256dh, auth: keys.auth,
-      });
-      if (error && error.code !== '23505') return serverErr(env);
+      const { error } = await db.insert('push_subscriptions', { user_id: session.sub, endpoint });
+      if (error && error.code !== '23505') return serverErr(env, error.message);
     }
     return ok({ subscribed: true }, env);
   }
 
-  /* DELETE /api/push/unsubscribe — remove a subscription */
+  // POST /api/push/unsubscribe  — remove endpoint
   if (path === '/push/unsubscribe' && method === 'POST') {
-    let body;
-    try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
     const { endpoint } = body || {};
     if (!endpoint) return badReq('endpoint is required', 'VALIDATION', env);
     await db.delete('push_subscriptions', { filters: { 'endpoint.eq': endpoint } });
     return ok({ unsubscribed: true }, env);
   }
 
-  /* POST /api/push/send-test — admin: send a test push to yourself */
+  // POST /api/push/send-test  — fire a bodyless push to your own devices
   if (path === '/push/send-test' && method === 'POST') {
     const { data: subs } = await db.from('push_subscriptions', {
-      filters: { 'user_id.eq': session.sub }, select: '*', limit: 10,
+      filters: { 'user_id.eq': session.sub }, select: 'id,endpoint', limit: 20,
     });
     const list = Array.isArray(subs) ? subs : [];
-    if (!list.length) return ok({ sent: 0, message: 'No subscriptions found for your account' }, env);
+    if (!list.length) return ok({ sent: 0, message: 'No subscriptions on file for your account.' }, env);
 
-    const payload = {
-      title: 'Rigways ACM — Test Push',
-      body:  'Push notifications are working correctly.',
-      icon:  '/favicon.ico',
-      tag:   'rigways-test',
-      url:   '/notifications.html',
-    };
+    const vapidPublicKey  = env.VAPID_PUBLIC_KEY;
+    const vapidPrivateKey = env.VAPID_PRIVATE_KEY;
+    const vapidSubject    = env.VAPID_SUBJECT || 'mailto:admin@rigways.com';
+    if (!vapidPublicKey || !vapidPrivateKey)
+      return serverErr(env, 'VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY env vars not set.');
 
     let sent = 0;
     for (const sub of list) {
-      const result = await sendWebPush({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload, env);
+      const result = await sendBodylessPush(sub.endpoint, vapidPublicKey, vapidPrivateKey, vapidSubject);
       if (result.gone) {
         await db.delete('push_subscriptions', { filters: { 'endpoint.eq': sub.endpoint } });
       } else if (result.ok) {
@@ -1983,42 +1889,37 @@ async function handlePush(request, env, path) {
     return ok({ sent, total: list.length }, env);
   }
 
-  /* POST /api/push/broadcast — admin: send push to all subscribers (or a specific user) */
+  // POST /api/push/broadcast  — admin: push to all (or one user's) devices
   if (path === '/push/broadcast' && method === 'POST') {
     if (!requireRole(session, ['admin'])) return forbidden(env);
-    let body;
-    try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
-
-    const { title, message, url: targetUrl, user_id } = body || {};
-    if (!title || !message) return badReq('title and message are required', 'VALIDATION', env);
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    const { user_id } = body || {};
 
     const filters = user_id ? { 'user_id.eq': user_id } : {};
     const { data: subs } = await db.from('push_subscriptions', {
-      filters, select: '*', limit: 1000,
+      filters, select: 'id,endpoint', limit: 2000,
     });
     const list = Array.isArray(subs) ? subs : [];
 
-    const payload = { title, body: message, icon: '/favicon.ico', tag: 'rigways-alert', url: targetUrl || '/notifications.html' };
+    const vapidPublicKey  = env.VAPID_PUBLIC_KEY;
+    const vapidPrivateKey = env.VAPID_PRIVATE_KEY;
+    const vapidSubject    = env.VAPID_SUBJECT || 'mailto:admin@rigways.com';
+    if (!vapidPublicKey || !vapidPrivateKey)
+      return serverErr(env, 'VAPID keys not configured.');
 
-    let sent = 0; const failed = [];
+    let sent = 0, failed = 0;
     for (const sub of list) {
-      const result = await sendWebPush({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload, env);
+      const result = await sendBodylessPush(sub.endpoint, vapidPublicKey, vapidPrivateKey, vapidSubject);
       if (result.gone) {
         await db.delete('push_subscriptions', { filters: { 'endpoint.eq': sub.endpoint } });
-        failed.push(sub.endpoint);
+        failed++;
       } else if (result.ok) {
         sent++;
       } else {
-        failed.push(sub.endpoint);
+        failed++;
       }
     }
-    return ok({ sent, failed: failed.length, total: list.length }, env);
-  }
-
-  /* GET /api/push/vapid-public-key — return the VAPID public key for the client */
-  if (path === '/push/vapid-public-key' && method === 'GET') {
-    const key = env.VAPID_PUBLIC_KEY || '';
-    return ok({ vapidPublicKey: key }, env);
+    return ok({ sent, failed, total: list.length }, env);
   }
 
   return badReq('Not found', 'NOT_FOUND', env);
@@ -2040,20 +1941,20 @@ export default {
     try {
       const path = url.pathname.replace('/api', '');
 
-      if (path.startsWith('/auth')) return await handleAuth(request, env, path);
-      if (path.startsWith('/users')) return await handleUsers(request, env, path);
+      if (path.startsWith('/auth'))   return await handleAuth(request, env, path);
+      if (path.startsWith('/users'))  return await handleUsers(request, env, path);
       if (path.startsWith('/assets')) return await handleAssets(request, env, path);
       if (path.startsWith('/certificates/upload') || path.startsWith('/certificates/file/')) {
-      const uploadResult = await handleCertUpload(request, env, path);
-      if (uploadResult) return uploadResult;
-    }
-    if (path.startsWith('/certificates')) return await handleCertificates(request, env, path);
-      if (path.startsWith('/clients')) return await handleClients(request, env, path);
-      if (path.startsWith('/inspectors')) return await handleInspectors(request, env, path);
-      if (path.startsWith('/functional-locations')) return await handleFunctionalLocations(request, env, path);
-      if (path.startsWith('/notifications')) return await handleNotifications(request, env, path);
-      if (path.startsWith('/push')) return await handlePush(request, env, path);
-      if (path.startsWith('/reports')) return await handleReports(request, env, path);
+        const uploadResult = await handleCertUpload(request, env, path);
+        if (uploadResult) return uploadResult;
+      }
+      if (path.startsWith('/certificates'))        return await handleCertificates(request, env, path);
+      if (path.startsWith('/clients'))             return await handleClients(request, env, path);
+      if (path.startsWith('/inspectors'))          return await handleInspectors(request, env, path);
+      if (path.startsWith('/functional-locations'))return await handleFunctionalLocations(request, env, path);
+      if (path.startsWith('/notifications'))       return await handleNotifications(request, env, path);
+      if (path.startsWith('/push'))                return await handlePush(request, env, path);
+      if (path.startsWith('/reports'))             return await handleReports(request, env, path);
 
       return json({ success: false, error: 'Route not found' }, 404, env);
     } catch (err) {

@@ -726,120 +726,72 @@ function toggleEmailNotif(cb) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   PUSH NOTIFICATIONS — Service Worker + VAPID
+   PUSH NOTIFICATIONS — Bodyless strategy
    ───────────────────────────────────────────────────────
-   Architecture:
-   1. Register sw.js as a Service Worker
-   2. Fetch VAPID public key from /api/push/vapid-public-key
-   3. Subscribe via pushManager.subscribe()
-   4. Save subscription to /api/push/subscribe
-   5. Test via /api/push/send-test
+   • Worker sends a zero-byte push (VAPID JWT only).
+   • sw.js wakes up, calls /api/notifications with the
+     token it stored in IndexedDB, shows the notification.
+   • This page only needs to: register SW, subscribe, and
+     send the token to the SW via postMessage.
 ═══════════════════════════════════════════════════════ */
 
-/* Convert a URL-safe base64 string to a Uint8Array (for VAPID key) */
-function urlB64ToUint8Array(base64String) {
-  const padding  = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64   = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData  = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
-  return outputArray;
+/* Convert URL-safe base64 → Uint8Array (for applicationServerKey) */
+function urlB64ToUint8(b64) {
+  b64 = b64.replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4) b64 += '=';
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
 }
 
-let _swRegistration = null;  /* cached SW registration */
-let _vapidPublicKey  = null;  /* cached VAPID public key from server */
+let _swReg = null;  /* cached SW registration */
 
-/* Register the service worker and cache the registration */
-async function registerServiceWorker() {
+/* Send the current JWT to the SW so it can authenticate push-triggered API calls */
+function sendTokenToSW(token) {
+  if (!token) return;
+  navigator.serviceWorker?.controller?.postMessage({ type: 'SET_TOKEN', token });
+}
+
+/* Register sw.js and pass the token immediately */
+async function registerSW() {
   if (!('serviceWorker' in navigator)) return null;
   try {
     const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-    _swRegistration = reg;
-    /* Listen for messages from sw.js (e.g. PUSH_SUBSCRIPTION_CHANGED) */
-    navigator.serviceWorker.addEventListener('message', event => {
-      if (event.data?.type === 'PUSH_SUBSCRIPTION_CHANGED') {
-        savePushSubscription(event.data.subscription).catch(console.warn);
-      }
+    _swReg = reg;
+    // Relay the token whenever the SW activates / takes control
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
+      sendTokenToSW(token);
     });
+    // Also send it now in case the SW is already active
+    const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
+    sendTokenToSW(token);
     return reg;
   } catch (err) {
-    console.warn('Service Worker registration failed:', err);
+    console.warn('[Push] SW registration failed:', err);
     return null;
   }
 }
 
-/* Fetch the VAPID public key from the backend (once per page load) */
-async function fetchVapidPublicKey() {
-  if (_vapidPublicKey) return _vapidPublicKey;
-  try {
-    const res  = await apiFetch('/api/push/vapid-public-key');
-    const data = await res.json();
-    _vapidPublicKey = (data.data || data).vapidPublicKey || '';
-    return _vapidPublicKey;
-  } catch (e) {
-    console.warn('fetchVapidPublicKey failed:', e);
-    return '';
-  }
-}
-
-/* Save a PushSubscription object to the backend */
-async function savePushSubscription(sub) {
-  if (!sub) return;
-  const json = sub.toJSON ? sub.toJSON() : sub;
-  try {
-    await apiFetch('/api/push/subscribe', {
-      method: 'POST',
-      body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
-    });
-  } catch (e) { console.warn('savePushSubscription failed:', e); }
-}
-
-/* Remove a PushSubscription from the backend */
-async function removePushSubscription(endpoint) {
-  if (!endpoint) return;
-  try {
-    await apiFetch('/api/push/unsubscribe', {
-      method: 'POST',
-      body: JSON.stringify({ endpoint }),
-    });
-  } catch (e) { console.warn('removePushSubscription failed:', e); }
-}
-
 async function loadPushState() {
+  const toggle = document.getElementById('pushToggle');
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     pushEnabled = false;
-    const t = document.getElementById('pushToggle');
-    if (t) { t.checked = false; t.disabled = true; t.closest('.digest-toggle')?.setAttribute('title', 'Push not supported in this browser'); }
+    if (toggle) { toggle.checked = false; toggle.disabled = true; }
     return;
   }
-
-  /* Register SW on every page load — idempotent */
-  await registerServiceWorker();
-
-  /* Check if there's already an active subscription */
+  await registerSW();
   try {
-    const reg = _swRegistration || await navigator.serviceWorker.ready;
-    const existing = await reg.pushManager.getSubscription();
-    if (existing && Notification.permission === 'granted') {
-      pushEnabled = true;
-      localStorage.setItem('sap_push_enabled', 'true');
-    } else {
-      pushEnabled = false;
-      localStorage.setItem('sap_push_enabled', 'false');
-    }
-  } catch (e) {
-    pushEnabled = false;
-  }
-
-  const toggle = document.getElementById('pushToggle');
+    const reg = _swReg || await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    pushEnabled = !!(sub && Notification.permission === 'granted');
+  } catch { pushEnabled = false; }
   if (toggle) toggle.checked = pushEnabled;
+  localStorage.setItem('sap_push_enabled', pushEnabled ? 'true' : 'false');
 }
 
 function openPushSetup() {
   const toggle = document.getElementById('pushToggle');
-  if (!toggle) return;
-  if (toggle.disabled) {
-    showToast('error', 'Not Supported', 'Push notifications are not supported in this browser.');
+  if (!toggle || toggle.disabled) {
+    showToast('error', 'Not Supported', 'Push notifications require a modern browser.');
     return;
   }
   toggle.checked = true;
@@ -849,59 +801,69 @@ function openPushSetup() {
 async function togglePushNotif(cb) {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     cb.checked = false;
-    showToast('error', 'Not Supported', 'Push notifications require a modern browser with Service Worker support.');
+    showToast('error', 'Not Supported', 'Push requires Service Worker support (Chrome/Firefox/Edge).');
     return;
   }
 
   if (cb.checked) {
-    /* ── Enable push ── */
+    /* ── Enable ── */
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
-      cb.checked = false;
-      pushEnabled = false;
-      localStorage.setItem('sap_push_enabled', 'false');
-      showToast('warning', 'Permission Denied', 'Please allow notifications in your browser settings and try again.');
+      cb.checked = false; pushEnabled = false;
+      showToast('warning', 'Permission Denied', 'Allow notifications in browser settings, then try again.');
       return;
     }
-
     try {
-      const vapidKey = await fetchVapidPublicKey();
-      if (!vapidKey) throw new Error('VAPID key not available. Check VAPID_PUBLIC_KEY env var.');
+      /* 1. Fetch VAPID public key from backend */
+      const keyRes    = await apiFetch('/api/push/vapid-public-key');
+      const keyData   = await keyRes.json();
+      const vapidKey  = (keyData.data || keyData).vapidPublicKey || '';
+      if (!vapidKey) throw new Error('VAPID_PUBLIC_KEY not configured on server.');
 
-      const reg = _swRegistration || await navigator.serviceWorker.ready;
+      /* 2. Subscribe via PushManager (bodyless — no p256dh/auth keys needed server-side) */
+      const reg = _swReg || await navigator.serviceWorker.ready;
       let sub   = await reg.pushManager.getSubscription();
-
       if (!sub) {
         sub = await reg.pushManager.subscribe({
           userVisibleOnly:      true,
-          applicationServerKey: urlB64ToUint8Array(vapidKey),
+          applicationServerKey: urlB64ToUint8(vapidKey),
         });
       }
 
-      await savePushSubscription(sub);
+      /* 3. Save endpoint to backend (only the endpoint, no encryption keys) */
+      await apiFetch('/api/push/subscribe', {
+        method: 'POST',
+        body:   JSON.stringify({ endpoint: sub.endpoint }),
+      });
+
+      /* 4. Give the SW the JWT so it can fetch notifications on push */
+      const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
+      sendTokenToSW(token);
+
       pushEnabled = true;
       localStorage.setItem('sap_push_enabled', 'true');
-      showToast('success', 'Push Enabled', 'Web push notifications are now active on this device.');
+      showToast('success', 'Push Enabled', 'You\'ll receive notifications on this device even when the tab is closed.');
     } catch (err) {
-      cb.checked = false;
-      pushEnabled = false;
-      localStorage.setItem('sap_push_enabled', 'false');
-      console.error('Push subscription failed:', err);
-      showToast('error', 'Subscription Failed', err.message || 'Could not subscribe to push notifications. Check VAPID configuration.');
+      cb.checked = false; pushEnabled = false;
+      console.error('[Push] subscribe failed:', err);
+      showToast('error', 'Subscribe Failed', err.message || 'Could not enable push. Check VAPID config.');
     }
   } else {
-    /* ── Disable push ── */
+    /* ── Disable ── */
     try {
-      const reg = _swRegistration || await navigator.serviceWorker.ready;
+      const reg = _swReg || await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
       if (sub) {
-        await removePushSubscription(sub.endpoint);
+        await apiFetch('/api/push/unsubscribe', {
+          method: 'POST', body: JSON.stringify({ endpoint: sub.endpoint }),
+        });
         await sub.unsubscribe();
       }
-    } catch (e) { console.warn('Unsubscribe error:', e); }
+      navigator.serviceWorker.controller?.postMessage({ type: 'CLEAR_TOKEN' });
+    } catch (e) { console.warn('[Push] unsubscribe error:', e); }
     pushEnabled = false;
     localStorage.setItem('sap_push_enabled', 'false');
-    showToast('info', 'Push Disabled', 'Web push notifications disabled for this device.');
+    showToast('info', 'Push Disabled', 'Push notifications turned off for this device.');
   }
 }
 
@@ -915,35 +877,33 @@ async function sendPushTestNotification() {
     const data = await res.json();
     const d    = data.data || data;
     if (data.success && d.sent > 0) {
-      showToast('success', 'Test Sent', `Push notification sent to ${d.sent} device(s). Check your browser.`);
+      showToast('success', 'Test Sent', `Push fired to ${d.sent} device(s). Your SW will fetch & display it.`);
     } else if (data.success) {
-      showToast('info', 'No Devices', d.message || 'No subscriptions found. Enable push and try again.');
+      showToast('info', 'No Devices', d.message || 'No subscriptions found — try enabling push again.');
     } else {
       showToast('error', 'Send Failed', d.error || 'Could not send test push.');
     }
   } catch (e) {
-    showToast('error', 'Network Error', 'Could not send test push notification.');
+    showToast('error', 'Network Error', 'Could not reach push test endpoint.');
   }
 }
 
 function maybeShowPushForUnread(notifs) {
-  /* With a service worker in place, background push is handled server-side.
-     This fallback fires in-tab Notifications for new unread items when the
-     user already has the page open (no SW push needed). */
-  if (!pushEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
-  const seen = new Set(JSON.parse(sessionStorage.getItem(pushSeenKey) || '[]'));
+  /* In-tab fallback: show Notification API pop-ups for fresh unread items
+     when the user already has the page open (no SW push round-trip needed). */
+  if (!pushEnabled || Notification.permission !== 'granted') return;
+  const seen        = new Set(JSON.parse(sessionStorage.getItem(pushSeenKey) || '[]'));
   const freshUnread = (notifs || []).filter(n => !seen.has(n.id) && !(n.read || n.is_read || n.isRead));
-  freshUnread.slice(0, 3).forEach(n => {
-    /* Use SW notification if available (richer, persistent) */
-    if (_swRegistration && _swRegistration.active) {
-      _swRegistration.showNotification(n.titleEn || 'Rigways Notification', {
+  freshUnread.slice(0, 2).forEach(n => {
+    if (_swReg?.active) {
+      _swReg.showNotification(n.titleEn || 'Rigways ACM', {
         body:  n.descEn || '',
         icon:  '/favicon.ico',
         tag:   `rigways-${n.id}`,
         data:  { url: n.link || '/notifications.html' },
       });
     } else {
-      const p = new Notification(n.titleEn || 'Rigways Notification', { body: n.descEn || '', tag: `rigways-${n.id}` });
+      const p = new Notification(n.titleEn || 'Rigways ACM', { body: n.descEn || '' });
       p.onclick = () => { window.focus(); p.close(); onNotificationClick(n.id); };
     }
     seen.add(n.id);
@@ -1606,11 +1566,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   loadConfig();
 
-  /* Register SW and restore push state (async — does not block UI) */
+  /* Register SW + restore push state (non-blocking) */
   loadPushState().catch(console.warn);
-
-  /* Prefetch VAPID key in background so it's ready when user enables push */
-  fetchVapidPublicKey().catch(console.warn);
 
   loadNotifications();
 
