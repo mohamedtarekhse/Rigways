@@ -2116,11 +2116,26 @@ export default {
             cryptoTest.ok = true;
           } else { cryptoTest.error = 'Keys missing'; }
         } catch (e) { cryptoTest.error = e.message || String(e); }
-
+        
+        let cronWorkerHeartbeat = { ok: false };
+        if (env.CRON_WORKER_URL) {
+          try {
+            const cronRes = await fetch(env.CRON_WORKER_URL, { signal: AbortSignal.timeout(3000) });
+            const text = await cronRes.text();
+            cronWorkerHeartbeat = { 
+              ok: cronRes.ok, 
+              status: cronRes.status, 
+              response: text.slice(0, 50),
+              online: text.includes('active') || text.includes('initiated')
+            };
+          } catch (e) { cronWorkerHeartbeat.error = e.message || String(e); }
+        } else { cronWorkerHeartbeat.error = 'CRON_WORKER_URL not configured'; }
+ 
         return ok({ 
           success: true, 
           checks, 
           cryptoTest,
+          cronWorkerHeartbeat,
           deployment: 'worker_v2_diag',
           version: '2.0.5',
           timestamp: new Date().toISOString() 
