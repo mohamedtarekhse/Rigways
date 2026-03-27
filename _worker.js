@@ -1739,10 +1739,19 @@ async function sendPushNotification(subscription, payload, vapid) {
       headers: { ...headers, ...vapidHeaders, 'TTL': '86400' },
       body: ciphertext,
     });
-    return { ok: response.ok || response.status === 201, status: response.status, gone: response.status === 410 || response.status === 404 };
+    let errorText = '';
+    if (!response.ok) {
+      try { errorText = await response.text(); } catch { errorText = 'Could not read error body'; }
+    }
+    return { 
+      ok: response.ok || response.status === 201, 
+      status: response.status, 
+      error: errorText,
+      gone: response.status === 410 || response.status === 404 
+    };
   } catch (e) {
     console.error('sendPushNotification error:', e);
-    return { ok: false, status: 0, gone: false };
+    return { ok: false, status: 0, error: e.message || String(e), gone: false };
   }
 }
 
@@ -1756,8 +1765,12 @@ async function sendPushToUser(db, env, userId, payload) {
       if (result.gone) { await db.delete('push_subscriptions', { filters: { 'id.eq': sub.id } }).catch(() => {}); }
       return result;
     })));
-    return { sent: results.filter(r => r.status === 'fulfilled' && r.value.ok).length, total: subs.length };
-  } catch (e) { console.warn('sendPushToUser failed:', e); return { sent: 0, total: 0 }; }
+    return { 
+      sent: results.filter(r => r.status === 'fulfilled' && r.value.ok).length, 
+      total: subs.length,
+      details: results.map(r => r.status === 'fulfilled' ? r.value : { status: 'failed', error: 'Unknown' })
+    };
+  } catch (e) { console.warn('sendPushToUser failed:', e); return { sent: 0, total: 0, error: e.message }; }
 }
 
 async function sendPushToRoles(db, env, roles, payload, excludeUserId = null) {
