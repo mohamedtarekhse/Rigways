@@ -442,7 +442,7 @@ async function handleUsers(request, env, path) {
 
 
 
-const ASSET_TYPES = ['Hoisting Equipment','Drilling Equipment','Mud System Low Pressure','Mud System High Pressure','Wirelines','Structure','Well Control','Tubular'];
+const ASSET_TYPES = ['Hoisting Equipment', 'Drilling Equipment', 'Mud System Low Pressure', 'Mud System High Pressure', 'Wirelines', 'Structure', 'Well Control', 'Tubular'];
 const ASSET_STATUSES = ['operation', 'stacked'];
 
 // Resolve AST-number (e.g. AST-0001) to UUID for DB operations
@@ -481,7 +481,7 @@ async function handleAssets(request, env, path) {
   if (!session) return unauth(env);
 
   const method = request.method;
-  const db  = createSupabase(env);
+  const db = createSupabase(env);
   const url = new URL(request.url);
 
   /* ── POST /api/assets/import/validate — server-side revalidation for mass upload ── */
@@ -543,8 +543,8 @@ async function handleAssets(request, env, path) {
     return ok({ total: total.count, active: active.count, maintenance: maintenance.count, inactive: inactive.count }, env);
   }
 
-  const idM    = path.match(/^\/assets\/([^/]+)$/);
-  const asId    = idM?.[1] ? await resolveAssetId(db, idM[1]) : undefined;
+  const idM = path.match(/^\/assets\/([^/]+)$/);
+  const asId = idM?.[1] ? await resolveAssetId(db, idM[1]) : undefined;
 
   /* LIST */
   if (!asId && method === 'GET') {
@@ -729,7 +729,7 @@ async function audit(db, session, table, id, action, before, after) {
 
 
 
-const CERT_TYPES = ['CAT III','CAT IV','ORIGINAL COC','LOAD TEST','LIFTING','NDT','TUBULAR'];
+const CERT_TYPES = ['CAT III', 'CAT IV', 'ORIGINAL COC', 'LOAD TEST', 'LIFTING', 'NDT', 'TUBULAR'];
 const CERT_STATUSES = ['pending', 'approved', 'rejected'];
 
 // ── CERTIFICATES FILE UPLOAD ──
@@ -748,13 +748,13 @@ async function handleCertUpload(request, env, path) {
 
     let formData;
     try { formData = await request.formData(); }
-    catch(e) { return badReq('Could not parse form data', 'BAD_FORM', env); }
+    catch (e) { return badReq('Could not parse form data', 'BAD_FORM', env); }
 
     const file = formData.get('file');
     if (!file || typeof file === 'string') return badReq('No file provided', 'NO_FILE', env);
 
     // Validate file type
-    const allowedTypes = ['application/pdf','image/jpeg','image/png','image/webp'];
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
     if (!allowedTypes.includes(file.type)) {
       return badReq('Invalid file type. Allowed: PDF, JPG, PNG, WEBP', 'INVALID_TYPE', env);
     }
@@ -766,10 +766,10 @@ async function handleCertUpload(request, env, path) {
 
     // Structured R2 key: clients/{clientId}/jobs/{jobNumber}/{certNumber}.{ext}
     // All three are required — passed from frontend after the cert record has been saved.
-    const clientId  = (formData.get('client_id')   || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
-    const jobNumber = (formData.get('job_number')   || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
-    const certNumber= (formData.get('cert_number')  || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
-    const ext       = (file.name.split('.').pop() || 'pdf').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const clientId = (formData.get('client_id') || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    const jobNumber = (formData.get('job_number') || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    const certNumber = (formData.get('cert_number') || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    const ext = (file.name.split('.').pop() || 'pdf').toLowerCase().replace(/[^a-z0-9]/g, '');
 
     if (!clientId || !jobNumber || !certNumber) {
       return badReq('client_id, job_number and cert_number are required for structured upload', 'MISSING_FIELDS', env);
@@ -783,7 +783,7 @@ async function handleCertUpload(request, env, path) {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
       .slice(0, 60);
-    const key       = `clients/${clientId}/jobs/${jobNumber}/${jobNumber}_${certNumber}_${safeOriginal}.${ext}`;
+    const key = `clients/${clientId}/jobs/${jobNumber}/${jobNumber}_${certNumber}_${safeOriginal}.${ext}`;
     const fileBuffer = await file.arrayBuffer();
 
     try {
@@ -791,14 +791,14 @@ async function handleCertUpload(request, env, path) {
         httpMetadata: { contentType: file.type },
         customMetadata: {
           originalName: file.name,
-          uploadedBy:   session.sub,
-          username:     session.username,
+          uploadedBy: session.sub,
+          username: session.username,
           certNumber,
           jobNumber,
           clientId,
         },
       });
-    } catch(e) {
+    } catch (e) {
       console.error('R2 upload error:', e);
       return json({ success: false, error: 'File upload failed: ' + e.message, code: 'UPLOAD_FAILED' }, 500, env);
     }
@@ -824,7 +824,7 @@ async function handleCertUpload(request, env, path) {
     if (!cert) return notFound('Certificate', env);
 
     // Check access
-    if (['user','technician'].includes(session.role) && session.customerId && cert.client_id !== session.customerId)
+    if (['user', 'technician'].includes(session.role) && session.customerId && cert.client_id !== session.customerId)
       return forbidden(env);
 
     if (!cert.file_url) return json({ success: false, error: 'No file attached to this certificate', code: 'NO_FILE' }, 404, env);
@@ -849,7 +849,7 @@ async function handleCertUpload(request, env, path) {
           ...cors(env),
         },
       });
-    } catch(e) {
+    } catch (e) {
       console.error('R2 get error:', e);
       return json({ success: false, error: 'Could not retrieve file: ' + e.message, code: 'STORAGE_ERROR' }, 500, env);
     }
@@ -895,7 +895,7 @@ async function handleCertificates(request, env, path) {
       CRON_SECRET: !!env.CRON_SECRET,
       CERT_BUCKET: !!env.CERT_BUCKET
     };
-    
+
     // Crypto Self-Test
     let cryptoTest = { ok: false };
     try {
@@ -912,12 +912,12 @@ async function handleCertificates(request, env, path) {
       cryptoTest.error = e.message || String(e);
     }
 
-    return ok({ 
-      success: true, 
-      checks, 
+    return ok({
+      success: true,
+      checks,
       cryptoTest,
       deployment: 'worker_v2_diag',
-      timestamp: new Date().toISOString() 
+      timestamp: new Date().toISOString()
     }, env);
   }
 
@@ -1779,11 +1779,11 @@ async function sendPushNotification(subscription, payload, vapid) {
     if (!response.ok) {
       try { errorText = await response.text(); } catch { errorText = 'Could not read error body'; }
     }
-    return { 
-      ok: response.ok || response.status === 201, 
-      status: response.status, 
+    return {
+      ok: response.ok || response.status === 201,
+      status: response.status,
       error: errorText,
-      gone: response.status === 410 || response.status === 404 
+      gone: response.status === 410 || response.status === 404
     };
   } catch (e) {
     console.error('sendPushNotification error:', e);
@@ -1798,11 +1798,11 @@ async function sendPushToUser(db, env, userId, payload) {
     if (!Array.isArray(subs) || !subs.length) return;
     const vapid = { publicKey: env.VAPID_PUBLIC_KEY || '', privateKey: env.VAPID_PRIVATE_KEY || '', subject: env.VAPID_SUBJECT || 'mailto:admin@rigways.com' };
     const results = await Promise.allSettled(subs.map(sub => sendPushNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload, vapid).then(async (result) => {
-      if (result.gone) { await db.delete('push_subscriptions', { filters: { 'id.eq': sub.id } }).catch(() => {}); }
+      if (result.gone) { await db.delete('push_subscriptions', { filters: { 'id.eq': sub.id } }).catch(() => { }); }
       return result;
     })));
-    return { 
-      sent: results.filter(r => r.status === 'fulfilled' && r.value.ok).length, 
+    return {
+      sent: results.filter(r => r.status === 'fulfilled' && r.value.ok).length,
       total: subs.length,
       details: results.map(r => r.status === 'fulfilled' ? r.value : { status: 'failed', error: 'Unknown' })
     };
@@ -2036,10 +2036,10 @@ export default {
       if (path.startsWith('/users')) return await handleUsers(request, env, path);
       if (path.startsWith('/assets')) return await handleAssets(request, env, path);
       if (path.startsWith('/certificates/upload') || path.startsWith('/certificates/file/')) {
-      const uploadResult = await handleCertUpload(request, env, path);
-      if (uploadResult) return uploadResult;
-    }
-    if (path.startsWith('/certificates')) return await handleCertificates(request, env, path);
+        const uploadResult = await handleCertUpload(request, env, path);
+        if (uploadResult) return uploadResult;
+      }
+      if (path.startsWith('/certificates')) return await handleCertificates(request, env, path);
       if (path.startsWith('/clients')) return await handleClients(request, env, path);
       if (path.startsWith('/inspectors')) return await handleInspectors(request, env, path);
       if (path.startsWith('/functional-locations')) return await handleFunctionalLocations(request, env, path);
