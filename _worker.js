@@ -2004,64 +2004,6 @@ async function handlePush(request, env, path) {
   return badReq('Not found', 'NOT_FOUND', env);
 }
 
-// ── check-expiry.js ──
-// worker/src/routes/check-expiry.js — Cron logic
-
-async function handleCheckExpiry(env) {
-  const db = createSupabase(env);
-  const today = new Date().toISOString().split('T')[0];
-  const in7d = datePlusDays(7);
-  const in14d = datePlusDays(14);
-  const in30d = datePlusDays(30);
-
-  const { data: expired } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved', 'expiry_date.lt': today }, select: 'id,name,cert_number,expiry_date,uploaded_by,client_id', limit: 500 });
-  const { data: crit7 } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved', 'expiry_date.gte': today, 'expiry_date.lte': in7d }, select: 'id,name,cert_number,expiry_date,uploaded_by,client_id', limit: 500 });
-  const { data: warn30 } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved', 'expiry_date.gt': in7d, 'expiry_date.lte': in30d }, select: 'id,name,cert_number,expiry_date,uploaded_by,client_id', limit: 500 });
-
-  const expiredList = Array.isArray(expired) ? expired : [];
-  const criticalList = Array.isArray(crit7) ? crit7 : [];
-  const warningList = Array.isArray(warn30) ? warn30 : [];
-
-  let pushCount = 0;
-  if (expiredList.length > 0) {
-    const payload = { title: `⚠️ ${expiredList.length} Certs Expired`, body: expiredList.slice(0, 3).map(c => c.name || c.cert_number).join(', '), url: '/notifications.html', tag: 'cert-expired' };
-    await sendPushToRoles(db, env, ['admin', 'manager'], payload); pushCount++;
-    const uploaderIds = [...new Set(expiredList.map(c => c.uploaded_by).filter(Boolean))];
-    for (const uid of uploaderIds) {
-      const userCerts = expiredList.filter(c => c.uploaded_by === uid);
-      await sendPushToUser(db, env, uid, { title: `⚠️ ${userCerts.length} of your certs expired`, body: userCerts.map(c => c.name || c.cert_number).join(', '), url: '/certificates.html', tag: 'cert-expired-user' });
-      pushCount++;
-    }
-  }
-  if (criticalList.length > 0) {
-    const payload = { title: `🔴 ${criticalList.length} Certs Expiring (7d)`, body: criticalList.slice(0, 3).map(c => `${c.name || c.cert_number} (${c.expiry_date})`).join(', '), url: '/notifications.html', tag: 'cert-expiring-critical' };
-    await sendPushToRoles(db, env, ['admin', 'manager'], payload); pushCount++;
-
-    const uploaderIds = [...new Set(criticalList.map(c => c.uploaded_by).filter(Boolean))];
-    for (const uid of uploaderIds) {
-      const userCerts = criticalList.filter(c => c.uploaded_by === uid);
-      await sendPushToUser(db, env, uid, { title: `🔴 ${userCerts.length} of your certs expiring (≤7d)`, body: userCerts.map(c => `${c.name || c.cert_number} (${c.expiry_date})`).join(', '), url: '/certificates.html', tag: 'cert-critical-user' });
-      pushCount++;
-    }
-  }
-  if (warningList.length > 0 && new Date().getUTCDay() === 1) {
-    await sendPushToRoles(db, env, ['admin', 'manager'], { title: `🟡 ${warningList.length} Certs Expiring (30d)`, body: `${warningList.length} certificates due soon.`, url: '/notifications.html', tag: 'cert-expiring-warning' });
-    pushCount++;
-
-    const uploaderIds = [...new Set(warningList.map(c => c.uploaded_by).filter(Boolean))];
-    for (const uid of uploaderIds) {
-      const userCerts = warningList.filter(c => c.uploaded_by === uid);
-      await sendPushToUser(db, env, uid, { title: `🟡 ${userCerts.length} of your certs expiring soon (≤30d)`, body: `${userCerts.length} certificates due soon.`, url: '/certificates.html', tag: 'cert-warning-user' });
-      pushCount++;
-    }
-  }
-  return { checked: true, expired: expiredList.length, critical: criticalList.length, warning: warningList.length, pushesSent: pushCount };
-}
-
-function datePlusDays(days) {
-  const d = new Date(); d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().split('T')[0];
-}
 
 // ── Entry point ──
 export default {
@@ -2102,7 +2044,6 @@ export default {
           JWT_SECRET: !!env.JWT_SECRET,
           VAPID_PRIVATE_KEY: !!env.VAPID_PRIVATE_KEY,
           VAPID_PUBLIC_KEY: !!env.VAPID_PUBLIC_KEY,
-          CRON_SECRET: !!env.CRON_SECRET,
           CERT_BUCKET: !!env.CERT_BUCKET
         };
         
@@ -2117,48 +2058,17 @@ export default {
           } else { cryptoTest.error = 'Keys missing'; }
         } catch (e) { cryptoTest.error = e.message || String(e); }
         
-        let cronWorkerHeartbeat = { ok: false };
-        if (env.CRON_WORKER_URL) {
-          try {
-            const cronRes = await fetch(env.CRON_WORKER_URL, { signal: AbortSignal.timeout(3000) });
-            const text = await cronRes.text();
-            cronWorkerHeartbeat = { 
-              ok: cronRes.ok, 
-              status: cronRes.status, 
-              response: text.slice(0, 50),
-              online: text.includes('active') || text.includes('initiated')
-            };
-          } catch (e) { cronWorkerHeartbeat.error = e.message || String(e); }
-        } else { cronWorkerHeartbeat.error = 'CRON_WORKER_URL not configured'; }
  
         return ok({ 
           success: true, 
           checks, 
           cryptoTest,
-          cronWorkerHeartbeat,
           deployment: 'worker_v2_diag',
           version: '2.0.5',
           timestamp: new Date().toISOString() 
         }, env);
       }
 
-      // Cron manual trigger (Admin or Secret)
-      if (path === '/cron/check-expiry' && request.method === 'GET') {
-        const cronSecret = env.CRON_SECRET;
-        const authHeader = request.headers.get('Authorization');
-        const isSecretMatch = cronSecret && (authHeader === `Bearer ${cronSecret}` || url.searchParams.get('secret') === cronSecret);
-
-        if (!isSecretMatch) {
-          const session = await getSession(request, env);
-          if (!session || !requireRole(session, ['admin'])) {
-            const reason = !cronSecret ? 'CRON_SECRET_NOT_CONFIGURED' : 'INVALID_SECRET_PROVIDED';
-            return json({ success: false, error: `Forbidden: ${reason}`, code: 'FORBIDDEN' }, 403, env);
-          }
-        }
-
-        const result = await handleCheckExpiry(env);
-        return json({ success: true, data: result }, 200, env);
-      }
 
       return json({ success: false, error: 'Route not found' }, 404, env);
     } catch (err) {
