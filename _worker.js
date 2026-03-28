@@ -1989,17 +1989,40 @@ async function handlePush(request, env, path) {
 
   /* ── GET /api/push/test ── Send a test notification to yourself */
   if (path === '/push/test' && method === 'GET') {
-    const payload = { title: 'Test Notification', body: 'Push notifications are working correctly!', url: '/notifications.html', tag: 'test-push' };
+    const payload = { 
+      title: 'Test Notification', 
+      body: 'This is a test notification for your device.', 
+      url: '/notifications.html', 
+      tag: 'test-push-individual' 
+    };
     const stats = await sendPushToUser(db, env, session.sub, payload);
-    return ok({ success: true, stats, message: stats.total > 0 ? `Sent to ${stats.sent} of your ${stats.total} devices.` : "You don't have any active push subscriptions. Did you enable them in this browser?" }, env);
+    const sentCount = stats?.sent || 0;
+    const totalCount = stats?.total || 0;
+    
+    return ok({ 
+      success: true, 
+      stats, 
+      message: totalCount > 0 
+        ? `Triggered for ${sentCount} of your ${totalCount} registered device(s). Check your notification center.` 
+        : "No active push subscriptions found for your account. Please enable them above." 
+    }, env);
   }
 
   /* ── GET /api/push/test-all ── Send a test notification to all admins/managers */
   if (path === '/push/test-all' && method === 'GET') {
     if (!isAdminOrManager(session)) return forbidden(env);
-    const payload = { title: 'Global Test', body: `Broadcasting test from ${session.username}`, url: '/notifications.html', tag: 'global-test' };
+    const payload = { 
+      title: 'Global Push Test', 
+      body: `Broadcast test triggered by ${session.name}.`, 
+      url: '/notifications.html', 
+      tag: 'test-push-global' 
+    };
     const stats = await sendPushToRoles(db, env, ['admin', 'manager'], payload);
-    return ok({ success: true, stats, message: `Broadcasting to ${stats.users} qualified users. ${stats.sent} notifications triggered.` }, env);
+    return ok({ 
+      success: true, 
+      stats, 
+      message: `Broadcasted to ${stats.users} qualified users. Total of ${stats.sent} push notifications triggered.` 
+    }, env);
   }
   return badReq('Not found', 'NOT_FOUND', env);
 }

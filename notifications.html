@@ -1557,6 +1557,17 @@ async function runDiagnostic() {
         report += `❌ REGISTRATION FAILED: ${regErr.message}\n`;
       }
     }
+
+    const sub = await swRegistration?.pushManager?.getSubscription();
+    if (sub) {
+      report += '\n--- SUBSCRIPTION DETAILS ---\n';
+      report += `Endpoint: ${sub.endpoint.slice(0, 40)}...\n`;
+      const keys = sub.toJSON().keys;
+      report += `Keys present: ${keys?.p256dh ? '✅ p256dh' : '❌ p256dh'} | ${keys?.auth ? '✅ auth' : '❌ auth'}\n`;
+    } else {
+      report += '\n--- NO ACTIVE SUBSCRIPTION ---\n';
+    }
+
     report += '\n';
   } catch (e) {
     report += `Browser Error: ${e.message}\n\n`;

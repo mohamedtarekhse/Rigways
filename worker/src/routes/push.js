@@ -103,5 +103,31 @@ export async function handlePush(request, env, path) {
     return ok({ notified: true, count }, env);
   }
 
+  /* ── GET /api/push/test ── send push to current user only */
+  if (path === '/push/test' && method === 'GET') {
+    const payload = {
+      title: 'Test Notification',
+      body: 'This is a test notification for your device.',
+      url: '/notifications.html',
+      tag: 'test-push-individual',
+    };
+    const { sendPushToUser } = await import('../lib/web-push.js');
+    await sendPushToUser(db, env, session.sub, payload);
+    return ok({ success: true, message: 'Test notification sent to your device.' }, env);
+  }
+
+  /* ── GET /api/push/test-all ── broadcast to all admins/managers */
+  if (path === '/push/test-all' && method === 'GET') {
+    if (!requireRole(session, ['admin', 'manager'])) return forbidden(env);
+    const payload = {
+      title: 'Global Push Test',
+      body: `Push test triggered by ${session.name}.`,
+      url: '/notifications.html',
+      tag: 'test-push-global',
+    };
+    await sendPushToRoles(db, env, ['admin', 'manager'], payload);
+    return ok({ success: true, message: 'Global test notification broadcasted to all admins/managers.' }, env);
+  }
+
   return badReq('Not found', 'NOT_FOUND', env);
 }

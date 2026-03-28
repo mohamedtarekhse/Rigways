@@ -54,12 +54,15 @@ self.addEventListener('push', (event) => {
   if (event.data) {
     try {
       const json = event.data.json();
-      console.log('[Service Worker] Push Data:', json);
+      console.log('[Service Worker] Push Data (JSON):', json);
       data = { ...data, ...json };
     } catch (e) {
-      console.log('[Service Worker] Push Text:', event.data.text());
-      data.body = event.data.text() || data.body;
+      const text = event.data.text();
+      console.log('[Service Worker] Push Data (Plain Text):', text);
+      data.body = text || data.body;
     }
+  } else {
+    console.log('[Service Worker] Push event contains NO data (using defaults).');
   }
 
   const options = {
