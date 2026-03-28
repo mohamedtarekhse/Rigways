@@ -21,6 +21,8 @@ JWT_EXPIRES_SEC       = "86400"
 #   wrangler secret put VAPID_SUBJECT    (e.g. "mailto:admin@rigways.com")
 
 VAPID_PUBLIC_KEY = "BNkHRry_3w6SjdeQNJbCpV3ouo7s5FHHSzWhAZQ5oja-X9tabOf8gqO7xRQpVBEHNrlSEazJLeqBY1eBhSMTdig"
+CRON_SECRET      = "acPF080P5DjTPf0DDX0QHOwUmyg9gnvfPo1MlDgKZ7U" # Also set as secret in Cloudflare Dashboard
+CRON_WORKER_URL  = "https://rigways-cron.mohamedtarekhse.workers.dev"
 
 # ── R2 Bucket — certificate file storage ──
 [[r2_buckets]]
