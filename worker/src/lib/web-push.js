@@ -110,7 +110,7 @@ export async function sendPushToRoles(db, env, roles, payload, excludeUserId = n
 }
 
 // ── VAPID config helper ─────────────────────────────
-function getVapidConfig(env) {
+export function getVapidConfig(env) {
   return {
     publicKey: env.VAPID_PUBLIC_KEY || '',
     privateKey: env.VAPID_PRIVATE_KEY || '',

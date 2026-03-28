@@ -129,5 +129,42 @@ export async function handlePush(request, env, path) {
     return ok({ success: true, message: 'Global test notification broadcasted to all admins/managers.' }, env);
   }
 
+  /* ── GET /api/diag ── system-level health check for push configuration */
+  if (path === '/diag' && method === 'GET') {
+    const vpk = env.VAPID_PUBLIC_KEY || '';
+    const vprk = env.VAPID_PRIVATE_KEY || '';
+    
+    // Performance self-test: can we derive a key?
+    let cryptoOk = false;
+    let cryptoError = null;
+    try {
+      if (vpk && vprk) {
+        const { getVapidConfig } = await import('../lib/web-push.js');
+        const config = getVapidConfig(env);
+        cryptoOk = (config.publicKey.length > 50 && config.privateKey.length > 30);
+      }
+    } catch (e) {
+      cryptoError = e.message;
+    }
+
+    return ok({
+      vapid: {
+        public_key_present: vpk.length > 0,
+        private_key_present: vprk.length > 0,
+        public_key_len: vpk.length,
+        subject: env.VAPID_SUBJECT || 'Not set',
+      },
+      cryptoTest: {
+        ok: cryptoOk,
+        error: cryptoError,
+        version: 'RFC 8291 (Phase 2)',
+      },
+      system: {
+        timestamp: new Date().toISOString(),
+        userAgent: request.headers.get('User-Agent'),
+      }
+    }, env);
+  }
+
   return badReq('Not found', 'NOT_FOUND', env);
 }
