@@ -1,79 +1,94 @@
-// sw.js — Service Worker for Rigways ACM (Optimized)
-// Must be at root for maximum scope
+// sw.js – Service Worker for Rigways ACM
+// Handles PWA caching, push notifications, and background sync
 
-const CACHE_NAME = 'rigways-static-v1';
-const STATIC_ASSETS = [
+const CACHE_NAME = 'rigways-acm-v2';
+const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
+  '/dashboard.html',
+  '/assets.html',
+  '/certificates.html',
+  '/notifications.html',
+  '/clients.html',
+  '/inspectors.html',
+  '/functional-locations.html',
   '/styles.css',
-  '/favicon.ico',
-  '/manifest.json'
+  '/app.js',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
+  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap',
+  'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'
 ];
 
-// ── Install — cache core assets ──────────────────
+// ── Install Event — cache core assets ───────────────
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching static environment...');
-      return cache.addAll(STATIC_ASSETS);
+      return cache.addAll(ASSETS_TO_CACHE);
+    })
+  );
+  self.skipWaiting();
+});
+
+// ── Activate Event — cleanup old caches ─────────────
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((name) => {
+          if (name !== CACHE_NAME) return caches.delete(name);
+        })
+      );
+    })
+  );
+  self.clients.claim();
+});
+
+// ── Fetch Event — cache-first for static, network-first for others ──
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
+  // Skip API calls & non-GET
+  if (url.pathname.startsWith('/api/') || event.request.method !== 'GET') return;
+
+  event.respondWith(
+    caches.match(event.request).then((response) => {
+      if (response) return response;
+      return fetch(event.request).then((networkResponse) => {
+        // Cache successful static responses
+        if (networkResponse.ok && event.request.destination !== 'document') {
+          const cacheCopy = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cacheCopy));
+        }
+        return networkResponse;
+      });
     })
   );
 });
 
-// ── Activate — cleanup old caches ───────────────────
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    Promise.all([
-      clients.claim(),
-      caches.keys().then((keys) => {
-        return Promise.all(
-          keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
-        );
-      })
-    ])
-  );
-});
-
-// ── Fetch — serve cached static assets ──────────────
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-  // Cache-first for core static icons/css/js
-  if (STATIC_ASSETS.includes(url.pathname)) {
-    event.respondWith(
-      caches.match(event.request).then(res => res || fetch(event.request))
-    );
-  }
-});
-
 // ── Push Event — show notification ──────────────────
 self.addEventListener('push', (event) => {
-  console.log('[Service Worker] Push Received.');
-  let data = { title: 'Rigways ACM', body: 'You have a new notification.', url: '/notifications.html' };
+  if (!event.data) return;
 
-  if (event.data) {
-    try {
-      const json = event.data.json();
-      console.log('[Service Worker] Push Data:', json);
-      data = { ...data, ...json };
-    } catch (e) {
-      console.log('[Service Worker] Push Text:', event.data.text());
-      data.body = event.data.text() || data.body;
-    }
+  let data = {};
+  try {
+    data = event.data.json();
+  } catch (e) {
+    data = { title: 'Rigways Notification', body: event.data.text() };
   }
 
   const options = {
-    body: data.body,
-    icon: data.icon || '/favicon.ico',
-    badge: data.badge || '/favicon.ico',
-    tag: data.tag || 'rigways-notification',
+    body: data.body || '',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
     data: { url: data.url || '/notifications.html' },
-    requireInteraction: data.requireInteraction || false,
-    vibrate: [200, 100, 200],
+    tag: data.tag || 'rigways-push',
+    renotify: true,
     actions: [
-      { action: 'open', title: 'View' },
-      { action: 'dismiss', title: 'Dismiss' },
-    ],
+      { action: 'open', title: 'View Details' },
+      { action: 'dismiss', title: 'Close' }
+    ]
   };
 
   event.waitUntil(
@@ -83,36 +98,41 @@ self.addEventListener('push', (event) => {
 
 // ── Notification Click — open relevant page ─────────
 self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
+  const notification = event.notification;
+  const action = event.action;
+  const urlToOpen = notification.data?.url || '/dashboard.html';
 
-  if (event.action === 'dismiss') return;
+  notification.close();
 
-  const urlPath = event.notification.data?.url || '/notifications.html';
-  const fullDestUrl = new URL(urlPath, self.location.origin).href;
+  if (action === 'dismiss') return;
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // 1. Search for a tab already on this exact page
-      for (const client of clientList) {
-        if (client.url === fullDestUrl) {
-          if ('focus' in client) return client.focus();
-        }
-      }
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      let matchingClient = null;
 
-      // 2. Search for a tab from our app (same origin) to reuse
-      for (const client of clientList) {
+      for (const client of windowClients) {
         const clientUrl = new URL(client.url);
-        if (clientUrl.origin === self.location.origin) {
-          if ('navigate' in client && 'focus' in client) {
-            client.navigate(fullDestUrl);
-            return client.focus();
-          }
+        const targetUrl = new URL(urlToOpen, self.location.origin);
+        
+        if (client.url === targetUrl.href) {
+          matchingClient = client;
+          break;
+        }
+        if (clientUrl.origin === targetUrl.origin) {
+          matchingClient = client;
         }
       }
 
-      // 3. Last fallback: Open a new window
+      if (matchingClient) {
+        return matchingClient.focus().then(c => {
+          if (c.url !== new URL(urlToOpen, self.location.origin).href) {
+            return c.navigate(urlToOpen);
+          }
+        });
+      }
+
       if (clients.openWindow) {
-        return clients.openWindow(fullDestUrl);
+        return clients.openWindow(urlToOpen);
       }
     })
   );

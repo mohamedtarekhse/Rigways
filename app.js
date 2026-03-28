@@ -373,6 +373,43 @@ const SapShell = (() => {
     const roleEl = document.getElementById('menuUserRole');
     if (nameEl) nameEl.textContent = SapLang.isAr() ? session.nameAr : session.name;
     if (roleEl) roleEl.textContent = SAP_CONFIG.ROLES[session.role]?.label || session.role;
+
+    // Inject Push Toggle if not present
+    const menu = document.getElementById('userMenu');
+    if (menu && !document.getElementById('pushToggleItem')) {
+      const sep = menu.querySelector('.sap-user-menu__sep');
+      if (sep) {
+        const item = document.createElement('div');
+        item.id = 'pushToggleItem';
+        item.className = 'sap-user-menu__item';
+        item.style.justifyContent = 'space-between';
+        item.innerHTML = `
+          <div style="display:flex;align-items:center;gap:var(--sp-sm);">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span data-en="Push Alerts" data-ar="التنبيهات">${SapLang.t('Push Alerts','التنبيهات')}</span>
+          </div>
+          <label class="sap-switch">
+            <input type="checkbox" id="pushNotifCheckbox">
+            <span class="sap-switch__slider"></span>
+          </label>
+        `;
+        sep.before(item);
+
+        const cb = document.getElementById('pushNotifCheckbox');
+        SapPush.status().then(s => {
+          cb.checked = s.subscribed;
+        });
+
+        cb.onchange = async () => {
+          if (cb.checked) {
+            const ok = await SapPush.subscribe();
+            if (!ok) cb.checked = false;
+          } else {
+            await SapPush.unsubscribe();
+          }
+        };
+      }
+    }
   }
 
   function _bindUserMenu() {
@@ -806,6 +843,115 @@ const SapRoles = (() => {
 })();
 
 /* ================================================================
+   13. PUSH NOTIFICATION MANAGER
+   Handles Web Push API lifecycle: permission, subscribe, sync.
+================================================================ */
+const SapPush = (() => {
+  let _sub = null;
+
+  /**
+   * Status check
+   */
+  async function status() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return { supported: false };
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    const permission = Notification.permission;
+    return { supported: true, subscribed: !!sub, permission, sub };
+  }
+
+  /**
+   * Subscribe current browser to push
+   */
+  async function subscribe() {
+    try {
+      if (!('serviceWorker' in navigator)) throw new Error('SW not supported');
+      
+      const reg = await navigator.serviceWorker.ready;
+      
+      // 1. Fetch public key from backend
+      const res = await apiFetch('/api/push/vapid-key');
+      const { publicKey } = await res.json();
+      if (!publicKey) throw new Error('VAPID public key not found');
+
+      // 2. Request permission + Subscribe
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: _urlBase64ToUint8Array(publicKey)
+      });
+
+      // 3. Send to backend
+      const syncRes = await apiFetch('/api/push/subscribe', {
+        method: 'POST',
+        body: JSON.stringify(sub)
+      });
+
+      if (syncRes.ok) {
+        SapToast.success(SapLang.t('Notifications Enabled', 'تم تفعيل الإشعارات'), 
+                         SapLang.t('You will now receive real-time alerts.', 'ستتلقى تنبيهات فورية الآن.'));
+        _sub = sub;
+        SapEventBus.emit('push:subscribed', sub);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('Push Subscribe Error:', e);
+      SapToast.error(SapLang.t('Push Error', 'خطأ في الإشعارات'), e.message);
+      return false;
+    }
+  }
+
+  /**
+   * Unsubscribe
+   */
+  async function unsubscribe() {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await sub.unsubscribe();
+        await apiFetch('/api/push/unsubscribe', {
+          method: 'DELETE',
+          body: JSON.stringify({ endpoint: sub.endpoint })
+        });
+      }
+      SapToast.info(SapLang.t('Notifications Disabled', 'تم تعطيل الإشعارات'), 
+                    SapLang.t('You have unsubscribed from push alerts.', 'لقد قمت بإلغاء الاشتراك في التنبيهات.'));
+      _sub = null;
+      SapEventBus.emit('push:unsubscribed');
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Sync subscription status with backend on app start
+   */
+  async function sync() {
+    const s = await status();
+    if (s.subscribed) {
+      // Refresh subscription on backend to update last_seen/user_agent
+      apiFetch('/api/push/subscribe', {
+        method: 'POST',
+        body: JSON.stringify(s.sub)
+      }).catch(() => {});
+    }
+  }
+
+  function _urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  }
+
+  return { status, subscribe, unsubscribe, sync };
+})();
+
+/* ================================================================
    13. EVENT BUS (simple pub/sub)
 ================================================================ */
 const SapEventBus = (() => {
@@ -929,6 +1075,9 @@ const SapEventBus = (() => {
     adminSections.forEach(el => {
       if (session.role !== 'admin') el.style.display = 'none';
     });
+
+    /* ── Push Sync ── */
+    SapPush.sync();
 
     /* ── Emit ready event ── */
     SapEventBus.emit('app:ready', { session, lang: sessionLang });

@@ -1483,3 +1483,59 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
   .sap-card { box-shadow: none; border: 1px solid #ccc; }
   .btn { display: none; }
 }
+
+/* ============================================================
+   SAP SWITCH (Toggle)
+   ============================================================ */
+.sap-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.sap-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.sap-switch__slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #c5c8ca;
+  transition: .2s;
+  border-radius: 20px;
+}
+
+.sap-switch__slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .2s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+
+.sap-switch input:checked + .sap-switch__slider {
+  background-color: var(--sap-brand);
+}
+
+.sap-switch input:focus + .sap-switch__slider {
+  box-shadow: 0 0 1px var(--sap-brand);
+}
+
+.sap-switch input:checked + .sap-switch__slider:before {
+  transform: translateX(16px);
+}
+
+/* RTL support for switch */
+[dir="rtl"] .sap-switch input:checked + .sap-switch__slider:before {
+  transform: translateX(-16px);
+}
