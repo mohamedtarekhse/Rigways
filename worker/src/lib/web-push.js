@@ -29,18 +29,23 @@ export async function sendPushNotification(subscription, payload, vapid) {
       vapid.privateKey
     );
 
-    // Log length for diagnostics
-    console.log(`[Push] Sending ciphertext: ${ciphertext.length} bytes to ${subscription.endpoint}`);
+    // Log length for diagnostics before sending
+    console.log(`[Push] RFC 8291 Binary Ciphertext: ${ciphertext.length} bytes`);
+
+    // In Cloudflare Workers, passing a Response body stream is the most reliable way 
+    // to ensure the body is never treated as a string or re-encoded.
+    const binaryBody = new Response(ciphertext).body;
 
     const response = await fetch(subscription.endpoint, {
       method: 'POST',
       headers: {
-        ...headers,
-        ...vapidHeaders,
         'TTL': '86400',
+        'Content-Encoding': 'aes128gcm',
+        'Content-Type': 'application/octet-stream',
+        ...vapidHeaders,
+        ...headers,
       },
-      // Ensure raw binary transmission by passing the buffer directly
-      body: ciphertext.buffer,
+      body: binaryBody,
     });
 
     return {
@@ -116,8 +121,8 @@ export async function sendPushToRoles(db, env, roles, payload, excludeUserId = n
 // ── VAPID config helper ─────────────────────────────
 export function getVapidConfig(env) {
   return {
-    publicKey: env.VAPID_PUBLIC_KEY || '',
-    privateKey: env.VAPID_PRIVATE_KEY || '',
+    publicKey: sanitizeKey(env.VAPID_PUBLIC_KEY),
+    privateKey: sanitizeKey(env.VAPID_PRIVATE_KEY),
     subject: env.VAPID_SUBJECT || 'mailto:admin@rigways.com',
   };
 }
@@ -162,17 +167,24 @@ async function buildVapidHeaders(endpoint, subject, publicKeyBase64, privateKeyB
   const rawSig = derToRaw(sigBytes);
   const token = `${unsignedToken}.${base64urlEncodeBytes(rawSig)}`;
 
-  // RFC 8292: Authorization: vapid t=<jwt>, k=<key>
-  // Note: some gateways are picky about the space after the comma
+  // RFC 8292: Authorization: vapid t=${token}, k=${publicKeyBase64}
   return {
     'Authorization': `vapid t=${token},k=${publicKeyBase64}`,
   };
 }
 
+// ── SANITIZE KEYS ───────────────────────────────────
+function sanitizeKey(key) {
+  if (!key) return '';
+  return key.replace(/-----BEGIN[^-]*-----/g, '')
+            .replace(/-----END[^-]*-----/g, '')
+            .replace(/[\s\n\r]/g, '');
+}
+
 // ── Web Push Encryption (RFC 8291 — aes128gcm) ─────
 async function encryptPayload(p256dhBase64, authBase64, payload) {
-  const clientPublicKeyBytes = base64urlDecode(p256dhBase64);
-  const authSecret = base64urlDecode(authBase64);
+  const clientPublicKeyBytes = base64urlDecode(sanitizeKey(p256dhBase64));
+  const authSecret = base64urlDecode(sanitizeKey(authBase64));
 
   // Import client's public key
   const clientPublicKey = await crypto.subtle.importKey(
