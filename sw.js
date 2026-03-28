@@ -52,17 +52,18 @@ self.addEventListener('push', (event) => {
   let data = { title: 'Rigways ACM', body: 'You have a new notification.', url: '/notifications.html' };
 
   if (event.data) {
+    const rawData = event.data.text();
+    console.log('[Service Worker] Raw Push Data:', rawData);
     try {
-      const json = event.data.json();
+      const json = JSON.parse(rawData);
       console.log('[Service Worker] Push Data (JSON):', json);
       data = { ...data, ...json };
     } catch (e) {
-      const text = event.data.text();
-      console.log('[Service Worker] Push Data (Plain Text):', text);
-      data.body = text || data.body;
+      console.warn('[Service Worker] Push data is not valid JSON, using as plain text.');
+      data.body = rawData || data.body;
     }
   } else {
-    console.log('[Service Worker] Push event contains NO data (using defaults).');
+    console.error('[Service Worker] Push event contains NO data (this usually means decryption failed at the browser level).');
   }
 
   const options = {

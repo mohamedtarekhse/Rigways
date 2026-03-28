@@ -165,7 +165,6 @@ async function buildVapidHeaders(endpoint, subject, publicKeyBase64, privateKeyB
 
 // ── Web Push Encryption (RFC 8291 — aes128gcm) ─────
 async function encryptPayload(p256dhBase64, authBase64, payload) {
-  // Client public key and auth secret
   const clientPublicKeyBytes = base64urlDecode(p256dhBase64);
   const authSecret = base64urlDecode(authBase64);
 
@@ -174,56 +173,61 @@ async function encryptPayload(p256dhBase64, authBase64, payload) {
     'raw', clientPublicKeyBytes, { name: 'ECDH', namedCurve: 'P-256' }, false, []
   );
 
-  // Generate server ECDH key pair
+  // Generate ephemeral server ECDH key pair
   const serverKeys = await crypto.subtle.generateKey(
-    { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']
+    { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits', 'deriveKey']
   );
 
-  // Derive shared secret
+  // Derive shared secret (IKM)
   const sharedSecret = await crypto.subtle.deriveBits(
     { name: 'ECDH', public: clientPublicKey },
     serverKeys.privateKey,
     256
   );
 
-  // Export server public key
+  // Export server public key (local_public_key)
   const serverPublicKeyBytes = new Uint8Array(
     await crypto.subtle.exportKey('raw', serverKeys.publicKey)
   );
 
-  // Generate salt (16 bytes)
+  // Generate random salt (16 bytes)
   const salt = crypto.getRandomValues(new Uint8Array(16));
 
-  // HKDF to derive encryption key and nonce
-  const prk = await hkdfExtract(authSecret, new Uint8Array(sharedSecret));
+  // 1. Derive PRK_key (using authSecret as salt)
+  const prkKey = await hkdfExtract(authSecret, new Uint8Array(sharedSecret));
 
-  // Info for content encryption key
-  const cekInfo = buildInfo('aesgcm', clientPublicKeyBytes, serverPublicKeyBytes);
-  const contentEncryptionKey = await hkdfExpand(prk, createInfo('Content-Encoding: aes128gcm\0', salt, clientPublicKeyBytes, serverPublicKeyBytes), 16);
+  // 2. Derive PRK (using random salt)
+  const prk = await hkdfExtract(salt, prkKey);
 
-  // Info for nonce
-  const nonce = await hkdfExpand(prk, createInfo('Content-Encoding: nonce\0', salt, clientPublicKeyBytes, serverPublicKeyBytes), 12);
+  // 3. Derive Content Encryption Key (CEK)
+  const infoCek = new TextEncoder().encode('Content-Encoding: aes128gcm\0');
+  const cek = await hkdfExpand(prk, infoCek, 16);
+
+  // 4. Derive Nonce
+  const infoNonce = new TextEncoder().encode('Content-Encoding: nonce\0');
+  const nonce = await hkdfExpand(prk, infoNonce, 12);
 
   // AES-128-GCM encryption
   const cryptoKey = await crypto.subtle.importKey(
-    'raw', contentEncryptionKey, { name: 'AES-GCM' }, false, ['encrypt']
+    'raw', cek, { name: 'AES-GCM' }, false, ['encrypt']
   );
 
-  // Add padding delimiter
+  // Add padding delimiter (0x02 for the final/only record)
   const paddedPayload = new Uint8Array(payload.length + 1);
   paddedPayload.set(payload);
-  paddedPayload[payload.length] = 2; // delimiter for final record
+  paddedPayload[payload.length] = 2;
 
   const encrypted = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv: nonce }, cryptoKey, paddedPayload
   );
 
-  // Build aes128gcm content coding header:
-  // salt (16) + rs (4) + idlen (1) + keyid (65)
-  const rs = payload.length + 1 + 16 + 1; // recordSize
+  // Build aes128gcm record header (RFC 8188):
+  // salt (16) + rs (4) + idlen (1) + keyid (rs bytes)
+  // rs is record size (usually 4096)
+  const rs = 4096;
   const header = new Uint8Array(16 + 4 + 1 + serverPublicKeyBytes.length);
   header.set(salt, 0);
-  new DataView(header.buffer).setUint32(16, 4096, false);
+  new DataView(header.buffer).setUint32(16, rs, false);
   header[20] = serverPublicKeyBytes.length;
   header.set(serverPublicKeyBytes, 21);
 
@@ -242,7 +246,7 @@ async function encryptPayload(p256dhBase64, authBase64, payload) {
   };
 }
 
-// ── HKDF helpers ────────────────────────────────────
+// ── HKDF helpers (Standard RFC 5869) ─────────────────
 async function hkdfExtract(salt, ikm) {
   const key = await crypto.subtle.importKey('raw', salt, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return new Uint8Array(await crypto.subtle.sign('HMAC', key, ikm));
@@ -252,39 +256,11 @@ async function hkdfExpand(prk, info, length) {
   const key = await crypto.subtle.importKey('raw', prk, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const infoWithCounter = new Uint8Array(info.length + 1);
   infoWithCounter.set(info, 0);
-  infoWithCounter[info.length] = 1;
+  infoWithCounter[info.length] = 1; // Counter 1 (keys/nonces are short)
   const result = new Uint8Array(await crypto.subtle.sign('HMAC', key, infoWithCounter));
   return result.slice(0, length);
 }
 
-function createInfo(type, salt, clientPublicKey, serverPublicKey) {
-  const typeBytes = new TextEncoder().encode(type);
-  // "WebPush: info\0" + client_public_key + server_public_key
-  const wpInfo = new TextEncoder().encode('WebPush: info\0');
-  const info = new Uint8Array(wpInfo.length + clientPublicKey.length + serverPublicKey.length);
-  info.set(wpInfo, 0);
-  info.set(clientPublicKey, wpInfo.length);
-  info.set(serverPublicKey, wpInfo.length + clientPublicKey.length);
-
-  // Actually for aes128gcm, the info is:
-  // "Content-Encoding: <type>\0" for CEK
-  // We need full HKDF with the PRK derived from auth + ECDH
-  // Simplified: use salt + info approach
-  const fullInfo = new Uint8Array(typeBytes.length);
-  fullInfo.set(typeBytes, 0);
-
-  // Proper aes128gcm key derivation
-  const combined = new Uint8Array(salt.length + info.length);
-  combined.set(salt, 0);
-  combined.set(info, salt.length);
-
-  return combined;
-}
-
-function buildInfo(type, clientPublicKey, serverPublicKey) {
-  const typeBytes = new TextEncoder().encode(`Content-Encoding: ${type}\0`);
-  return typeBytes;
-}
 
 // ── Base64url helpers ───────────────────────────────
 function base64urlEncode(str) {
