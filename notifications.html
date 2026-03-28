@@ -390,6 +390,10 @@
       <div class="sap-page-header__subtitle">Certificate expiry alerts, approval updates, and system events</div>
     </div>
     <div class="sap-page-header__actions">
+      <button class="btn btn-ghost" onclick="resubscribePush()" title="Reset Push Delivery">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        <span>Reset Push</span>
+      </button>
       <button class="btn btn-ghost" onclick="markAllRead()">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="20 6 9 17 4 12"/></svg>
         <span>Mark All Read</span>
@@ -1588,6 +1592,25 @@ async function runDiagnostic() {
     }
   } catch (e) {
     content.textContent = report + '\nFailed to run server diagnostics: ' + e.message;
+  }
+}
+
+async function resubscribePush() {
+  if (!confirm('This will disconnect and reconnect your push alerts to ensure encryption keys are fresh. Continue?')) return;
+  const toggle = document.getElementById('pushToggle');
+  try {
+    // 1. Force unsubscribe if possible
+    const sub = await swRegistration?.pushManager?.getSubscription();
+    if (sub) {
+      await sub.unsubscribe();
+      await apiFetch('/api/push/unsubscribe', { method: 'DELETE', body: JSON.stringify({ endpoint: sub.endpoint }) });
+    }
+    // 2. Clear state and re-toggle
+    toggle.checked = true;
+    await togglePushNotif(toggle);
+    showToast('success', 'Reset Complete', 'Your push session has been refreshed with new encryption keys.');
+  } catch (e) {
+    showToast('error', 'Reset Failed', e.message);
   }
 }
 

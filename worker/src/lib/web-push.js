@@ -29,6 +29,9 @@ export async function sendPushNotification(subscription, payload, vapid) {
       vapid.privateKey
     );
 
+    // Log length for diagnostics
+    console.log(`[Push] Sending ciphertext: ${ciphertext.length} bytes to ${subscription.endpoint}`);
+
     const response = await fetch(subscription.endpoint, {
       method: 'POST',
       headers: {
@@ -36,7 +39,8 @@ export async function sendPushNotification(subscription, payload, vapid) {
         ...vapidHeaders,
         'TTL': '86400',
       },
-      body: ciphertext,
+      // Ensure raw binary transmission by passing the buffer directly
+      body: ciphertext.buffer,
     });
 
     return {
@@ -158,8 +162,10 @@ async function buildVapidHeaders(endpoint, subject, publicKeyBase64, privateKeyB
   const rawSig = derToRaw(sigBytes);
   const token = `${unsignedToken}.${base64urlEncodeBytes(rawSig)}`;
 
+  // RFC 8292: Authorization: vapid t=<jwt>, k=<key>
+  // Note: some gateways are picky about the space after the comma
   return {
-    'Authorization': `vapid t=${token}, k=${publicKeyBase64}`,
+    'Authorization': `vapid t=${token},k=${publicKeyBase64}`,
   };
 }
 
