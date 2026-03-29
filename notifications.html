@@ -1442,12 +1442,23 @@ async function sendTestPush(global = false) {
     const endpoint = global ? '/api/push/test-all' : '/api/push/test';
     const res = await apiFetch(endpoint);
     const raw = await res.json();
-    const data = raw.data || raw; 
-    if (raw.success) {
-      const msg = data.message || 'Notification triggered successfully.';
+    const data = raw.data || raw;
+    const stats = data.stats || {};
+    const msg = data.message || '';
+
+    if (stats.total === 0) {
+      // No subscription in DB at all
+      showToast('warning',
+        global ? 'No Subscriptions Found' : 'Not Subscribed',
+        'No active push subscriptions found. Toggle the Push Notifications switch above first.');
+    } else if (data.delivered || stats.sent > 0) {
+      // At least one device received it
       showToast('success', global ? 'Global Test Sent' : 'Test Sent', msg);
     } else {
-      showToast('error', 'Test Failed', data.error || 'Failed to trigger notification.');
+      // Subscriptions exist but FCM rejected every one — show the actual error
+      showToast('error',
+        global ? 'Broadcast Delivery Failed' : 'Push Delivery Failed',
+        msg || 'FCM rejected the push. Try "Reset Push" to refresh your subscription, or check VAPID keys in Cloudflare dashboard.');
     }
   } catch (e) {
     showToast('error', 'Error', e.message);

@@ -1972,16 +1972,17 @@ async function sendPushNotification(subscription, payload, vapid) {
       body,
     });
 
-    const ok = response.ok || response.status === 201;
+    const isOk = response.ok || response.status === 201;
     const gone = response.status === 410 || response.status === 404;
-    if (!ok && !gone) {
-      const text = await response.text().catch(() => '');
-      console.warn(`[Push] Non-ok response ${response.status} for endpoint ${subscription.endpoint.slice(0, 60)}: ${text.slice(0, 200)}`);
+    let errorText = '';
+    if (!isOk) {
+      errorText = await response.text().catch(() => '(no body)');
+      console.warn(`[Push] HTTP ${response.status} from push service for ${subscription.endpoint.slice(0, 60)}: ${errorText.slice(0, 300)}`);
     }
-    return { ok, status: response.status, gone };
+    return { ok: isOk, status: response.status, gone, error: isOk ? null : `HTTP ${response.status}: ${errorText.slice(0, 200)}` };
   } catch (e) {
     console.error('[Push] sendPushNotification error:', e);
-    return { ok: false, status: 0, gone: false };
+    return { ok: false, status: 0, gone: false, error: e.message };
   }
 }
 
@@ -1991,17 +1992,18 @@ async function sendPushNotification(subscription, payload, vapid) {
  * On HTTP 410/404: soft-deletes the subscription (active = false).
  */
 async function sendPushToUser(db, env, userId, payload) {
-  if (!userId || !env.VAPID_PRIVATE_KEY) return { sent: 0, total: 0 };
+  if (!userId || !env.VAPID_PRIVATE_KEY) return { sent: 0, total: 0, errors: ['VAPID key not configured'] };
   try {
     const { data: subs } = await db.from('push_subscriptions', {
       filters: { 'user_id.eq': userId, 'active.is': true },
       select: '*',
       limit: 20,
     });
-    if (!Array.isArray(subs) || !subs.length) return { sent: 0, total: 0 };
+    if (!Array.isArray(subs) || !subs.length) return { sent: 0, total: 0, errors: ['No active subscriptions in database — toggle Push Notifications to re-subscribe'] };
 
     const vapid = getVapidConfig(env);
     const now = new Date().toISOString();
+    const errors = [];
 
     const results = await Promise.allSettled(
       subs.map(sub =>
@@ -2017,6 +2019,7 @@ async function sendPushToUser(db, env, userId, payload) {
             // Track last successful dispatch
             await db.update('push_subscriptions', { last_used_at: now }, { filters: { 'id.eq': sub.id } }).catch(() => {});
           }
+          if (!result.ok && result.error) errors.push(result.error);
           return result;
         })
       )
@@ -2025,10 +2028,11 @@ async function sendPushToUser(db, env, userId, payload) {
     return {
       sent: results.filter(r => r.status === 'fulfilled' && r.value.ok).length,
       total: subs.length,
+      errors,
     };
   } catch (e) {
     console.warn('[Push] sendPushToUser failed:', e);
-    return { sent: 0, total: 0 };
+    return { sent: 0, total: 0, errors: [e.message] };
   }
 }
 
@@ -2038,13 +2042,13 @@ async function sendPushToUser(db, env, userId, payload) {
  * @param {string|null} excludeUserId  optional user to skip
  */
 async function sendPushToRoles(db, env, roles, payload, excludeUserId = null) {
-  if (!env.VAPID_PRIVATE_KEY) return { users: 0, sent: 0 };
+  if (!env.VAPID_PRIVATE_KEY) return { users: 0, sent: 0, errors: ['VAPID_PRIVATE_KEY not set'] };
   try {
     const { data: users } = await db.from('users', {
       filters: { 'role.in': roles, 'is_active.is': true },
       select: 'id',
     });
-    if (!Array.isArray(users) || !users.length) return { users: 0, sent: 0 };
+    if (!Array.isArray(users) || !users.length) return { users: 0, sent: 0, errors: [] };
 
     const eligible = users.filter(u => u.id !== excludeUserId);
     const results = await Promise.allSettled(
@@ -2052,10 +2056,11 @@ async function sendPushToRoles(db, env, roles, payload, excludeUserId = null) {
     );
 
     const sent = results.reduce((acc, r) => acc + (r.status === 'fulfilled' ? (r.value?.sent || 0) : 0), 0);
-    return { users: eligible.length, sent };
+    const errors = results.flatMap(r => r.status === 'fulfilled' ? (r.value?.errors || []) : [r.reason?.message || 'unknown error']);
+    return { users: eligible.length, sent, errors };
   } catch (e) {
     console.warn('[Push] sendPushToRoles failed:', e);
-    return { users: 0, sent: 0 };
+    return { users: 0, sent: 0, errors: [e.message] };
   }
 }
 
@@ -2152,13 +2157,21 @@ async function handlePush(request, env, path) {
   if (path === '/push/test' && method === 'GET') {
     const payload = { title: 'Test Notification', body: 'This is a test notification for your device.', url: '/notifications.html', tag: 'test-push-individual', event_type: 'test' };
     const stats = await sendPushToUser(db, env, session.sub, payload);
-    return ok({
-      success: true,
-      stats,
-      message: stats.total > 0
-        ? `Triggered for ${stats.sent} of your ${stats.total} registered device(s). Check your notification center.`
-        : 'No active push subscriptions found for your account. Please enable them above.',
-    }, env);
+    const delivered = stats.sent > 0;
+    const noSubs = stats.total === 0;
+    const fcmError = (stats.errors || []).join('; ');
+    return json({
+      success: delivered || noSubs,
+      data: {
+        delivered,
+        stats,
+        message: noSubs
+          ? 'No active push subscriptions found for your account. Toggle the Push Notifications switch to subscribe.'
+          : delivered
+            ? `Notification sent to ${stats.sent} of your ${stats.total} registered device(s). Check your notification center.`
+            : `Push delivery failed for all ${stats.total} device(s). FCM error: ${fcmError || 'Unknown — check Cloudflare Worker logs'}`,
+      }
+    }, 200, env);
   }
 
   /* ── GET /api/push/test-all — broadcast test to all admins/managers ── */
@@ -2166,7 +2179,19 @@ async function handlePush(request, env, path) {
     if (!isAdminOrManager(session)) return forbidden(env);
     const payload = { title: 'Global Push Test', body: `Broadcast test triggered by ${session.name}.`, url: '/notifications.html', tag: 'test-push-global', event_type: 'test' };
     const stats = await sendPushToRoles(db, env, ['admin', 'manager'], payload);
-    return ok({ success: true, stats, message: `Broadcasted to ${stats.users} qualified users. Total of ${stats.sent} push notification(s) triggered.` }, env);
+    const delivered = stats.sent > 0;
+    return json({
+      success: delivered || stats.users === 0,
+      data: {
+        delivered,
+        stats,
+        message: stats.users === 0
+          ? 'No admin/manager users with active push subscriptions found.'
+          : delivered
+            ? `Broadcast sent to ${stats.sent} device(s) across ${stats.users} user(s).`
+            : `Broadcast attempted for ${stats.users} user(s) but all deliveries failed. Check Cloudflare Worker logs for FCM errors.`,
+      }
+    }, 200, env);
   }
 
   return badReq('Not found', 'NOT_FOUND', env);
