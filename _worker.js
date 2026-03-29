@@ -1071,10 +1071,20 @@ async function handleCertificates(request, env, path) {
     const updated = Array.isArray(data) ? data[0] : data;
     await _recordCertificateHistory(db, updated || existing, session, 'update');
 
-    // Notify uploader of decision
-    if (body.approval_status && body.approval_status !== existing.approval_status && existing.uploaded_by)
-      await _notifyUser(db, env, existing.uploaded_by, 'cert_reviewed', `Certificate ${body.approval_status}`,
-        `Your certificate "${updated.name}" has been ${body.approval_status}.`, 'certificate', certId);
+    // Notify uploader + admins/managers of approval status changes
+    if (body.approval_status && body.approval_status !== existing.approval_status) {
+      if (existing.uploaded_by) {
+        await _notifyUser(db, env, existing.uploaded_by, 'cert_reviewed', `Certificate ${body.approval_status}`,
+          `Your certificate "${updated.name}" has been ${body.approval_status}.`, 'certificate', certId);
+      }
+      await _notifyRoles(
+        db, env, ['admin', 'manager'], 'cert_status_changed',
+        `Certificate ${body.approval_status}`,
+        `${session.name} changed "${updated.name}" to ${body.approval_status}.`,
+        'certificate', certId,
+        [session.sub]
+      );
+    }
 
     // Instant notification for manual expiry status change
     if (body.expiry_date && body.expiry_date !== existing.expiry_date && updated.approval_status !== 'rejected') {
@@ -1221,6 +1231,27 @@ async function _notifyUser(db, env, userId, type, title, body, refType, refId) {
     const payload = { title, body, url: '/notifications.html', tag: type + '-' + (refId || 'null') };
     await sendPushToUser(db, env, userId, payload);
   } catch (e) { console.warn('_notifyUser failed:', e); }
+}
+
+async function _notifyRoles(db, env, roles, type, title, body, refType, refId, excludeUserIds = []) {
+  try {
+    const excluded = new Set((Array.isArray(excludeUserIds) ? excludeUserIds : [excludeUserIds]).filter(Boolean));
+    const { data: users } = await db.from('users', {
+      filters: { 'role.in': roles, 'is_active.is': true },
+      select: 'id',
+      limit: 300,
+    });
+    const recipients = (Array.isArray(users) ? users : [])
+      .map(u => u.id)
+      .filter(Boolean)
+      .filter(id => !excluded.has(id));
+    if (!recipients.length) return;
+    await Promise.allSettled(
+      recipients.map(uid => _notifyUser(db, env, uid, type, title, body, refType, refId))
+    );
+  } catch (e) {
+    console.warn('_notifyRoles failed:', e);
+  }
 }
 
 async function _withUploaderUsername(db, rows, field = 'uploaded_by') {
