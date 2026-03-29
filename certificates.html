@@ -647,6 +647,12 @@
             <label class="sap-label">Job Number <span class="required">*</span></label>
             <input type="text" id="f_jobNumber" class="sap-input" placeholder="e.g. JOB-2024-010 — groups all certs done in one job"/>
           </div>
+          <div class="sap-field">
+            <label class="sap-label">Select Job</label>
+            <select id="f_jobSelect" class="sap-select" onchange="onJobSelectChange(this.value)">
+              <option value="">Select active job…</option>
+            </select>
+          </div>
 
           <!-- Cert Name -->
           <div class="sap-field">
@@ -919,7 +925,7 @@ function logout() {
 /* ── Language ── */
 function toggleUserMenu() { document.getElementById('userMenu').classList.toggle('open'); }
 document.addEventListener('click', e => {
-  if (!e.target.closest('#shellAvatar') && !e.target.closest('#userMenu'))
+  if (!e.target.closest('#shellAvatar') && !e.target.closest('#mobileMenuBtn') && !e.target.closest('#userMenu'))
     document.getElementById('userMenu').classList.remove('open');
 });
 
@@ -1276,15 +1282,6 @@ function setPageSize(size) {
   renderTable();
 }
 
-function setPageSize(size) {
-  const parsed = Number(size);
-  if (![25,50,100].includes(parsed)) return;
-  PAGE_SIZE = parsed;
-  localStorage.setItem('sap_cert_page_size', String(parsed));
-  currentPage = 1;
-  renderTable();
-}
-
 /* ── Filters ── */
 function filterStatus(val, el) {
   activeStatusFilter = val;
@@ -1418,7 +1415,7 @@ async function massDelete() {
    UPLOAD / EDIT MODAL
 ═══════════════════════════════════════════════════════ */
 function certDraftKey(){ const id=document.getElementById('editCertId')?.value||''; return id?`certs:edit:${id}`:'certs:add'; }
-function collectCertDraft(){ return { editCertId:document.getElementById('editCertId')?.value||'', f_jobNumber:document.getElementById('f_jobNumber')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_certType:document.getElementById('f_certType')?.value||'', f_liftingSubtype:document.getElementById('f_liftingSubtype')?.value||'', f_issuedBy:document.getElementById('f_issuedBy')?.value||'', f_issueDate:document.getElementById('f_issueDate')?.value||'', f_expiryDate:document.getElementById('f_expiryDate')?.value||'', f_client:document.getElementById('f_client')?.value||'', f_assetId:document.getElementById('f_assetId')?.value||'' }; }
+function collectCertDraft(){ return { editCertId:document.getElementById('editCertId')?.value||'', f_jobNumber:document.getElementById('f_jobNumber')?.value||'', f_jobSelect:document.getElementById('f_jobSelect')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_certType:document.getElementById('f_certType')?.value||'', f_liftingSubtype:document.getElementById('f_liftingSubtype')?.value||'', f_issuedBy:document.getElementById('f_issuedBy')?.value||'', f_issueDate:document.getElementById('f_issueDate')?.value||'', f_expiryDate:document.getElementById('f_expiryDate')?.value||'', f_client:document.getElementById('f_client')?.value||'', f_assetId:document.getElementById('f_assetId')?.value||'' }; }
 function saveCertDraft(){ if(window.SapDraft) SapDraft.save(certDraftKey(), collectCertDraft()); }
 function restoreCertDraft(){ if(!window.SapDraft) return; const d=SapDraft.load(certDraftKey(),24*60*60*1000); if(d&&confirm('A saved draft was found. Restore it?')) Object.entries(d).forEach(([k,v])=>{const el=document.getElementById(k); if(el) el.value=v;}); onCertTypeChange(); }
 function clearCertDraft(){ if(!window.SapDraft) return; const id=document.getElementById('editCertId')?.value||''; SapDraft.clear('certs:add'); if(id) SapDraft.clear(`certs:edit:${id}`); }
@@ -1451,6 +1448,7 @@ function openUploadModal() {
   loadAssetDropdown();
   loadInspectorDropdown();
   loadClientDropdown();
+  loadJobDropdown();
   if (session.role === 'technician') lockTechnicianModalFields();
 }
 
@@ -1510,7 +1508,14 @@ function openEditModal(id) {
   });
   loadInspectorDropdown(_inspVal);
   loadClientDropdown(_clientVal);
+  loadJobDropdown(c.jobNumber || '');
   if (session.role === 'technician') lockTechnicianModalFields();
+}
+
+function onJobSelectChange(jobNumber) {
+  if (!jobNumber) return;
+  const input = document.getElementById('f_jobNumber');
+  if (input) input.value = jobNumber;
 }
 
 function lockTechnicianModalFields() {
@@ -1600,6 +1605,7 @@ zone.addEventListener('drop', e => {
 /* ── Save ── */
 async function saveCert() {
   const jobNumber      = document.getElementById('f_jobNumber')?.value?.trim() || '';
+  const selectedJobNum = document.getElementById('f_jobSelect')?.value?.trim() || '';
   const name           = document.getElementById('f_name')?.value?.trim() || '';
   const certType       = document.getElementById('f_certType')?.value || '';
   const liftingSubtype = certType === 'LIFTING' ? (document.getElementById('f_liftingSubtype')?.value || '') : '';
@@ -1643,7 +1649,7 @@ async function saveCert() {
     issued_by:   effectiveIssuedBy,
     issue_date:  issueDate,
     expiry_date: expiryDate,
-    notes:       jobNumber || null,
+    notes:       selectedJobNum || jobNumber || null,
   };
 
   let savedCert = null;
@@ -2606,6 +2612,31 @@ async function loadClientDropdown(selectedValue) {
       if (selectedValue) modalSel.value = selectedValue;
     }
   } catch(e) { console.warn('Could not load clients:', e); }
+}
+
+async function loadJobDropdown(selectedJobNumber) {
+  const sel = document.getElementById('f_jobSelect');
+  if (!sel) return;
+  try {
+    const res = await apiFetch('/api/jobs?limit=200');
+    const raw = await res.json();
+    const rows = ((raw.data || raw).jobs || []).filter(j => ['active', 'reopened', 'technician_done'].includes(j.status));
+    sel.innerHTML = '<option value="">Select active job…</option>' + rows.map(j => {
+      const label = `${j.job_number} — ${j.client_id} (${j.status})`;
+      return `<option value="${j.job_number}">${label}</option>`;
+    }).join('');
+    const desired = selectedJobNumber || document.getElementById('f_jobNumber')?.value || '';
+    if (desired) sel.value = desired;
+    if (session?.role === 'technician' && sel.options.length > 1) {
+      if (!sel.value) sel.selectedIndex = 1;
+      onJobSelectChange(sel.value);
+      sel.disabled = false;
+    } else {
+      sel.disabled = false;
+    }
+  } catch (e) {
+    sel.innerHTML = '<option value="">Could not load jobs</option>';
+  }
 }
 
 async function loadCerts() {
