@@ -869,6 +869,13 @@ function ensureJobsNavForRole(role) {
 }
 
 
+
+function applyPageBodyClass() {
+  const page = (window.location.pathname.split('/').pop() || '').toLowerCase();
+  const slug = page.replace(/\.html$/, '').replace(/[^a-z0-9-]/g, '');
+  if (slug) document.body.classList.add(`page-${slug}`);
+}
+
 function applyPlanBMobileLayout() {
   const page = (window.location.pathname.split('/').pop() || '').toLowerCase();
   const targets = new Set(['assets.html','certificates.html','inspectors.html','clients.html','functional-locations.html','jobs.html']);
@@ -935,6 +942,7 @@ function applyPlanBMobileLayout() {
     SapRoles.applyVisibility(session.role);
     SapRoles.applyReadOnly(session.role);
 
+    applyPageBodyClass();
     applyPlanBMobileLayout();
 
     /* ── Wire global buttons ── */
