@@ -1440,12 +1440,20 @@ async function initPushNotifications() {
 async function sendTestPush(global = false) {
   try {
     const endpoint = global ? '/api/push/test-all' : '/api/push/test';
-    const res = await apiFetch(endpoint);
+    const res = await apiFetch(endpoint, {
+      method: 'POST',
+      headers: { 'Cache-Control': 'no-store' },
+    });
     const raw = await res.json();
     const data = raw.data || raw; 
     if (raw.success) {
       const msg = data.message || 'Notification triggered successfully.';
-      showToast('success', global ? 'Global Test Sent' : 'Test Sent', msg);
+      const sentCount = Number(data?.stats?.sent || 0);
+      if (sentCount > 0) {
+        showToast('success', global ? 'Global Test Sent' : 'Test Sent', msg);
+      } else {
+        showToast('warning', 'No Deliveries', msg);
+      }
     } else {
       showToast('error', 'Test Failed', data.error || 'Failed to trigger notification.');
     }
