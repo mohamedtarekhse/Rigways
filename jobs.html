@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="styles.css" />
   <script src="app.js"></script>
 </head>
-<body>
+<body class="jobs-page">
 <header class="sap-shell">
   <a href="dashboard.html" class="sap-shell__logo">
     <span>Rigways</span><span class="sap-shell__logo-badge">ACM</span>
@@ -44,7 +44,7 @@
   </div>
 </nav>
 
-<main class="sap-main" style="padding-top:calc(var(--sap-shell-height) + var(--sap-navbar-height) + 12px);">
+<main class="sap-main jobs-main">
   <div class="sap-page-header"><h1 class="sap-page-title">Jobs Dashboard</h1></div>
 
   <div class="sap-card">
@@ -68,14 +68,16 @@
         <input id="jobTitle" class="sap-input" />
       </div>
     </div>
-    <button class="btn btn-primary" onclick="createJob()">Create Job</button>
+    <button class="btn btn-primary jobs-create-btn" onclick="createJob()">Create Job</button>
   </div>
 
-  <div class="sap-card" style="margin-top:12px;">
+  <div class="sap-card jobs-table-card" style="margin-top:12px;">
+    <div class="sap-table-wrapper">
     <table class="sap-table">
       <thead><tr><th>Job Number</th><th>Client</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody id="jobsBody"></tbody>
     </table>
+    </div>
   </div>
 </main>
 
@@ -122,11 +124,11 @@ async function loadJobs(){
   const jobs = (raw.data||raw).jobs || [];
   document.getElementById('jobsBody').innerHTML = jobs.map(j => `<tr>
     <td>${j.job_number||''}</td><td>${j.client_id||''}</td><td>${j.status||''}</td>
-    <td>
+    <td><div class="jobs-actions">
       <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','close')">Close</button>
       <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','reopen')">Reopen</button>
       <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','mark_done')">Mark Done</button>
-    </td></tr>`).join('');
+    </div></td></tr>`).join('');
 }
 
 async function createJob(){

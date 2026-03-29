@@ -1559,3 +1559,135 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
   body { background: #fff; }
   .sap-table-wrapper { overflow: visible; }
 }
+
+/* Jobs page responsive tuning */
+.jobs-main {
+  padding-top: calc(var(--sap-shell-height) + var(--sap-navbar-height) + 12px);
+}
+
+.jobs-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .jobs-page .sap-nav-item span { display: inline; }
+  .jobs-page .sap-nav-item {
+    padding: 0 10px;
+    min-width: max-content;
+    font-size: 12px;
+  }
+
+  .jobs-page .sap-navbar__inner {
+    gap: 4px;
+    padding: 0 8px;
+  }
+
+  .jobs-main {
+    margin-top: calc(48px + var(--sap-navbar-height));
+    padding-top: calc(var(--sap-shell-height) + var(--sap-navbar-height) + 8px);
+  }
+
+  .jobs-create-btn {
+    width: 100%;
+    justify-content: center;
+    margin-top: 8px;
+  }
+
+  .jobs-table-card .sap-table-wrapper {
+    margin: 0;
+    padding: 0;
+  }
+
+  .jobs-actions {
+    min-width: 120px;
+    flex-direction: column;
+  }
+
+  .jobs-actions .btn-sm {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Plan B mobile layout for data-heavy pages */
+@media (max-width: 640px) {
+  body.mobile-plan-b .sap-main {
+    padding: var(--sp-sm);
+  }
+
+  body.mobile-plan-b .sap-card {
+    border-radius: 12px;
+  }
+
+  body.mobile-plan-b .sap-table,
+  body.mobile-plan-b .sap-table thead,
+  body.mobile-plan-b .sap-table tbody,
+  body.mobile-plan-b .sap-table th,
+  body.mobile-plan-b .sap-table td,
+  body.mobile-plan-b .sap-table tr {
+    display: block;
+    width: 100%;
+  }
+
+  body.mobile-plan-b .sap-table thead {
+    display: none;
+  }
+
+  body.mobile-plan-b .sap-table tbody tr {
+    background: #fff;
+    border: 1px solid #e6edf5;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+  }
+
+  body.mobile-plan-b .sap-table td {
+    border: 0;
+    border-bottom: 1px dashed #edf2f8;
+    min-height: 40px;
+    padding: 9px 8px 9px 110px;
+    position: relative;
+    text-align: left;
+    white-space: normal;
+  }
+
+  body.mobile-plan-b .sap-table td:last-child {
+    border-bottom: 0;
+  }
+
+  body.mobile-plan-b .sap-table td::before {
+    content: attr(data-label);
+    color: #5c6f82;
+    font-size: 11px;
+    font-weight: 700;
+    left: 8px;
+    letter-spacing: .02em;
+    position: absolute;
+    text-transform: uppercase;
+    top: 11px;
+    width: 95px;
+  }
+
+  body.mobile-plan-b .sap-mobile-actions-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 8px;
+  }
+
+  body.mobile-plan-b .sap-mobile-actions-cell::before {
+    position: static;
+    width: auto;
+    margin-bottom: 2px;
+  }
+
+  body.mobile-plan-b .sap-mobile-actions-cell .btn,
+  body.mobile-plan-b .sap-mobile-actions-cell button,
+  body.mobile-plan-b .sap-mobile-actions-cell a.btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

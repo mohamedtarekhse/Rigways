@@ -868,6 +868,30 @@ function ensureJobsNavForRole(role) {
   });
 }
 
+
+function applyPlanBMobileLayout() {
+  const page = (window.location.pathname.split('/').pop() || '').toLowerCase();
+  const targets = new Set(['assets.html','certificates.html','inspectors.html','clients.html','functional-locations.html','jobs.html']);
+  if (!targets.has(page)) return;
+
+  document.body.classList.add('mobile-plan-b');
+
+  document.querySelectorAll('.sap-table').forEach(table => {
+    const headers = [...table.querySelectorAll('thead th')].map(th => (th.textContent || '').trim());
+    if (!headers.length) return;
+    table.querySelectorAll('tbody tr').forEach(tr => {
+      [...tr.children].forEach((td, idx) => {
+        if (td.tagName !== 'TD') return;
+        if (!td.hasAttribute('data-label')) td.setAttribute('data-label', headers[idx] || `Column ${idx + 1}`);
+      });
+      const actionCell = tr.querySelector('td:last-child');
+      if (actionCell && actionCell.querySelector('button, .btn, [role="button"], a.btn')) {
+        actionCell.classList.add('sap-mobile-actions-cell');
+      }
+    });
+  });
+}
+
 (function autoInit() {
   document.addEventListener('DOMContentLoaded', () => {
 
@@ -910,6 +934,8 @@ function ensureJobsNavForRole(role) {
     /* ── Role visibility ── */
     SapRoles.applyVisibility(session.role);
     SapRoles.applyReadOnly(session.role);
+
+    applyPlanBMobileLayout();
 
     /* ── Wire global buttons ── */
     const langBtn = document.getElementById('langBtn');
