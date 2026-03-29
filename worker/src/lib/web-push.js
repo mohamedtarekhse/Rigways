@@ -121,7 +121,7 @@ export async function sendPushToRoles(db, env, roles, payload, excludeUserId = n
 // ── VAPID config helper ─────────────────────────────
 export function getVapidConfig(env) {
   return {
-    publicKey: sanitizeKey(env.VAPID_PUBLIC_KEY || "BFknY0EbanjqnfnPJLXTGJLADhGqtssiB7wlSVlL-HzvdqBVE84BTbrVauJAHy26FX2tpMk3lK6rG3tqK0yuGc0"),
+    publicKey: sanitizeKey(env.VAPID_PUBLIC_KEY),
     privateKey: sanitizeKey(env.VAPID_PRIVATE_KEY),
     subject: env.VAPID_SUBJECT || 'mailto:admin@rigways.com',
   };

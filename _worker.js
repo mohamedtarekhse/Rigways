@@ -1860,14 +1860,14 @@ async function sendPushNotification(subscription, payload, vapid) {
  * Auto-deletes expired subscriptions (HTTP 410).
  */
 async function sendPushToUser(db, env, userId, payload) {
-  if (!userId || !env.VAPID_PRIVATE_KEY) return;
+  if (!userId || !env.VAPID_PRIVATE_KEY) return { sent: 0, total: 0 };
   try {
     const { data: subs } = await db.from('push_subscriptions', {
       filters: { 'user_id.eq': userId },
       select: '*',
       limit: 20,
     });
-    if (!Array.isArray(subs) || !subs.length) return;
+    if (!Array.isArray(subs) || !subs.length) return { sent: 0, total: 0 };
 
     const vapid = getVapidConfig(env);
     const results = await Promise.allSettled(
@@ -1884,9 +1884,14 @@ async function sendPushToUser(db, env, userId, payload) {
         })
       )
     );
-    return results;
+    
+    return {
+      sent: results.filter(r => r.status === 'fulfilled' && r.value.ok).length,
+      total: subs.length
+    };
   } catch (e) {
     console.warn('sendPushToUser failed:', e);
+    return { sent: 0, total: 0 };
   }
 }
 
@@ -1896,28 +1901,31 @@ async function sendPushToUser(db, env, userId, payload) {
  * @param {string|null} excludeUserId — user to exclude (e.g. the one who triggered the event)
  */
 async function sendPushToRoles(db, env, roles, payload, excludeUserId = null) {
-  if (!env.VAPID_PRIVATE_KEY) return;
+  if (!env.VAPID_PRIVATE_KEY) return { users: 0, sent: 0 };
   try {
     const { data: users } = await db.from('users', {
       filters: { 'role.in': roles, 'is_active.is': true },
       select: 'id',
     });
-    if (!Array.isArray(users) || !users.length) return;
+    if (!Array.isArray(users) || !users.length) return { users: 0, sent: 0 };
 
-    await Promise.allSettled(
-      users
-        .filter(u => u.id !== excludeUserId)
-        .map(u => sendPushToUser(db, env, u.id, payload))
+    const eligible = users.filter(u => u.id !== excludeUserId);
+    const results = await Promise.allSettled(
+      eligible.map(u => sendPushToUser(db, env, u.id, payload))
     );
+    
+    const sent = results.reduce((acc, r) => acc + (r.status === 'fulfilled' ? (r.value?.sent || 0) : 0), 0);
+    return { users: eligible.length, sent };
   } catch (e) {
     console.warn('sendPushToRoles failed:', e);
+    return { users: 0, sent: 0 };
   }
 }
 
 // ── VAPID config helper ─────────────────────────────
 function getVapidConfig(env) {
   return {
-    publicKey: sanitizeKey(env.VAPID_PUBLIC_KEY || "BFknY0EbanjqnfnPJLXTGJLADhGqtssiB7wlSVlL-HzvdqBVE84BTbrVauJAHy26FX2tpMk3lK6rG3tqK0yuGc0"),
+    publicKey: sanitizeKey(env.VAPID_PUBLIC_KEY),
     privateKey: sanitizeKey(env.VAPID_PRIVATE_KEY),
     subject: env.VAPID_SUBJECT || 'mailto:admin@rigways.com',
   };
