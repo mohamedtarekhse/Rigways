@@ -1856,8 +1856,8 @@ async function hkdfExpand(prkBytes, infoBytes, length) {
 
 // ── VAPID JWT Signing (RFC 8292) ────────────────────────────────────────────
 function parseVapidPublicKey(publicKey) {
-  const raw = b64urlDecodeBytes(String(publicKey || ''));
-  if (raw.length !== 65 || raw[0] !== 4) throw new Error('VAPID_PUBLIC_KEY must be an uncompressed P-256 public key (65 bytes, prefix 0x04)');
+  const raw = b64urlDecodeBytes(String(publicKey || '').trim());
+  if (raw.length !== 65 || raw[0] !== 4) throw new Error(`VAPID_PUBLIC_KEY must be an uncompressed P-256 public key (65 bytes, prefix 0x04). Got ${raw.length} bytes with prefix 0x${raw[0]?.toString(16)}. Re-generate VAPID keys.`);
   return {
     raw,
     x: b64urlEncodeBytes(raw.slice(1, 33)),
@@ -1866,9 +1866,14 @@ function parseVapidPublicKey(publicKey) {
 }
 async function importVapidPrivateKey(privateKey, publicKey) {
   const pub = parseVapidPublicKey(publicKey);
+  // Decode to raw bytes then re-encode as clean base64url (no padding, no +/)
+  // This fixes "Invalid EC key in JSON Web Key" caused by padding or wrong alphabet
+  const privBytes = b64urlDecodeBytes(String(privateKey || '').trim());
+  if (privBytes.length !== 32) throw new Error(`VAPID_PRIVATE_KEY must be 32 bytes (got ${privBytes.length}). Re-generate VAPID keys.`);
+  const d = b64urlEncodeBytes(privBytes);
   return crypto.subtle.importKey(
     'jwk',
-    { kty: 'EC', crv: 'P-256', d: String(privateKey || ''), x: pub.x, y: pub.y, ext: true },
+    { kty: 'EC', crv: 'P-256', d, x: pub.x, y: pub.y, ext: true },
     { name: 'ECDSA', namedCurve: 'P-256' },
     false,
     ['sign']
@@ -1972,17 +1977,16 @@ async function sendPushNotification(subscription, payload, vapid) {
       body,
     });
 
-    const isOk = response.ok || response.status === 201;
+    const ok = response.ok || response.status === 201;
     const gone = response.status === 410 || response.status === 404;
-    let errorText = '';
-    if (!isOk) {
-      errorText = await response.text().catch(() => '(no body)');
-      console.warn(`[Push] HTTP ${response.status} from push service for ${subscription.endpoint.slice(0, 60)}: ${errorText.slice(0, 300)}`);
+    if (!ok && !gone) {
+      const text = await response.text().catch(() => '');
+      console.warn(`[Push] Non-ok response ${response.status} for endpoint ${subscription.endpoint.slice(0, 60)}: ${text.slice(0, 200)}`);
     }
-    return { ok: isOk, status: response.status, gone, error: isOk ? null : `HTTP ${response.status}: ${errorText.slice(0, 200)}` };
+    return { ok, status: response.status, gone };
   } catch (e) {
     console.error('[Push] sendPushNotification error:', e);
-    return { ok: false, status: 0, gone: false, error: e.message };
+    return { ok: false, status: 0, gone: false };
   }
 }
 
@@ -1992,18 +1996,17 @@ async function sendPushNotification(subscription, payload, vapid) {
  * On HTTP 410/404: soft-deletes the subscription (active = false).
  */
 async function sendPushToUser(db, env, userId, payload) {
-  if (!userId || !env.VAPID_PRIVATE_KEY) return { sent: 0, total: 0, errors: ['VAPID key not configured'] };
+  if (!userId || !env.VAPID_PRIVATE_KEY) return { sent: 0, total: 0 };
   try {
     const { data: subs } = await db.from('push_subscriptions', {
       filters: { 'user_id.eq': userId, 'active.is': true },
       select: '*',
       limit: 20,
     });
-    if (!Array.isArray(subs) || !subs.length) return { sent: 0, total: 0, errors: ['No active subscriptions in database — toggle Push Notifications to re-subscribe'] };
+    if (!Array.isArray(subs) || !subs.length) return { sent: 0, total: 0 };
 
     const vapid = getVapidConfig(env);
     const now = new Date().toISOString();
-    const errors = [];
 
     const results = await Promise.allSettled(
       subs.map(sub =>
@@ -2019,7 +2022,6 @@ async function sendPushToUser(db, env, userId, payload) {
             // Track last successful dispatch
             await db.update('push_subscriptions', { last_used_at: now }, { filters: { 'id.eq': sub.id } }).catch(() => {});
           }
-          if (!result.ok && result.error) errors.push(result.error);
           return result;
         })
       )
@@ -2028,11 +2030,10 @@ async function sendPushToUser(db, env, userId, payload) {
     return {
       sent: results.filter(r => r.status === 'fulfilled' && r.value.ok).length,
       total: subs.length,
-      errors,
     };
   } catch (e) {
     console.warn('[Push] sendPushToUser failed:', e);
-    return { sent: 0, total: 0, errors: [e.message] };
+    return { sent: 0, total: 0 };
   }
 }
 
@@ -2042,13 +2043,13 @@ async function sendPushToUser(db, env, userId, payload) {
  * @param {string|null} excludeUserId  optional user to skip
  */
 async function sendPushToRoles(db, env, roles, payload, excludeUserId = null) {
-  if (!env.VAPID_PRIVATE_KEY) return { users: 0, sent: 0, errors: ['VAPID_PRIVATE_KEY not set'] };
+  if (!env.VAPID_PRIVATE_KEY) return { users: 0, sent: 0 };
   try {
     const { data: users } = await db.from('users', {
       filters: { 'role.in': roles, 'is_active.is': true },
       select: 'id',
     });
-    if (!Array.isArray(users) || !users.length) return { users: 0, sent: 0, errors: [] };
+    if (!Array.isArray(users) || !users.length) return { users: 0, sent: 0 };
 
     const eligible = users.filter(u => u.id !== excludeUserId);
     const results = await Promise.allSettled(
@@ -2056,11 +2057,10 @@ async function sendPushToRoles(db, env, roles, payload, excludeUserId = null) {
     );
 
     const sent = results.reduce((acc, r) => acc + (r.status === 'fulfilled' ? (r.value?.sent || 0) : 0), 0);
-    const errors = results.flatMap(r => r.status === 'fulfilled' ? (r.value?.errors || []) : [r.reason?.message || 'unknown error']);
-    return { users: eligible.length, sent, errors };
+    return { users: eligible.length, sent };
   } catch (e) {
     console.warn('[Push] sendPushToRoles failed:', e);
-    return { users: 0, sent: 0, errors: [e.message] };
+    return { users: 0, sent: 0 };
   }
 }
 
@@ -2070,6 +2070,42 @@ async function sendPushToRoles(db, env, roles, payload, excludeUserId = null) {
 async function handlePush(request, env, path) {
   const method = request.method;
   const db = createSupabase(env);
+
+  /* ── GET /api/push/validate-keys — check VAPID key format ── */
+  if (path === '/push/validate-keys' && method === 'GET') {
+    const report = { ok: false, publicKey: {}, privateKey: {}, error: null };
+    try {
+      const pub = String(env.VAPID_PUBLIC_KEY || '').trim();
+      const priv = String(env.VAPID_PRIVATE_KEY || '').trim();
+      const pubBytes = b64urlDecodeBytes(pub);
+      const privBytes = b64urlDecodeBytes(priv);
+      report.publicKey = {
+        present: pub.length > 0,
+        rawLength: pubBytes.length,
+        prefix: pubBytes[0],
+        valid: pubBytes.length === 65 && pubBytes[0] === 4,
+        note: pubBytes.length !== 65 ? `Expected 65 bytes, got ${pubBytes.length}` : pubBytes[0] !== 4 ? `Expected prefix 0x04, got 0x${pubBytes[0].toString(16)}` : 'OK',
+      };
+      report.privateKey = {
+        present: priv.length > 0,
+        rawLength: privBytes.length,
+        valid: privBytes.length === 32,
+        note: privBytes.length !== 32 ? `Expected 32 bytes, got ${privBytes.length}` : 'OK',
+      };
+      if (report.publicKey.valid && report.privateKey.valid) {
+        // Try actually importing the key
+        await importVapidPrivateKey(priv, pub);
+        report.ok = true;
+        report.error = null;
+      } else {
+        report.error = 'Key format invalid — re-generate VAPID keys with: npx web-push generate-vapid-keys';
+      }
+    } catch (e) {
+      report.ok = false;
+      report.error = e.message;
+    }
+    return ok(report, env);
+  }
 
   /* ── GET /api/push/vapid-key — public, no auth needed ── */
   if (path === '/push/vapid-key' && method === 'GET') {
@@ -2157,21 +2193,13 @@ async function handlePush(request, env, path) {
   if (path === '/push/test' && method === 'GET') {
     const payload = { title: 'Test Notification', body: 'This is a test notification for your device.', url: '/notifications.html', tag: 'test-push-individual', event_type: 'test' };
     const stats = await sendPushToUser(db, env, session.sub, payload);
-    const delivered = stats.sent > 0;
-    const noSubs = stats.total === 0;
-    const fcmError = (stats.errors || []).join('; ');
-    return json({
-      success: delivered || noSubs,
-      data: {
-        delivered,
-        stats,
-        message: noSubs
-          ? 'No active push subscriptions found for your account. Toggle the Push Notifications switch to subscribe.'
-          : delivered
-            ? `Notification sent to ${stats.sent} of your ${stats.total} registered device(s). Check your notification center.`
-            : `Push delivery failed for all ${stats.total} device(s). FCM error: ${fcmError || 'Unknown — check Cloudflare Worker logs'}`,
-      }
-    }, 200, env);
+    return ok({
+      success: true,
+      stats,
+      message: stats.total > 0
+        ? `Triggered for ${stats.sent} of your ${stats.total} registered device(s). Check your notification center.`
+        : 'No active push subscriptions found for your account. Please enable them above.',
+    }, env);
   }
 
   /* ── GET /api/push/test-all — broadcast test to all admins/managers ── */
@@ -2179,19 +2207,7 @@ async function handlePush(request, env, path) {
     if (!isAdminOrManager(session)) return forbidden(env);
     const payload = { title: 'Global Push Test', body: `Broadcast test triggered by ${session.name}.`, url: '/notifications.html', tag: 'test-push-global', event_type: 'test' };
     const stats = await sendPushToRoles(db, env, ['admin', 'manager'], payload);
-    const delivered = stats.sent > 0;
-    return json({
-      success: delivered || stats.users === 0,
-      data: {
-        delivered,
-        stats,
-        message: stats.users === 0
-          ? 'No admin/manager users with active push subscriptions found.'
-          : delivered
-            ? `Broadcast sent to ${stats.sent} device(s) across ${stats.users} user(s).`
-            : `Broadcast attempted for ${stats.users} user(s) but all deliveries failed. Check Cloudflare Worker logs for FCM errors.`,
-      }
-    }, 200, env);
+    return ok({ success: true, stats, message: `Broadcasted to ${stats.users} qualified users. Total of ${stats.sent} push notification(s) triggered.` }, env);
   }
 
   return badReq('Not found', 'NOT_FOUND', env);

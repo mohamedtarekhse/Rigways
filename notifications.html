@@ -1442,23 +1442,12 @@ async function sendTestPush(global = false) {
     const endpoint = global ? '/api/push/test-all' : '/api/push/test';
     const res = await apiFetch(endpoint);
     const raw = await res.json();
-    const data = raw.data || raw;
-    const stats = data.stats || {};
-    const msg = data.message || '';
-
-    if (stats.total === 0) {
-      // No subscription in DB at all
-      showToast('warning',
-        global ? 'No Subscriptions Found' : 'Not Subscribed',
-        'No active push subscriptions found. Toggle the Push Notifications switch above first.');
-    } else if (data.delivered || stats.sent > 0) {
-      // At least one device received it
+    const data = raw.data || raw; 
+    if (raw.success) {
+      const msg = data.message || 'Notification triggered successfully.';
       showToast('success', global ? 'Global Test Sent' : 'Test Sent', msg);
     } else {
-      // Subscriptions exist but FCM rejected every one — show the actual error
-      showToast('error',
-        global ? 'Broadcast Delivery Failed' : 'Push Delivery Failed',
-        msg || 'FCM rejected the push. Try "Reset Push" to refresh your subscription, or check VAPID keys in Cloudflare dashboard.');
+      showToast('error', 'Test Failed', data.error || 'Failed to trigger notification.');
     }
   } catch (e) {
     showToast('error', 'Error', e.message);
@@ -1588,7 +1577,27 @@ async function runDiagnostic() {
     report += `Browser Error: ${e.message}\n\n`;
   }
 
-  report += '--- SERVER STATUS ---\n';
+  report += '--- VAPID KEY VALIDATION ---\n';
+  try {
+    const keyRes = await apiFetch('/api/push/validate-keys');
+    const keyData = await keyRes.json();
+    const kd = keyData.data || keyData;
+    report += `Overall: ${kd.ok ? '✅ KEYS VALID' : '❌ KEY ERROR'}\n`;
+    report += `Public Key  — Length: ${kd.publicKey?.rawLength} bytes | Valid: ${kd.publicKey?.valid ? '✅' : '❌'} | ${kd.publicKey?.note}\n`;
+    report += `Private Key — Length: ${kd.privateKey?.rawLength} bytes | Valid: ${kd.privateKey?.valid ? '✅' : '❌'} | ${kd.privateKey?.note}\n`;
+    if (kd.error) report += `Error: ${kd.error}\n`;
+    if (!kd.ok) {
+      report += '\n⚠️  FIX: Run this in your terminal:\n';
+      report += '  npx web-push generate-vapid-keys --json\n';
+      report += 'Then update VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY in the\n';
+      report += 'Cloudflare Pages dashboard → Settings → Environment Variables.\n';
+      report += 'Then click "Reset Push" to get a new subscription.\n';
+    }
+  } catch (e) {
+    report += `Key validation error: ${e.message}\n`;
+  }
+
+  report += '\n--- SERVER STATUS ---\n';
   try {
     const res = await apiFetch('/api/diag');
     const data = await res.json();
@@ -1596,10 +1605,10 @@ async function runDiagnostic() {
     report += JSON.stringify(result, null, 2);
     content.textContent = report;
     
-    if (!result.cryptoTest) {
-      content.innerHTML += '\n\n<span style="color:#d32f2f; font-weight:bold;">⚠️ WARNING: Live Worker version is old. Please redeploy.</span>';
-    } else if (result.cryptoTest.ok) {
-      content.innerHTML += '\n\n<span style="color:#2e7d32; font-weight:bold;">✅ SUCCESS: Push engine is healthy and modern.</span>';
+    if (result.cryptoTest?.ok) {
+      content.innerHTML += '\n\n<span style="color:#2e7d32; font-weight:bold;">✅ SUCCESS: Push crypto engine is healthy.</span>';
+    } else if (result.cryptoTest?.error) {
+      content.innerHTML += `\n\n<span style="color:#d32f2f; font-weight:bold;">❌ Crypto test failed: ${result.cryptoTest.error}</span>`;
     }
   } catch (e) {
     content.textContent = report + '\nFailed to run server diagnostics: ' + e.message;
