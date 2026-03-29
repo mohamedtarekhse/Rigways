@@ -253,6 +253,7 @@ input, select, textarea { font-family: inherit; }
   transition: border-color var(--transition);
 }
 .sap-shell__avatar:hover { border-color: rgba(255,255,255,.6); }
+.sap-mobile-menu-btn { display: none !important; }
 
 /* ---------- User Dropdown ----------------------------------- */
 .sap-user-menu {
@@ -1471,6 +1472,12 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
   .sap-shell__logo { font-size: 13px; }
   .sap-shell__logo svg { width: 18px; height: auto; }
   .sap-shell__app-title { display: none; } /* Space saver */
+  #shellAvatar { display: none !important; }
+  .sap-mobile-menu-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+  }
   
   /* User Dropdown constraints */
   .sap-user-menu {
@@ -1531,6 +1538,10 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
   .sap-pagination__controls { width: 100%; justify-content: center; }
 }
 
+@media (min-width: 641px) {
+  #mobileMenuBtn { display: none !important; }
+}
+
 @media (max-width: 400px) {
   /* Extreme small screens (e.g. SE/older iPhones) */
   .sap-shell__logo-badge { display: none; }
@@ -1547,4 +1558,217 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
   .btn, .sap-page-header__actions, .sap-pagination { display: none; }
   body { background: #fff; }
   .sap-table-wrapper { overflow: visible; }
+}
+
+/* Jobs page responsive tuning */
+.jobs-main {
+  padding-top: calc(var(--sap-shell-height) + var(--sap-navbar-height) + 12px);
+}
+
+.jobs-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .jobs-page .sap-nav-item span { display: inline; }
+  .jobs-page .sap-nav-item {
+    padding: 0 10px;
+    min-width: max-content;
+    font-size: 12px;
+  }
+
+  .jobs-page .sap-navbar__inner {
+    gap: 4px;
+    padding: 0 8px;
+  }
+
+  .jobs-main {
+    margin-top: calc(48px + var(--sap-navbar-height));
+    padding-top: calc(var(--sap-shell-height) + var(--sap-navbar-height) + 8px);
+  }
+
+  .jobs-create-btn {
+    width: 100%;
+    justify-content: center;
+    margin-top: 8px;
+  }
+
+  .jobs-table-card .sap-table-wrapper {
+    margin: 0;
+    padding: 0;
+  }
+
+  .jobs-actions {
+    min-width: 120px;
+    flex-direction: column;
+  }
+
+  .jobs-actions .btn-sm {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Plan B mobile layout for data-heavy pages */
+@media (max-width: 640px) {
+  body.mobile-plan-b .sap-main {
+    padding: var(--sp-sm);
+  }
+
+  body.mobile-plan-b .sap-card {
+    border-radius: 12px;
+  }
+
+  body.mobile-plan-b .sap-table,
+  body.mobile-plan-b .sap-table thead,
+  body.mobile-plan-b .sap-table tbody,
+  body.mobile-plan-b .sap-table th,
+  body.mobile-plan-b .sap-table td,
+  body.mobile-plan-b .sap-table tr {
+    display: block;
+    width: 100%;
+  }
+
+  body.mobile-plan-b .sap-table thead {
+    display: none;
+  }
+
+  body.mobile-plan-b .sap-table tbody tr {
+    background: #fff;
+    border: 1px solid #e6edf5;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+  }
+
+  body.mobile-plan-b .sap-table td {
+    border: 0;
+    border-bottom: 1px dashed #edf2f8;
+    min-height: 40px;
+    padding: 9px 8px 9px 110px;
+    position: relative;
+    text-align: left;
+    white-space: normal;
+  }
+
+  body.mobile-plan-b .sap-table td:last-child {
+    border-bottom: 0;
+  }
+
+  body.mobile-plan-b .sap-table td::before {
+    content: attr(data-label);
+    color: #5c6f82;
+    font-size: 11px;
+    font-weight: 700;
+    left: 8px;
+    letter-spacing: .02em;
+    position: absolute;
+    text-transform: uppercase;
+    top: 11px;
+    width: 95px;
+  }
+
+  body.mobile-plan-b .sap-mobile-actions-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 8px;
+  }
+
+  body.mobile-plan-b .sap-mobile-actions-cell::before {
+    position: static;
+    width: auto;
+    margin-bottom: 2px;
+  }
+
+  body.mobile-plan-b .sap-mobile-actions-cell .btn,
+  body.mobile-plan-b .sap-mobile-actions-cell button,
+  body.mobile-plan-b .sap-mobile-actions-cell a.btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Plan B refinement for Assets/Certificates/Notifications mobile views */
+@media (max-width: 640px) {
+  body.mobile-plan-b .sap-toolbar {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px !important;
+    align-items: stretch;
+  }
+
+  body.mobile-plan-b .sap-toolbar .filter-chips {
+    grid-column: 1 / -1;
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+
+  body.mobile-plan-b .sap-toolbar .filter-chip {
+    flex: 0 0 auto;
+  }
+
+  body.mobile-plan-b .sap-toolbar select,
+  body.mobile-plan-b .sap-toolbar input[type="text"],
+  body.mobile-plan-b .sap-toolbar input[type="date"],
+  body.mobile-plan-b .sap-toolbar .sap-search-box,
+  body.mobile-plan-b .sap-toolbar .btn,
+  body.mobile-plan-b .sap-toolbar .col-dropdown {
+    width: 100% !important;
+    min-width: 0;
+  }
+
+  body.mobile-plan-b .sap-toolbar__count,
+  body.mobile-plan-b #tableCount {
+    justify-self: end;
+    min-width: 44px;
+    text-align: center;
+  }
+
+  body.mobile-plan-b .sap-page-header {
+    gap: 10px;
+  }
+
+  body.mobile-plan-b .sap-page-header__actions,
+  body.mobile-plan-b .page-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  body.page-notifications #kpiStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px;
+  }
+
+  body.page-notifications .notif-tabs {
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.page-notifications .digest-toggle {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  body.page-notifications #pushToggleArea,
+  body.page-notifications .digest-toggle > div[style*="margin-left:auto"],
+  body.page-notifications .digest-toggle > div[style*="margin-left:24px"] {
+    margin-left: 0 !important;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  body.page-notifications .sap-search-box {
+    width: 100% !important;
+  }
 }

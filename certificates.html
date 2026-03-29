@@ -606,8 +606,16 @@
       </div>
     </div>
     <div class="sap-pagination" id="pagination">
-      <div class="sap-pagination__info" id="paginationInfo">Showing 1–15 of 114</div>
+      <div class="sap-pagination__info" id="paginationInfo">Showing 1–25 of 114</div>
       <div class="sap-pagination__controls" id="paginationControls"></div>
+      <div class="sap-pagination__size">
+        <label for="pageSizeSelect" style="font-size:12px;color:var(--sap-text-secondary);">Rows:</label>
+        <select id="pageSizeSelect" class="sap-select" style="height:30px;padding:2px 8px;" onchange="setPageSize(this.value)">
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
     </div>
   </div>
 </main>
@@ -638,6 +646,12 @@
           <div class="sap-field">
             <label class="sap-label">Job Number <span class="required">*</span></label>
             <input type="text" id="f_jobNumber" class="sap-input" placeholder="e.g. JOB-2024-010 — groups all certs done in one job"/>
+          </div>
+          <div class="sap-field">
+            <label class="sap-label">Select Job</label>
+            <select id="f_jobSelect" class="sap-select" onchange="onJobSelectChange(this.value)">
+              <option value="">Select active job…</option>
+            </select>
           </div>
 
           <!-- Cert Name -->
@@ -878,7 +892,9 @@ function toggleLang() {}
 /* ── State ── */
 let session = null;
 let sortCol = 'expiryDate'; let sortDir = 1;
-let currentPage = 1; const PAGE_SIZE = 15;
+let currentPage = 1;
+let PAGE_SIZE = Number(localStorage.getItem('sap_cert_page_size') || 25);
+if (![25,50,100].includes(PAGE_SIZE)) PAGE_SIZE = 25;
 let activeStatusFilter = 'all';
 let filteredData = [];
 let selectedFile = null;
@@ -909,7 +925,7 @@ function logout() {
 /* ── Language ── */
 function toggleUserMenu() { document.getElementById('userMenu').classList.toggle('open'); }
 document.addEventListener('click', e => {
-  if (!e.target.closest('#shellAvatar') && !e.target.closest('#userMenu'))
+  if (!e.target.closest('#shellAvatar') && !e.target.closest('#mobileMenuBtn') && !e.target.closest('#userMenu'))
     document.getElementById('userMenu').classList.remove('open');
 });
 
@@ -1257,6 +1273,15 @@ function goPage(p) {
   currentPage = p; renderTable();
 }
 
+function setPageSize(size) {
+  const parsed = Number(size);
+  if (![25,50,100].includes(parsed)) return;
+  PAGE_SIZE = parsed;
+  localStorage.setItem('sap_cert_page_size', String(parsed));
+  currentPage = 1;
+  renderTable();
+}
+
 /* ── Filters ── */
 function filterStatus(val, el) {
   activeStatusFilter = val;
@@ -1390,7 +1415,7 @@ async function massDelete() {
    UPLOAD / EDIT MODAL
 ═══════════════════════════════════════════════════════ */
 function certDraftKey(){ const id=document.getElementById('editCertId')?.value||''; return id?`certs:edit:${id}`:'certs:add'; }
-function collectCertDraft(){ return { editCertId:document.getElementById('editCertId')?.value||'', f_jobNumber:document.getElementById('f_jobNumber')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_certType:document.getElementById('f_certType')?.value||'', f_liftingSubtype:document.getElementById('f_liftingSubtype')?.value||'', f_issuedBy:document.getElementById('f_issuedBy')?.value||'', f_issueDate:document.getElementById('f_issueDate')?.value||'', f_expiryDate:document.getElementById('f_expiryDate')?.value||'', f_client:document.getElementById('f_client')?.value||'', f_assetId:document.getElementById('f_assetId')?.value||'' }; }
+function collectCertDraft(){ return { editCertId:document.getElementById('editCertId')?.value||'', f_jobNumber:document.getElementById('f_jobNumber')?.value||'', f_jobSelect:document.getElementById('f_jobSelect')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_certType:document.getElementById('f_certType')?.value||'', f_liftingSubtype:document.getElementById('f_liftingSubtype')?.value||'', f_issuedBy:document.getElementById('f_issuedBy')?.value||'', f_issueDate:document.getElementById('f_issueDate')?.value||'', f_expiryDate:document.getElementById('f_expiryDate')?.value||'', f_client:document.getElementById('f_client')?.value||'', f_assetId:document.getElementById('f_assetId')?.value||'' }; }
 function saveCertDraft(){ if(window.SapDraft) SapDraft.save(certDraftKey(), collectCertDraft()); }
 function restoreCertDraft(){ if(!window.SapDraft) return; const d=SapDraft.load(certDraftKey(),24*60*60*1000); if(d&&confirm('A saved draft was found. Restore it?')) Object.entries(d).forEach(([k,v])=>{const el=document.getElementById(k); if(el) el.value=v;}); onCertTypeChange(); }
 function clearCertDraft(){ if(!window.SapDraft) return; const id=document.getElementById('editCertId')?.value||''; SapDraft.clear('certs:add'); if(id) SapDraft.clear(`certs:edit:${id}`); }
@@ -1423,6 +1448,8 @@ function openUploadModal() {
   loadAssetDropdown();
   loadInspectorDropdown();
   loadClientDropdown();
+  loadJobDropdown();
+  if (session.role === 'technician') lockTechnicianModalFields();
 }
 
 function openEditModal(id) {
@@ -1481,6 +1508,46 @@ function openEditModal(id) {
   });
   loadInspectorDropdown(_inspVal);
   loadClientDropdown(_clientVal);
+  loadJobDropdown(c.jobNumber || '');
+  if (session.role === 'technician') lockTechnicianModalFields();
+}
+
+function onJobSelectChange(jobNumber) {
+  if (!jobNumber) return;
+  const input = document.getElementById('f_jobNumber');
+  if (input) input.value = jobNumber;
+}
+
+function lockTechnicianModalFields() {
+  if (session?.role !== 'technician') return;
+  const inspectorSel = document.getElementById('f_issuedBy');
+  if (inspectorSel) {
+    const inspectorName = (session.name || '').trim();
+    inspectorSel.innerHTML = inspectorName
+      ? `<option value="${inspectorName}">${inspectorName}</option>`
+      : '<option value="">Technician account missing display name</option>';
+    inspectorSel.value = inspectorName;
+    inspectorSel.disabled = true;
+  }
+
+  const clientSel = document.getElementById('f_client');
+  const clientWrap = document.getElementById('f_client_wrap');
+  if (clientSel) {
+    const cid = (session.customerId || '').trim();
+    if (cid) {
+      const label = CLIENTS_MAP[cid] ? `${CLIENTS_MAP[cid]} (${cid})` : cid;
+      clientSel.innerHTML = `<option value="${cid}">${label}</option>`;
+      clientSel.value = cid;
+      clientSel.disabled = true;
+      if (clientWrap) clientWrap.style.display = 'none';
+    } else {
+      clientSel.innerHTML = '<option value="">Technician account missing client mapping</option>';
+      clientSel.value = '';
+      clientSel.disabled = true;
+      if (clientWrap) clientWrap.style.display = '';
+      showToast('error', 'Client Mapping Missing', 'Technician account has no linked client. Contact administrator.');
+    }
+  }
 }
 
 function closeModal(force) {
@@ -1538,6 +1605,7 @@ zone.addEventListener('drop', e => {
 /* ── Save ── */
 async function saveCert() {
   const jobNumber      = document.getElementById('f_jobNumber')?.value?.trim() || '';
+  const selectedJobNum = document.getElementById('f_jobSelect')?.value?.trim() || '';
   const name           = document.getElementById('f_name')?.value?.trim() || '';
   const certType       = document.getElementById('f_certType')?.value || '';
   const liftingSubtype = certType === 'LIFTING' ? (document.getElementById('f_liftingSubtype')?.value || '') : '';
@@ -1547,9 +1615,16 @@ async function saveCert() {
   const client         = document.getElementById('f_client')?.value || session?.customerId || '';
   const assetId        = document.getElementById('f_assetId')?.value || '';
   const editId         = document.getElementById('editCertId')?.value || '';
+  const isTechnician   = session?.role === 'technician';
+  const effectiveIssuedBy = isTechnician ? (session?.name || '').trim() : issuedBy;
+  const effectiveClient   = isTechnician ? (session?.customerId || '').trim() : client;
 
-  if (!name || !certType || !issuedBy || !issueDate || !expiryDate) {
+  if (!name || !certType || !effectiveIssuedBy || !issueDate || !expiryDate) {
     showToast('error','Required Fields','Please fill all required fields.'); return;
+  }
+  if (isTechnician && !effectiveClient) {
+    showToast('error','Client Mapping Missing','Your technician account is not linked to a client. Contact administrator.');
+    return;
   }
   if (certType === 'LIFTING' && !liftingSubtype) {
     showToast('error','Lifting Sub-type Required','Please select a lifting sub-type.'); return;
@@ -1567,13 +1642,14 @@ async function saveCert() {
   /* ── Step 1: Save/update the cert record (without file fields) ── */
   const payload = {
     name,
-    cert_type:   certType + (liftingSubtype ? ' — ' + liftingSubtype : ''),
+    cert_type:   certType,
+    lifting_subtype: liftingSubtype || null,
     asset_id:    assetId   || undefined,
-    client_id:   client    || undefined,
-    issued_by:   issuedBy,
+    client_id:   effectiveClient || undefined,
+    issued_by:   effectiveIssuedBy,
     issue_date:  issueDate,
     expiry_date: expiryDate,
-    notes:       jobNumber || null,
+    notes:       selectedJobNum || jobNumber || null,
   };
 
   let savedCert = null;
@@ -2465,6 +2541,16 @@ async function loadAssetDropdown() {
 async function loadInspectorDropdown(selectedValue) {
   const sel = document.getElementById('f_issuedBy');
   if (!sel) return;
+  if (session?.role === 'technician') {
+    const inspectorName = (session.name || '').trim();
+    sel.innerHTML = inspectorName
+      ? `<option value="${inspectorName}">${inspectorName}</option>`
+      : '<option value="">Technician account missing display name</option>';
+    sel.value = inspectorName;
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
   // Only admin/manager can call GET /api/inspectors; for others keep existing options
   if (!['admin', 'manager'].includes(session?.role)) return;
   try {
@@ -2481,6 +2567,22 @@ async function loadInspectorDropdown(selectedValue) {
 }
 
 async function loadClientDropdown(selectedValue) {
+  if (session?.role === 'technician') {
+    const modalSel = document.getElementById('f_client');
+    const cid = (session.customerId || '').trim();
+    if (modalSel) {
+      if (cid) {
+        const label = CLIENTS_MAP[cid] ? `${CLIENTS_MAP[cid]} (${cid})` : cid;
+        modalSel.innerHTML = `<option value="${cid}">${label}</option>`;
+        modalSel.value = cid;
+      } else {
+        modalSel.innerHTML = '<option value="">Technician account missing client mapping</option>';
+        modalSel.value = '';
+      }
+      modalSel.disabled = true;
+    }
+    return;
+  }
   if (!['admin', 'manager'].includes(session?.role)) return;
   try {
     const res  = await apiFetch('/api/clients?status=active&limit=200');
@@ -2512,6 +2614,31 @@ async function loadClientDropdown(selectedValue) {
   } catch(e) { console.warn('Could not load clients:', e); }
 }
 
+async function loadJobDropdown(selectedJobNumber) {
+  const sel = document.getElementById('f_jobSelect');
+  if (!sel) return;
+  try {
+    const res = await apiFetch('/api/jobs?limit=200');
+    const raw = await res.json();
+    const rows = ((raw.data || raw).jobs || []).filter(j => ['active', 'reopened', 'technician_done'].includes(j.status));
+    sel.innerHTML = '<option value="">Select active job…</option>' + rows.map(j => {
+      const label = `${j.job_number} — ${j.client_id} (${j.status})`;
+      return `<option value="${j.job_number}">${label}</option>`;
+    }).join('');
+    const desired = selectedJobNumber || document.getElementById('f_jobNumber')?.value || '';
+    if (desired) sel.value = desired;
+    if (session?.role === 'technician' && sel.options.length > 1) {
+      if (!sel.value) sel.selectedIndex = 1;
+      onJobSelectChange(sel.value);
+      sel.disabled = false;
+    } else {
+      sel.disabled = false;
+    }
+  } catch (e) {
+    sel.innerHTML = '<option value="">Could not load jobs</option>';
+  }
+}
+
 async function loadCerts() {
   try {
     const [certRes, assetRes] = await Promise.all([
@@ -2523,10 +2650,17 @@ async function loadCerts() {
     const assetMap = {};
     (ad.assets || ad || []).forEach(a => { if (a.id) assetMap[a.id] = a.asset_number || a.id; });
     window._assetMap = assetMap;
-    CERTS = (cd.certificates || cd || []).map(cert => ({
+    CERTS = (cd.certificates || cd || []).map(cert => {
+      const rawType = String(cert.cert_type || '');
+      const parts = rawType.split(' — ');
+      const baseType = parts[0] || rawType;
+      const inferredSubtype = parts.length > 1 ? parts.slice(1).join(' — ') : '';
+      const liftingSubtype = cert.lifting_subtype || inferredSubtype || '';
+      return ({
       ...cert,
       certId:          cert.cert_number || cert.id,
-      certType:        cert.cert_type,
+      certType:        baseType,
+      liftingSubtype,
       approvalStatus:  cert.approval_status,
       expiryDate:      cert.expiry_date,
       issueDate:       cert.issue_date,
@@ -2540,7 +2674,7 @@ async function loadCerts() {
       uploadTime:      cert.created_at || '',   // full ISO timestamp for accurate 24hr window
       uploadedBy:      cert.uploaded_by_username || cert.uploaded_by || '',
       uploaded_by:     cert.uploaded_by || '',
-    }));
+    })});
     window._certUrls = {};
     CERTS.forEach(cert => { if (cert.file_url) window._certUrls[cert.id] = cert.file_url; });
   } catch(e) { CERTS = []; }
@@ -2548,6 +2682,8 @@ async function loadCerts() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  const pageSizeSelect = document.getElementById('pageSizeSelect');
+  if (pageSizeSelect) pageSizeSelect.value = String(PAGE_SIZE);
   session = getSession();
   if (!session) return;
   const role = session.role;
