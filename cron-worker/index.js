@@ -3,7 +3,7 @@
 
 export default {
   async scheduled(event, env, ctx) {
-    const apiBase = env.API_BASE_URL || 'https://rigways.pages.dev';
+    const apiBase = String(env.API_BASE_URL || 'https://rigways.pages.dev').replace(/\/+$/, '');
     const secret  = env.CRON_SECRET;
 
     if (!secret) {
@@ -21,6 +21,7 @@ export default {
           'User-Agent': 'Rigways-Cron-Worker',
           'Cache-Control': 'no-store',
         },
+        signal: AbortSignal.timeout(10000),
       });
 
       const rawText = await response.text();
@@ -38,7 +39,15 @@ export default {
 
   // Also allow manual trigger via fetch if needed for testing
   async fetch(request, env, ctx) {
-    if (new URL(request.url).pathname === '/run') {
+    const url = new URL(request.url);
+    if (url.pathname === '/run') {
+      const secret = env.CRON_SECRET;
+      const authHeader = request.headers.get('Authorization');
+      const querySecret = url.searchParams.get('secret');
+      const authorized = secret && (authHeader === `Bearer ${secret}` || querySecret === secret);
+      if (!authorized) {
+        return new Response('Unauthorized', { status: 401 });
+      }
       ctx.waitUntil(this.scheduled(null, env, ctx));
       return new Response('Cron trigger initiated.', { status: 202 });
     }
