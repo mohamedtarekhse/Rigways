@@ -11,7 +11,12 @@
 function json(body, status = 200, env = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json', ...cors(env) },
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      ...cors(env),
+    },
   });
 }
 
@@ -1996,14 +2001,15 @@ async function sendPushNotification(subscription, payload, vapid) {
  * On HTTP 410/404: soft-deletes the subscription (active = false).
  */
 async function sendPushToUser(db, env, userId, payload) {
-  if (!userId || !env.VAPID_PRIVATE_KEY) return { sent: 0, total: 0 };
+  if (!userId) return { sent: 0, total: 0, reason: 'missing_user' };
+  if (!env.VAPID_PRIVATE_KEY || !env.VAPID_PUBLIC_KEY) return { sent: 0, total: 0, reason: 'missing_vapid' };
   try {
     const { data: subs } = await db.from('push_subscriptions', {
       filters: { 'user_id.eq': userId, 'active.is': true },
       select: '*',
       limit: 20,
     });
-    if (!Array.isArray(subs) || !subs.length) return { sent: 0, total: 0 };
+    if (!Array.isArray(subs) || !subs.length) return { sent: 0, total: 0, reason: 'no_subscriptions' };
 
     const vapid = getVapidConfig(env);
     const now = new Date().toISOString();
@@ -2027,13 +2033,15 @@ async function sendPushToUser(db, env, userId, payload) {
       )
     );
 
+    const sent = results.filter(r => r.status === 'fulfilled' && r.value.ok).length;
     return {
-      sent: results.filter(r => r.status === 'fulfilled' && r.value.ok).length,
+      sent,
       total: subs.length,
+      reason: sent > 0 ? null : 'dispatch_failed',
     };
   } catch (e) {
     console.warn('[Push] sendPushToUser failed:', e);
-    return { sent: 0, total: 0 };
+    return { sent: 0, total: 0, reason: 'internal_error' };
   }
 }
 
@@ -2043,24 +2051,25 @@ async function sendPushToUser(db, env, userId, payload) {
  * @param {string|null} excludeUserId  optional user to skip
  */
 async function sendPushToRoles(db, env, roles, payload, excludeUserId = null) {
-  if (!env.VAPID_PRIVATE_KEY) return { users: 0, sent: 0 };
+  if (!env.VAPID_PRIVATE_KEY || !env.VAPID_PUBLIC_KEY) return { users: 0, sent: 0, reason: 'missing_vapid' };
   try {
     const { data: users } = await db.from('users', {
       filters: { 'role.in': roles, 'is_active.is': true },
       select: 'id',
     });
-    if (!Array.isArray(users) || !users.length) return { users: 0, sent: 0 };
+    if (!Array.isArray(users) || !users.length) return { users: 0, sent: 0, reason: 'no_users' };
 
     const eligible = users.filter(u => u.id !== excludeUserId);
+    if (!eligible.length) return { users: 0, sent: 0, reason: 'no_eligible_users' };
     const results = await Promise.allSettled(
       eligible.map(u => sendPushToUser(db, env, u.id, payload))
     );
 
     const sent = results.reduce((acc, r) => acc + (r.status === 'fulfilled' ? (r.value?.sent || 0) : 0), 0);
-    return { users: eligible.length, sent };
+    return { users: eligible.length, sent, reason: sent > 0 ? null : 'dispatch_failed' };
   } catch (e) {
     console.warn('[Push] sendPushToRoles failed:', e);
-    return { users: 0, sent: 0 };
+    return { users: 0, sent: 0, reason: 'internal_error' };
   }
 }
 
@@ -2189,25 +2198,45 @@ async function handlePush(request, env, path) {
     return ok({ notified: true, count }, env);
   }
 
-  /* ── GET /api/push/test — send a test notification to yourself ── */
-  if (path === '/push/test' && method === 'GET') {
+  /* ── POST /api/push/test — send a test notification to yourself ── */
+  if (path === '/push/test' && method === 'POST') {
     const payload = { title: 'Test Notification', body: 'This is a test notification for your device.', url: '/notifications.html', tag: 'test-push-individual', event_type: 'test' };
     const stats = await sendPushToUser(db, env, session.sub, payload);
+    let message = '';
+    if (stats.sent > 0) {
+      message = `Triggered for ${stats.sent} of your ${stats.total} registered device(s). Check your notification center.`;
+    } else if (stats.reason === 'missing_vapid') {
+      message = 'Push server keys are missing or invalid. Configure VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY in Worker settings.';
+    } else if (stats.reason === 'no_subscriptions') {
+      message = 'No active push subscriptions found for your account. Enable push notifications above, then retry.';
+    } else if (stats.reason === 'dispatch_failed') {
+      message = `Push request was attempted for ${stats.total} device(s), but all were rejected by the push service. Check worker logs for [Push] warnings.`;
+    } else {
+      message = 'Push test completed with no successful deliveries. Check worker logs for details.';
+    }
     return ok({
       success: true,
       stats,
-      message: stats.total > 0
-        ? `Triggered for ${stats.sent} of your ${stats.total} registered device(s). Check your notification center.`
-        : 'No active push subscriptions found for your account. Please enable them above.',
+      message,
     }, env);
   }
 
-  /* ── GET /api/push/test-all — broadcast test to all admins/managers ── */
-  if (path === '/push/test-all' && method === 'GET') {
+  /* ── POST /api/push/test-all — broadcast test to all admins/managers ── */
+  if (path === '/push/test-all' && method === 'POST') {
     if (!isAdminOrManager(session)) return forbidden(env);
     const payload = { title: 'Global Push Test', body: `Broadcast test triggered by ${session.name}.`, url: '/notifications.html', tag: 'test-push-global', event_type: 'test' };
     const stats = await sendPushToRoles(db, env, ['admin', 'manager'], payload);
-    return ok({ success: true, stats, message: `Broadcasted to ${stats.users} qualified users. Total of ${stats.sent} push notification(s) triggered.` }, env);
+    let message = `Broadcasted to ${stats.users} qualified users. Total of ${stats.sent} push notification(s) triggered.`;
+    if (stats.sent === 0) {
+      if (stats.reason === 'missing_vapid') {
+        message = 'Broadcast blocked: VAPID keys are not configured in Worker settings.';
+      } else if (stats.reason === 'no_users' || stats.reason === 'no_eligible_users') {
+        message = 'Broadcast found no eligible admin/manager accounts to notify.';
+      } else {
+        message = `Broadcast reached ${stats.users} users but no device accepted the push. Check active subscriptions and worker logs.`;
+      }
+    }
+    return ok({ success: true, stats, message }, env);
   }
 
   return badReq('Not found', 'NOT_FOUND', env);
@@ -2352,7 +2381,7 @@ export default {
       }
 
       // Cron manual trigger (Admin or Secret)
-      if (path === '/cron/check-expiry' && request.method === 'GET') {
+      if (path === '/cron/check-expiry' && (request.method === 'GET' || request.method === 'POST')) {
         const cronSecret = env.CRON_SECRET;
         const authHeader = request.headers.get('Authorization');
         const isSecretMatch = cronSecret && (authHeader === `Bearer ${cronSecret}` || url.searchParams.get('secret') === cronSecret);
