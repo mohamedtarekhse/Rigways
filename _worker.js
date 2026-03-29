@@ -1795,81 +1795,214 @@ async function handleReports(request, env, path) {
 
 // ── web-push.js ──
 // worker/src/lib/web-push.js
-// Web Push sending using VAPID (pure Web Crypto — no npm deps)
-// Works in Cloudflare Workers environment
+// Zero-dependency Web Push — VAPID + AES-128-GCM encryption
+// Uses standard Web Crypto API (crypto.subtle) only. No Node.js deps.
+// RFC 8291 (payload encryption) + RFC 8292 (VAPID signing)
 
+// ── Base64url helpers ───────────────────────────────────────────────────────
+function b64urlEncodeBytes(bytes) {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+function b64urlEncodeText(text) {
+  return b64urlEncodeBytes(new TextEncoder().encode(text));
+}
+function b64urlDecodeBytes(input) {
+  const padded = input.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((input.length + 3) % 4);
+  const binary = atob(padded);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+function utf8Bytes(text) {
+  return new TextEncoder().encode(String(text || ''));
+}
+function concatBytes(...parts) {
+  const arrays = parts.filter(Boolean).map(part => part instanceof Uint8Array ? part : new Uint8Array(part));
+  const total = arrays.reduce((sum, part) => sum + part.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const part of arrays) { out.set(part, offset); offset += part.length; }
+  return out;
+}
+function uint32Bytes(value) {
+  const out = new Uint8Array(4);
+  new DataView(out.buffer).setUint32(0, value >>> 0);
+  return out;
+}
+
+// ── HKDF (RFC 5869) ────────────────────────────────────────────────────────
+async function hmacSha256Bytes(keyBytes, dataBytes) {
+  const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', key, dataBytes));
+}
+async function hkdfExtract(saltBytes, ikmBytes) {
+  return hmacSha256Bytes(saltBytes, ikmBytes);
+}
+async function hkdfExpand(prkBytes, infoBytes, length) {
+  let prev = new Uint8Array(0);
+  const chunks = [];
+  let generated = 0;
+  let counter = 1;
+  while (generated < length) {
+    prev = await hmacSha256Bytes(prkBytes, concatBytes(prev, infoBytes, Uint8Array.of(counter)));
+    chunks.push(prev);
+    generated += prev.length;
+    counter += 1;
+  }
+  return concatBytes(...chunks).slice(0, length);
+}
+
+// ── VAPID JWT Signing (RFC 8292) ────────────────────────────────────────────
+function parseVapidPublicKey(publicKey) {
+  const raw = b64urlDecodeBytes(String(publicKey || ''));
+  if (raw.length !== 65 || raw[0] !== 4) throw new Error('VAPID_PUBLIC_KEY must be an uncompressed P-256 public key (65 bytes, prefix 0x04)');
+  return {
+    raw,
+    x: b64urlEncodeBytes(raw.slice(1, 33)),
+    y: b64urlEncodeBytes(raw.slice(33, 65)),
+  };
+}
+async function importVapidPrivateKey(privateKey, publicKey) {
+  const pub = parseVapidPublicKey(publicKey);
+  return crypto.subtle.importKey(
+    'jwk',
+    { kty: 'EC', crv: 'P-256', d: String(privateKey || ''), x: pub.x, y: pub.y, ext: true },
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false,
+    ['sign']
+  );
+}
+function derToJose(der, size) {
+  const bytes = der instanceof Uint8Array ? der : new Uint8Array(der);
+  if (bytes.length === size) return bytes;
+  if (bytes[0] !== 0x30) throw new Error('Unexpected DER signature format');
+  let offset = 2;
+  if (bytes[1] & 0x80) offset = 2 + (bytes[1] & 0x7f);
+  if (bytes[offset] !== 0x02) throw new Error('Unexpected DER signature format');
+  const rLen = bytes[offset + 1];
+  const r = bytes.slice(offset + 2, offset + 2 + rLen);
+  offset = offset + 2 + rLen;
+  if (bytes[offset] !== 0x02) throw new Error('Unexpected DER signature format');
+  const sLen = bytes[offset + 1];
+  const s = bytes.slice(offset + 2, offset + 2 + sLen);
+  const out = new Uint8Array(size);
+  out.set(r.slice(-size / 2), size / 2 - Math.min(r.length, size / 2));
+  out.set(s.slice(-size / 2), size - Math.min(s.length, size / 2));
+  return out;
+}
+async function signVapidJwt(endpoint, subject, publicKey, privateKey) {
+  const aud = new URL(endpoint).origin;
+  const now = Math.floor(Date.now() / 1000);
+  const exp = now + 12 * 60 * 60;
+  const header = b64urlEncodeText(JSON.stringify({ alg: 'ES256', typ: 'JWT' }));
+  const payload = b64urlEncodeText(JSON.stringify({ aud, exp, sub: subject }));
+  const signingInput = `${header}.${payload}`;
+  const key = await importVapidPrivateKey(privateKey, publicKey);
+  const sigDer = new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, utf8Bytes(signingInput)));
+  const joseSig = derToJose(sigDer, 64);
+  return `${signingInput}.${b64urlEncodeBytes(joseSig)}`;
+}
+
+// ── Web Push Payload Encryption (RFC 8291 — aes128gcm) ─────────────────────
+async function encryptWebPushPayload(subscription, payload) {
+  const userPublicRaw = b64urlDecodeBytes(String(subscription?.keys?.p256dh || ''));
+  const authSecret = b64urlDecodeBytes(String(subscription?.keys?.auth || ''));
+  if (userPublicRaw.length !== 65) throw new Error('Invalid subscription public key (p256dh must be 65 bytes)');
+  if (!authSecret.length) throw new Error('Invalid subscription auth secret');
+
+  const uaPublicKey = await crypto.subtle.importKey('raw', userPublicRaw, { name: 'ECDH', namedCurve: 'P-256' }, true, []);
+  const asKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const asPublicRaw = new Uint8Array(await crypto.subtle.exportKey('raw', asKeys.publicKey));
+  const sharedSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: uaPublicKey }, asKeys.privateKey, 256));
+
+  // RFC 8291 §3.3: PRK_key = HKDF-Extract(auth_secret, ECDH_secret)
+  const prkKey = await hkdfExtract(authSecret, sharedSecret);
+  // RFC 8291 §3.3: IKM = HKDF-Expand(PRK_key, key_info, 32)
+  const keyInfo = concatBytes(utf8Bytes('WebPush: info'), Uint8Array.of(0), userPublicRaw, asPublicRaw);
+  const ikm = await hkdfExpand(prkKey, keyInfo, 32);
+
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const contentPrk = await hkdfExtract(salt, ikm);
+  const cek = await hkdfExpand(contentPrk, utf8Bytes('Content-Encoding: aes128gcm\0'), 16);
+  const nonce = await hkdfExpand(contentPrk, utf8Bytes('Content-Encoding: nonce\0'), 12);
+
+  // Pad payload: append 0x02 delimiter (final record indicator)
+  const plainBytes = concatBytes(utf8Bytes(JSON.stringify(payload || {})), Uint8Array.of(0x02));
+
+  const cekKey = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, cekKey, plainBytes));
+
+  // aes128gcm record: salt(16) + rs(4 BE) + idlen(1) + keyid(65)
+  const recordHeader = concatBytes(salt, uint32Bytes(4096), Uint8Array.of(asPublicRaw.length), asPublicRaw);
+  return concatBytes(recordHeader, ciphertext);
+}
+
+// ── VAPID config helper ─────────────────────────────────────────────────────
+function getVapidConfig(env) {
+  return {
+    publicKey: String(env.VAPID_PUBLIC_KEY || '').trim(),
+    privateKey: String(env.VAPID_PRIVATE_KEY || '').trim(),
+    subject: env.VAPID_SUBJECT || 'mailto:admin@rigways.com',
+  };
+}
+
+// ── Send a single Web Push notification ────────────────────────────────────
 /**
- * Send a Web Push notification to a single subscription.
- * @param {object} subscription - { endpoint, keys: { p256dh, auth } }
- * @param {object} payload      - { title, body, icon?, url?, tag? }
- * @param {object} vapid        - { publicKey, privateKey, subject }
- * @returns {Promise<{ok: boolean, status: number, gone: boolean}>}
+ * @param {object} subscription  { endpoint, keys: { p256dh, auth } }
+ * @param {object} payload       { title, body, url?, tag?, event_type? }
+ * @param {object} vapid         { publicKey, privateKey, subject }
+ * @returns {Promise<{ ok: boolean, status: number, gone: boolean }>}
  */
 async function sendPushNotification(subscription, payload, vapid) {
   try {
-    const payloadStr = JSON.stringify(payload);
-    const payloadBytes = new TextEncoder().encode(payloadStr);
-
-    // Build encrypted body + headers using Web Push encryption
-    const { ciphertext, headers } = await encryptPayload(
-      subscription.keys.p256dh,
-      subscription.keys.auth,
-      payloadBytes
-    );
-
-    // VAPID Authorization header
-    const vapidHeaders = await buildVapidHeaders(
-      subscription.endpoint,
-      vapid.subject,
-      vapid.publicKey,
-      vapid.privateKey
-    );
-
-    // Log length for diagnostics before sending
-    console.log(`[Push] RFC 8291 Binary Ciphertext: ${ciphertext.length} bytes`);
-
-    // In Cloudflare Workers, passing a Response body stream is the most reliable way 
-    // to ensure the body is never treated as a string or re-encoded.
-    const binaryBody = new Response(ciphertext).body;
+    const body = await encryptWebPushPayload(subscription, payload);
+    const token = await signVapidJwt(subscription.endpoint, vapid.subject, vapid.publicKey, vapid.privateKey);
 
     const response = await fetch(subscription.endpoint, {
       method: 'POST',
       headers: {
         'TTL': '86400',
+        'Urgency': 'high',
         'Content-Encoding': 'aes128gcm',
         'Content-Type': 'application/octet-stream',
-        ...vapidHeaders,
-        ...headers,
+        'Authorization': `vapid t=${token},k=${vapid.publicKey}`,
       },
-      body: binaryBody,
+      body,
     });
 
-    return {
-      ok: response.ok || response.status === 201,
-      status: response.status,
-      gone: response.status === 410 || response.status === 404,
-    };
+    const ok = response.ok || response.status === 201;
+    const gone = response.status === 410 || response.status === 404;
+    if (!ok && !gone) {
+      const text = await response.text().catch(() => '');
+      console.warn(`[Push] Non-ok response ${response.status} for endpoint ${subscription.endpoint.slice(0, 60)}: ${text.slice(0, 200)}`);
+    }
+    return { ok, status: response.status, gone };
   } catch (e) {
-    console.error('sendPushNotification error:', e);
+    console.error('[Push] sendPushNotification error:', e);
     return { ok: false, status: 0, gone: false };
   }
 }
 
+// ── Send push to all active subscriptions for a user ───────────────────────
 /**
- * Send push notification to all subscriptions for a user.
- * Auto-deletes expired subscriptions (HTTP 410).
+ * Sends push to all active subscriptions belonging to userId.
+ * On HTTP 410/404: soft-deletes the subscription (active = false).
  */
 async function sendPushToUser(db, env, userId, payload) {
   if (!userId || !env.VAPID_PRIVATE_KEY) return { sent: 0, total: 0 };
   try {
     const { data: subs } = await db.from('push_subscriptions', {
-      filters: { 'user_id.eq': userId },
+      filters: { 'user_id.eq': userId, 'active.is': true },
       select: '*',
       limit: 20,
     });
     if (!Array.isArray(subs) || !subs.length) return { sent: 0, total: 0 };
 
     const vapid = getVapidConfig(env);
+    const now = new Date().toISOString();
+
     const results = await Promise.allSettled(
       subs.map(sub =>
         sendPushNotification(
@@ -1878,27 +2011,31 @@ async function sendPushToUser(db, env, userId, payload) {
           vapid
         ).then(async (result) => {
           if (result.gone) {
-            await db.delete('push_subscriptions', { filters: { 'id.eq': sub.id } }).catch(() => {});
+            // Soft-delete: mark inactive instead of hard-delete
+            await db.update('push_subscriptions', { active: false, updated_at: now }, { filters: { 'id.eq': sub.id } }).catch(() => {});
+          } else if (result.ok) {
+            // Track last successful dispatch
+            await db.update('push_subscriptions', { last_used_at: now }, { filters: { 'id.eq': sub.id } }).catch(() => {});
           }
           return result;
         })
       )
     );
-    
+
     return {
       sent: results.filter(r => r.status === 'fulfilled' && r.value.ok).length,
-      total: subs.length
+      total: subs.length,
     };
   } catch (e) {
-    console.warn('sendPushToUser failed:', e);
+    console.warn('[Push] sendPushToUser failed:', e);
     return { sent: 0, total: 0 };
   }
 }
 
+// ── Send push to all active users with given roles ──────────────────────────
 /**
- * Send push notification to all users with specified roles.
- * @param {string[]} roles — e.g. ['admin','manager']
- * @param {string|null} excludeUserId — user to exclude (e.g. the one who triggered the event)
+ * @param {string[]} roles          e.g. ['admin', 'manager']
+ * @param {string|null} excludeUserId  optional user to skip
  */
 async function sendPushToRoles(db, env, roles, payload, excludeUserId = null) {
   if (!env.VAPID_PRIVATE_KEY) return { users: 0, sent: 0 };
@@ -1913,232 +2050,13 @@ async function sendPushToRoles(db, env, roles, payload, excludeUserId = null) {
     const results = await Promise.allSettled(
       eligible.map(u => sendPushToUser(db, env, u.id, payload))
     );
-    
+
     const sent = results.reduce((acc, r) => acc + (r.status === 'fulfilled' ? (r.value?.sent || 0) : 0), 0);
     return { users: eligible.length, sent };
   } catch (e) {
-    console.warn('sendPushToRoles failed:', e);
+    console.warn('[Push] sendPushToRoles failed:', e);
     return { users: 0, sent: 0 };
   }
-}
-
-// ── VAPID config helper ─────────────────────────────
-function getVapidConfig(env) {
-  return {
-    publicKey: sanitizeKey(env.VAPID_PUBLIC_KEY),
-    privateKey: sanitizeKey(env.VAPID_PRIVATE_KEY),
-    subject: env.VAPID_SUBJECT || 'mailto:admin@rigways.com',
-  };
-}
-
-// ── VAPID JWT header generation ─────────────────────
-async function buildVapidHeaders(endpoint, subject, publicKeyBase64, privateKeyBase64) {
-  const audience = new URL(endpoint).origin;
-  const expiration = Math.floor(Date.now() / 1000) + (12 * 60 * 60); // 12 hours
-
-  const header = { typ: 'JWT', alg: 'ES256' };
-  const claims = { aud: audience, exp: expiration, sub: subject };
-
-  const headerB64 = base64urlEncode(JSON.stringify(header));
-  const claimsB64 = base64urlEncode(JSON.stringify(claims));
-  const unsignedToken = `${headerB64}.${claimsB64}`;
-
-  // Import VAPID private key
-  const privateKeyBytes = base64urlDecode(privateKeyBase64);
-  const publicKeyBytes = base64urlDecode(publicKeyBase64);
-
-  // Build JWK for the ECDSA P-256 key
-  const jwk = {
-    kty: 'EC',
-    crv: 'P-256',
-    x: base64urlEncode(publicKeyBytes.slice(1, 33)),
-    y: base64urlEncode(publicKeyBytes.slice(33, 65)),
-    d: base64urlEncode(privateKeyBytes),
-  };
-
-  const key = await crypto.subtle.importKey(
-    'jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']
-  );
-
-  const signature = await crypto.subtle.sign(
-    { name: 'ECDSA', hash: 'SHA-256' },
-    key,
-    new TextEncoder().encode(unsignedToken)
-  );
-
-  // Convert DER signature to raw r||s format
-  const sigBytes = new Uint8Array(signature);
-  const rawSig = derToRaw(sigBytes);
-  const token = `${unsignedToken}.${base64urlEncodeBytes(rawSig)}`;
-
-  // RFC 8292: Authorization: vapid t=${token}, k=${publicKeyBase64}
-  return {
-    'Authorization': `vapid t=${token},k=${publicKeyBase64}`,
-  };
-}
-
-// ── SANITIZE KEYS ───────────────────────────────────
-function sanitizeKey(key) {
-  if (!key) return '';
-  return key.replace(/-----BEGIN[^-]*-----/g, '')
-            .replace(/-----END[^-]*-----/g, '')
-            .replace(/[\s\n\r]/g, '');
-}
-
-// ── Web Push Encryption (RFC 8291 — aes128gcm) ─────
-async function encryptPayload(p256dhBase64, authBase64, payload) {
-  const clientPublicKeyBytes = base64urlDecode(sanitizeKey(p256dhBase64));
-  const authSecret = base64urlDecode(sanitizeKey(authBase64));
-
-  // Import client's public key
-  const clientPublicKey = await crypto.subtle.importKey(
-    'raw', clientPublicKeyBytes, { name: 'ECDH', namedCurve: 'P-256' }, false, []
-  );
-
-  // Generate ephemeral server ECDH key pair
-  const serverKeys = await crypto.subtle.generateKey(
-    { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits', 'deriveKey']
-  );
-
-  // Derive shared secret (IKM)
-  const sharedSecret = await crypto.subtle.deriveBits(
-    { name: 'ECDH', public: clientPublicKey },
-    serverKeys.privateKey,
-    256
-  );
-
-  // Export server public key (local_public_key)
-  const serverPublicKeyBytes = new Uint8Array(
-    await crypto.subtle.exportKey('raw', serverKeys.publicKey)
-  );
-
-  // Generate random salt (16 bytes)
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-
-  // 1. Derive PRK_key (using authSecret as salt)
-  const prkKey = await hkdfExtract(authSecret, new Uint8Array(sharedSecret));
-
-  // 2. Derive PRK (using random salt)
-  const prk = await hkdfExtract(salt, prkKey);
-
-  // 3. Derive Content Encryption Key (CEK)
-  const infoCek = new TextEncoder().encode('Content-Encoding: aes128gcm\0');
-  const cek = await hkdfExpand(prk, infoCek, 16);
-
-  // 4. Derive Nonce
-  const infoNonce = new TextEncoder().encode('Content-Encoding: nonce\0');
-  const nonce = await hkdfExpand(prk, infoNonce, 12);
-
-  // AES-128-GCM encryption
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw', cek, { name: 'AES-GCM' }, false, ['encrypt']
-  );
-
-  // Add padding delimiter (0x02 for the final/only record)
-  const paddedPayload = new Uint8Array(payload.length + 1);
-  paddedPayload.set(payload);
-  paddedPayload[payload.length] = 2;
-
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: nonce }, cryptoKey, paddedPayload
-  );
-
-  // Build aes128gcm record header (RFC 8188):
-  // salt (16) + rs (4) + idlen (1) + keyid (rs bytes)
-  // rs is record size (usually 4096)
-  const rs = 4096;
-  const header = new Uint8Array(16 + 4 + 1 + serverPublicKeyBytes.length);
-  header.set(salt, 0);
-  new DataView(header.buffer).setUint32(16, rs, false);
-  header[20] = serverPublicKeyBytes.length;
-  header.set(serverPublicKeyBytes, 21);
-
-  // Combine header + encrypted
-  const ciphertext = new Uint8Array(header.length + encrypted.byteLength);
-  ciphertext.set(header, 0);
-  ciphertext.set(new Uint8Array(encrypted), header.length);
-
-  return {
-    ciphertext,
-    headers: {
-      'Content-Type': 'application/octet-stream',
-      'Content-Encoding': 'aes128gcm',
-      'Content-Length': String(ciphertext.length),
-    },
-  };
-}
-
-// ── HKDF helpers (Standard RFC 5869) ─────────────────
-async function hkdfExtract(salt, ikm) {
-  const key = await crypto.subtle.importKey('raw', salt, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  return new Uint8Array(await crypto.subtle.sign('HMAC', key, ikm));
-}
-
-async function hkdfExpand(prk, info, length) {
-  const key = await crypto.subtle.importKey('raw', prk, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const infoWithCounter = new Uint8Array(info.length + 1);
-  infoWithCounter.set(info, 0);
-  infoWithCounter[info.length] = 1; // Counter 1 (keys/nonces are short)
-  const result = new Uint8Array(await crypto.subtle.sign('HMAC', key, infoWithCounter));
-  return result.slice(0, length);
-}
-
-
-// ── Base64url helpers ───────────────────────────────
-function base64urlEncode(str) {
-  const bytes = typeof str === 'string' ? new TextEncoder().encode(str) : str;
-  return base64urlEncodeBytes(bytes);
-}
-
-function base64urlEncodeBytes(bytes) {
-  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  let binary = '';
-  for (let i = 0; i < arr.length; i++) binary += String.fromCharCode(arr[i]);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function base64urlDecode(str) {
-  str = str.replace(/-/g, '+').replace(/_/g, '/');
-  while (str.length % 4) str += '=';
-  const binary = atob(str);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-// ── DER to raw signature conversion ─────────────────
-function derToRaw(der) {
-  // If already 64 bytes (raw format), return as-is
-  if (der.length === 64) return der;
-
-  // ECDSA P-256 signatures from WebCrypto may be raw (64 bytes)
-  // or DER encoded. Handle both.
-  if (der[0] !== 0x30) return der; // Not DER, assume raw
-
-  let offset = 2;
-  if (der[1] === 0x81) offset = 3; // Long form length
-
-  // Read r
-  if (der[offset] !== 0x02) return der;
-  offset++;
-  const rLen = der[offset++];
-  let r = der.slice(offset, offset + rLen);
-  offset += rLen;
-
-  // Read s
-  if (der[offset] !== 0x02) return der;
-  offset++;
-  const sLen = der[offset++];
-  let s = der.slice(offset, offset + sLen);
-
-  // Trim leading zeros and pad to 32 bytes
-  if (r.length > 32) r = r.slice(r.length - 32);
-  if (s.length > 32) s = s.slice(s.length - 32);
-
-  const raw = new Uint8Array(64);
-  raw.set(r, 32 - r.length);
-  raw.set(s, 64 - s.length);
-  return raw;
 }
 
 // ── push.js ──
@@ -2148,7 +2066,7 @@ async function handlePush(request, env, path) {
   const method = request.method;
   const db = createSupabase(env);
 
-  /* ── GET /api/push/vapid-key ── public key needed by frontend to subscribe */
+  /* ── GET /api/push/vapid-key — public, no auth needed ── */
   if (path === '/push/vapid-key' && method === 'GET') {
     return ok({ publicKey: env.VAPID_PUBLIC_KEY || '' }, env);
   }
@@ -2156,22 +2074,56 @@ async function handlePush(request, env, path) {
   const session = await getSession(request, env);
   if (!session) return unauth(env);
 
+  /* ── POST /api/push/subscribe — save a browser push subscription ── */
   if (path === '/push/subscribe' && method === 'POST') {
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
     const { endpoint, keys } = body || {};
-    if (!endpoint || !keys?.p256dh || !keys?.auth) return badReq('Missing subscription fields', 'VALIDATION', env);
+    if (!endpoint || !keys?.p256dh || !keys?.auth) return badReq('Missing subscription fields (endpoint, keys.p256dh, keys.auth)', 'VALIDATION', env);
     if (!endpoint.startsWith('https://')) return badReq('Invalid push endpoint (HTTPS required)', 'VALIDATION', env);
-    const { data: existing } = await db.from('push_subscriptions', { filters: { 'user_id.eq': session.sub, 'endpoint.eq': endpoint }, select: 'id', limit: 1 });
+
+    // Check if this endpoint is already registered for this user
+    const { data: existing } = await db.from('push_subscriptions', {
+      filters: { 'user_id.eq': session.sub, 'endpoint.eq': endpoint },
+      select: 'id',
+      limit: 1,
+    });
     const existingRow = Array.isArray(existing) ? existing[0] : existing;
+
+    const ua = request.headers.get('User-Agent') || null;
+    const now = new Date().toISOString();
+
     if (existingRow) {
-      await db.update('push_subscriptions', { p256dh: keys.p256dh, auth: keys.auth, user_agent: request.headers.get('User-Agent') || null }, { filters: { 'id.eq': existingRow.id } });
+      // Re-subscribe: refresh keys + optional metadata
+      await db.update('push_subscriptions', {
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+        active: true,
+        user_agent: ua,
+        ...(body.client_id !== undefined && { client_id: body.client_id }),
+        ...(body.platform !== undefined && { platform: body.platform }),
+        ...(body.is_standalone !== undefined && { is_standalone: Boolean(body.is_standalone) }),
+        updated_at: now,
+      }, { filters: { 'id.eq': existingRow.id } });
       return ok({ subscribed: true, updated: true }, env);
     }
-    const { error } = await db.insert('push_subscriptions', { user_id: session.sub, endpoint, p256dh: keys.p256dh, auth: keys.auth, user_agent: request.headers.get('User-Agent') || null });
+
+    // New subscription
+    const { error } = await db.insert('push_subscriptions', {
+      user_id: session.sub,
+      endpoint,
+      p256dh: keys.p256dh,
+      auth: keys.auth,
+      active: true,
+      user_agent: ua,
+      client_id: body.client_id || null,
+      platform: body.platform || null,
+      is_standalone: body.is_standalone !== undefined ? Boolean(body.is_standalone) : null,
+    });
     if (error) return serverErr(env, error.message || JSON.stringify(error));
     return created({ subscribed: true }, env);
   }
 
+  /* ── DELETE /api/push/unsubscribe ── */
   if (path === '/push/unsubscribe' && method === 'DELETE') {
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
     if (!body?.endpoint) return badReq('Missing endpoint', 'VALIDATION', env);
@@ -2179,225 +2131,44 @@ async function handlePush(request, env, path) {
     return ok({ unsubscribed: true }, env);
   }
 
+  /* ── GET /api/push/status ── */
   if (path === '/push/status' && method === 'GET') {
-    const { count } = await db.count('push_subscriptions', { filters: { 'user_id.eq': session.sub } });
+    const { count } = await db.count('push_subscriptions', { filters: { 'user_id.eq': session.sub, 'active.is': true } });
     return ok({ subscribed: (count || 0) > 0, count: count || 0 }, env);
   }
 
-  if (path === '/push/vapid-key' && method === 'GET') {
-    return ok({ publicKey: env.VAPID_PUBLIC_KEY || '' }, env);
-  }
-
+  /* ── POST /api/push/batch-notify ── */
   if (path === '/push/batch-notify' && method === 'POST') {
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
     const count = parseInt(body.count) || 0;
     if (count < 1) return badReq('Count must be at least 1', 'VALIDATION', env);
-    const payload = { title: 'Certificates Uploaded', body: body.message || `${count} certificate uploaded.`, url: '/certificates.html', tag: 'batch-cert-upload' };
+    const payload = { title: 'Certificates Uploaded', body: body.message || `${count} certificate(s) uploaded.`, url: '/certificates.html', tag: 'batch-cert-upload', event_type: 'cert_upload' };
     await sendPushToUser(db, env, session.sub, payload);
     await sendPushToRoles(db, env, ['admin', 'manager'], payload, session.sub);
     return ok({ notified: true, count }, env);
   }
 
-  /* ── GET /api/push/test ── Send a test notification to yourself */
+  /* ── GET /api/push/test — send a test notification to yourself ── */
   if (path === '/push/test' && method === 'GET') {
-    const payload = { 
-      title: 'Test Notification', 
-      body: 'This is a test notification for your device.', 
-      url: '/notifications.html', 
-      tag: 'test-push-individual' 
-    };
+    const payload = { title: 'Test Notification', body: 'This is a test notification for your device.', url: '/notifications.html', tag: 'test-push-individual', event_type: 'test' };
     const stats = await sendPushToUser(db, env, session.sub, payload);
-    const sentCount = stats?.sent || 0;
-    const totalCount = stats?.total || 0;
-    
-    return ok({ 
-      success: true, 
-      stats, 
-      message: totalCount > 0 
-        ? `Triggered for ${sentCount} of your ${totalCount} registered device(s). Check your notification center.` 
-        : "No active push subscriptions found for your account. Please enable them above." 
+    return ok({
+      success: true,
+      stats,
+      message: stats.total > 0
+        ? `Triggered for ${stats.sent} of your ${stats.total} registered device(s). Check your notification center.`
+        : 'No active push subscriptions found for your account. Please enable them above.',
     }, env);
   }
 
-  /* ── GET /api/push/test-all ── Send a test notification to all admins/managers */
+  /* ── GET /api/push/test-all — broadcast test to all admins/managers ── */
   if (path === '/push/test-all' && method === 'GET') {
     if (!isAdminOrManager(session)) return forbidden(env);
-    const payload = { 
-      title: 'Global Push Test', 
-      body: `Broadcast test triggered by ${session.name}.`, 
-      url: '/notifications.html', 
-      tag: 'test-push-global' 
-    };
+    const payload = { title: 'Global Push Test', body: `Broadcast test triggered by ${session.name}.`, url: '/notifications.html', tag: 'test-push-global', event_type: 'test' };
     const stats = await sendPushToRoles(db, env, ['admin', 'manager'], payload);
-    return ok({ 
-      success: true, 
-      stats, 
-      message: `Broadcasted to ${stats.users} qualified users. Total of ${stats.sent} push notifications triggered.` 
-    }, env);
+    return ok({ success: true, stats, message: `Broadcasted to ${stats.users} qualified users. Total of ${stats.sent} push notification(s) triggered.` }, env);
   }
+
   return badReq('Not found', 'NOT_FOUND', env);
 }
 
-// ── check-expiry.js ──
-// worker/src/routes/check-expiry.js — Cron logic
-
-async function handleCheckExpiry(env) {
-  const db = createSupabase(env);
-  const today = new Date().toISOString().split('T')[0];
-  const in7d = datePlusDays(7);
-  const in14d = datePlusDays(14);
-  const in30d = datePlusDays(30);
-
-  const { data: expired } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved', 'expiry_date.lt': today }, select: 'id,name,cert_number,expiry_date,uploaded_by,client_id', limit: 500 });
-  const { data: crit7 } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved', 'expiry_date.gte': today, 'expiry_date.lte': in7d }, select: 'id,name,cert_number,expiry_date,uploaded_by,client_id', limit: 500 });
-  const { data: warn30 } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved', 'expiry_date.gt': in7d, 'expiry_date.lte': in30d }, select: 'id,name,cert_number,expiry_date,uploaded_by,client_id', limit: 500 });
-
-  const expiredList = Array.isArray(expired) ? expired : [];
-  const criticalList = Array.isArray(crit7) ? crit7 : [];
-  const warningList = Array.isArray(warn30) ? warn30 : [];
-
-  let pushCount = 0;
-  if (expiredList.length > 0) {
-    const payload = { title: `⚠️ ${expiredList.length} Certs Expired`, body: expiredList.slice(0, 3).map(c => c.name || c.cert_number).join(', '), url: '/notifications.html', tag: 'cert-expired' };
-    await sendPushToRoles(db, env, ['admin', 'manager'], payload); pushCount++;
-    const uploaderIds = [...new Set(expiredList.map(c => c.uploaded_by).filter(Boolean))];
-    for (const uid of uploaderIds) {
-      const userCerts = expiredList.filter(c => c.uploaded_by === uid);
-      await sendPushToUser(db, env, uid, { title: `⚠️ ${userCerts.length} of your certs expired`, body: userCerts.map(c => c.name || c.cert_number).join(', '), url: '/certificates.html', tag: 'cert-expired-user' });
-      pushCount++;
-    }
-  }
-  if (criticalList.length > 0) {
-    const payload = { title: `🔴 ${criticalList.length} Certs Expiring (7d)`, body: criticalList.slice(0, 3).map(c => `${c.name || c.cert_number} (${c.expiry_date})`).join(', '), url: '/notifications.html', tag: 'cert-expiring-critical' };
-    await sendPushToRoles(db, env, ['admin', 'manager'], payload); pushCount++;
-
-    const uploaderIds = [...new Set(criticalList.map(c => c.uploaded_by).filter(Boolean))];
-    for (const uid of uploaderIds) {
-      const userCerts = criticalList.filter(c => c.uploaded_by === uid);
-      await sendPushToUser(db, env, uid, { title: `🔴 ${userCerts.length} of your certs expiring (≤7d)`, body: userCerts.map(c => `${c.name || c.cert_number} (${c.expiry_date})`).join(', '), url: '/certificates.html', tag: 'cert-critical-user' });
-      pushCount++;
-    }
-  }
-  if (warningList.length > 0 && new Date().getUTCDay() === 1) {
-    await sendPushToRoles(db, env, ['admin', 'manager'], { title: `🟡 ${warningList.length} Certs Expiring (30d)`, body: `${warningList.length} certificates due soon.`, url: '/notifications.html', tag: 'cert-expiring-warning' });
-    pushCount++;
-
-    const uploaderIds = [...new Set(warningList.map(c => c.uploaded_by).filter(Boolean))];
-    for (const uid of uploaderIds) {
-      const userCerts = warningList.filter(c => c.uploaded_by === uid);
-      await sendPushToUser(db, env, uid, { title: `🟡 ${userCerts.length} of your certs expiring soon (≤30d)`, body: `${userCerts.length} certificates due soon.`, url: '/certificates.html', tag: 'cert-warning-user' });
-      pushCount++;
-    }
-  }
-  return { checked: true, expired: expiredList.length, critical: criticalList.length, warning: warningList.length, pushesSent: pushCount };
-}
-
-function datePlusDays(days) {
-  const d = new Date(); d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().split('T')[0];
-}
-
-// ── Entry point ──
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-
-    // Serve static files for non-API requests
-    if (!url.pathname.startsWith('/api/')) {
-      return env.ASSETS.fetch(request);
-    }
-
-    // Handle CORS preflight
-    if (request.method === 'OPTIONS') return handleOptions(request, env);
-
-    try {
-      const path = url.pathname.replace('/api', '');
-
-      if (path.startsWith('/auth')) return await handleAuth(request, env, path);
-      if (path.startsWith('/users')) return await handleUsers(request, env, path);
-      if (path.startsWith('/assets')) return await handleAssets(request, env, path);
-      if (path.startsWith('/certificates/upload') || path.startsWith('/certificates/file/')) {
-        const uploadResult = await handleCertUpload(request, env, path);
-        if (uploadResult) return uploadResult;
-      }
-      if (path.startsWith('/certificates')) return await handleCertificates(request, env, path);
-      if (path.startsWith('/clients')) return await handleClients(request, env, path);
-      if (path.startsWith('/inspectors')) return await handleInspectors(request, env, path);
-      if (path.startsWith('/functional-locations')) return await handleFunctionalLocations(request, env, path);
-      if (path.startsWith('/notifications')) return await handleNotifications(request, env, path);
-      if (path.startsWith('/reports')) return await handleReports(request, env, path);
-      if (path.startsWith('/push')) return await handlePush(request, env, path);
-
-      /* ── GET /api/diag ── Configuration Diagnostics */
-      if (path === '/diag' && request.method === 'GET') {
-        const checks = {
-          SUPABASE_URL: !!env.SUPABASE_URL,
-          SUPABASE_SERVICE_ROLE_KEY: !!env.SUPABASE_SERVICE_ROLE_KEY,
-          JWT_SECRET: !!env.JWT_SECRET,
-          VAPID_PRIVATE_KEY: !!env.VAPID_PRIVATE_KEY,
-          VAPID_PUBLIC_KEY: !!env.VAPID_PUBLIC_KEY,
-          CRON_SECRET: !!env.CRON_SECRET,
-          CERT_BUCKET: !!env.CERT_BUCKET
-        };
-        
-        let cryptoTest = { ok: false };
-        try {
-          if (env.VAPID_PRIVATE_KEY && env.VAPID_PUBLIC_KEY) {
-            const dummySub = { endpoint: 'https://updates.push.services.mozilla.com/wpush/v2/dummy', keys: { p256dh: 'BNkHRry_3w6SjdeQNJbCpV3ouo7s5FHHSzWhAZQ5oja-X9tabOf8gqO7xRQpVBEHNrlSEazJLeqBY1eBhSMTdig', auth: '8eByt89o4J9v-02e3K5IYA' } };
-            const vapid = { publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY, subject: env.VAPID_SUBJECT || 'mailto:admin@rigways.com' };
-            await buildVapidHeaders(dummySub.endpoint, vapid.subject, vapid.publicKey, vapid.privateKey);
-            await encryptPayload(dummySub.keys.p256dh, dummySub.keys.auth, new TextEncoder().encode('test-diag'));
-            cryptoTest.ok = true;
-          } else { cryptoTest.error = 'Keys missing'; }
-        } catch (e) { cryptoTest.error = e.message || String(e); }
-        
-        let cronWorkerHeartbeat = { ok: false };
-        if (env.CRON_WORKER_URL) {
-          try {
-            const cronRes = await fetch(env.CRON_WORKER_URL, { signal: AbortSignal.timeout(3000) });
-            const text = await cronRes.text();
-            cronWorkerHeartbeat = { 
-              ok: cronRes.ok, 
-              status: cronRes.status, 
-              response: text.slice(0, 50),
-              online: text.includes('active') || text.includes('initiated')
-            };
-          } catch (e) { cronWorkerHeartbeat.error = e.message || String(e); }
-        } else { cronWorkerHeartbeat.error = 'CRON_WORKER_URL not configured'; }
- 
-        return ok({ 
-          success: true, 
-          checks, 
-          cryptoTest,
-          cronWorkerHeartbeat,
-          deployment: 'worker_v2_diag',
-          version: '2.0.5',
-          timestamp: new Date().toISOString() 
-        }, env);
-      }
-
-      // Cron manual trigger (Admin or Secret)
-      if (path === '/cron/check-expiry' && request.method === 'GET') {
-        const cronSecret = env.CRON_SECRET;
-        const authHeader = request.headers.get('Authorization');
-        const isSecretMatch = cronSecret && (authHeader === `Bearer ${cronSecret}` || url.searchParams.get('secret') === cronSecret);
-
-        if (!isSecretMatch) {
-          const session = await getSession(request, env);
-          if (!session || !requireRole(session, ['admin'])) {
-            const reason = !cronSecret ? 'CRON_SECRET_NOT_CONFIGURED' : 'INVALID_SECRET_PROVIDED';
-            return json({ success: false, error: `Forbidden: ${reason}`, code: 'FORBIDDEN' }, 403, env);
-          }
-        }
-
-        const result = await handleCheckExpiry(env);
-        return json({ success: true, data: result }, 200, env);
-      }
-
-      return json({ success: false, error: 'Route not found' }, 404, env);
-    } catch (err) {
-      console.error('Worker error:', err);
-      return json({ success: false, error: 'Error: ' + (err?.message || String(err)), code: 'SERVER_ERROR' }, 500, env);
-    }
-  }
-};
