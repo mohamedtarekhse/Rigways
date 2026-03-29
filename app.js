@@ -159,7 +159,7 @@ const SapSession = (() => {
   function guard(allowedRoles) {
     const s = get();
     if (!s) {
-      window.location.href = 'index.html';
+      window.location.href = '/';
       return null;
     }
     if (allowedRoles && !allowedRoles.includes(s.role)) {
@@ -184,7 +184,7 @@ const SapSession = (() => {
       }).catch(() => {});
     } catch(e) {}
     clear();
-    window.location.href = 'index.html';
+    window.location.href = '/';
   }
 
   function role()       { const s = get(); return s?.role || 'user'; }

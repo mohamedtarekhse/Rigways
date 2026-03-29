@@ -1460,18 +1460,81 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
   .sap-kpi-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* On small screens hide nav item text, show icons only */
 @media (max-width: 640px) {
+  /* Navbar */
   .sap-nav-item span { display: none; }
-  .sap-nav-item { padding: 0 14px; }
+  .sap-nav-item { padding: 0 16px; justify-content: center; height: 100%; }
+  .sap-nav-item svg { width: 18px; height: 18px; }
+  
+  /* Shell / App Header */
+  .sap-shell { padding: 0 var(--sp-sm); }
+  .sap-shell__logo { font-size: 13px; }
+  .sap-shell__logo svg { width: 18px; height: auto; }
+  .sap-shell__app-title { display: none; } /* Space saver */
+  
+  /* User Dropdown constraints */
+  .sap-user-menu {
+    right: 8px;
+    width: 280px;
+    max-width: calc(100vw - 16px);
+  }
+
+  /* Main container & Title area */
+  .sap-main { padding: var(--sp-sm); }
+  .sap-page-header { flex-direction: column; align-items: stretch; gap: var(--sp-md); margin-bottom: var(--sp-md); }
+  
+  /* Buttons stretch on mobile */
+  .sap-page-header__actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; gap: var(--sp-sm); justify-content: stretch; }
+  .sap-page-header__actions .btn { width: 100%; justify-content: center; }
+  .sap-page-header__actions .sap-search-box { grid-column: 1 / -1; width: 100%; height: 40px; }
+  
+  /* KPI Cards */
+  .sap-kpi-grid { grid-template-columns: 1fr; gap: var(--sp-sm); margin-bottom: var(--sp-md); }
+  
+  /* Toolbar / Search filters */
+  .sap-toolbar { flex-direction: column; align-items: stretch; gap: var(--sp-sm); padding: var(--sp-sm); }
+  .sap-toolbar__title { text-align: center; margin-bottom: 2px; }
+  .sap-search-box { width: 100%; height: 38px; }
+
+  /* Forms & Details */
+  .sap-detail-grid { grid-template-columns: 1fr; gap: var(--sp-md); }
+  .sap-form-grid { grid-template-columns: 1fr; gap: var(--sp-md); }
+
+  /* Modals - Take up full screen */
+  .sap-modal-overlay.open .sap-modal {
+    max-width: 100%;
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    margin: 0;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    transform: translateY(0);
+  }
+  .sap-modal__body { flex: 1; overflow-y: auto; padding: var(--sp-md); }
+  .sap-modal__footer { border-radius: 0; padding: var(--sp-md); }
+  .sap-modal__header { padding: var(--sp-md); border-radius: 0; }
+  
+  /* Scrollable Datatables */
+  .sap-card__body { padding: var(--sp-sm); }
+  .sap-table-wrapper {
+    margin: 0 calc(var(--sp-sm) * -1); /* Bleed horizontal scrolling to card edges */
+    padding: 0 var(--sp-sm);
+  }
+  .sap-card__body--no-pad .sap-table-wrapper { margin: 0; padding: 0; }
+  .sap-table td, .sap-table th { padding: 12px 10px; }
+  
+  /* Pagination */
+  .sap-pagination { flex-direction: column; gap: var(--sp-sm); padding: var(--sp-md) var(--sp-sm); }
+  .sap-pagination__info { text-align: center; }
+  .sap-pagination__controls { width: 100%; justify-content: center; }
 }
 
-@media (max-width: 600px) {
-  .sap-main { padding: var(--sp-md); }
-  .sap-page-header { flex-direction: column; }
-  .sap-kpi-grid { grid-template-columns: 1fr; }
-  .sap-toolbar { gap: var(--sp-xs); }
-  .sap-search-box { width: 100%; }
+@media (max-width: 400px) {
+  /* Extreme small screens (e.g. SE/older iPhones) */
+  .sap-shell__logo-badge { display: none; }
+  .sap-page-header__actions { grid-template-columns: 1fr; }
 }
 
 /* ============================================================
@@ -1479,7 +1542,9 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
    ============================================================ */
 @media print {
   .sap-shell, .sap-navbar { display: none; }
-  .sap-main { margin: 0; padding: 0; }
-  .sap-card { box-shadow: none; border: 1px solid #ccc; }
-  .btn { display: none; }
+  .sap-main { margin: 0; padding: 0; height: auto; min-height: auto; }
+  .sap-card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+  .btn, .sap-page-header__actions, .sap-pagination { display: none; }
+  body { background: #fff; }
+  .sap-table-wrapper { overflow: visible; }
 }

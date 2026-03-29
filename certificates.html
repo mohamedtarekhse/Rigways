@@ -891,9 +891,9 @@ function getSession() {
   if (typeof SapSession !== 'undefined') return SapSession.get();
   try {
     const s = sessionStorage.getItem('sap_session');
-    if (!s) { window.location.href = 'index.html'; return null; }
+    if (!s) { window.location.href = '/'; return null; }
     return JSON.parse(s);
-  } catch(e) { window.location.href = 'index.html'; return null; }
+  } catch(e) { window.location.href = '/'; return null; }
 }
 function logout() {
   if (typeof SapSession !== 'undefined') { SapSession.logout(); return; }
@@ -903,7 +903,7 @@ function logout() {
     headers: s.token ? { 'Authorization': 'Bearer ' + s.token } : {},
   }).catch(() => {});
   sessionStorage.removeItem('sap_session');
-  window.location.href = 'index.html';
+  window.location.href = '/';
 }
 
 /* ── Language ── */
