@@ -1442,6 +1442,7 @@ function openUploadModal() {
   loadAssetDropdown();
   loadInspectorDropdown();
   loadClientDropdown();
+  if (session.role === 'technician') lockTechnicianModalFields();
 }
 
 function openEditModal(id) {
@@ -1500,6 +1501,39 @@ function openEditModal(id) {
   });
   loadInspectorDropdown(_inspVal);
   loadClientDropdown(_clientVal);
+  if (session.role === 'technician') lockTechnicianModalFields();
+}
+
+function lockTechnicianModalFields() {
+  if (session?.role !== 'technician') return;
+  const inspectorSel = document.getElementById('f_issuedBy');
+  if (inspectorSel) {
+    const inspectorName = (session.name || '').trim();
+    inspectorSel.innerHTML = inspectorName
+      ? `<option value="${inspectorName}">${inspectorName}</option>`
+      : '<option value="">Technician account missing display name</option>';
+    inspectorSel.value = inspectorName;
+    inspectorSel.disabled = true;
+  }
+
+  const clientSel = document.getElementById('f_client');
+  const clientWrap = document.getElementById('f_client_wrap');
+  if (clientSel) {
+    const cid = (session.customerId || '').trim();
+    if (cid) {
+      const label = CLIENTS_MAP[cid] ? `${CLIENTS_MAP[cid]} (${cid})` : cid;
+      clientSel.innerHTML = `<option value="${cid}">${label}</option>`;
+      clientSel.value = cid;
+      clientSel.disabled = true;
+      if (clientWrap) clientWrap.style.display = 'none';
+    } else {
+      clientSel.innerHTML = '<option value="">Technician account missing client mapping</option>';
+      clientSel.value = '';
+      clientSel.disabled = true;
+      if (clientWrap) clientWrap.style.display = '';
+      showToast('error', 'Client Mapping Missing', 'Technician account has no linked client. Contact administrator.');
+    }
+  }
 }
 
 function closeModal(force) {
@@ -1566,9 +1600,16 @@ async function saveCert() {
   const client         = document.getElementById('f_client')?.value || session?.customerId || '';
   const assetId        = document.getElementById('f_assetId')?.value || '';
   const editId         = document.getElementById('editCertId')?.value || '';
+  const isTechnician   = session?.role === 'technician';
+  const effectiveIssuedBy = isTechnician ? (session?.name || '').trim() : issuedBy;
+  const effectiveClient   = isTechnician ? (session?.customerId || '').trim() : client;
 
-  if (!name || !certType || !issuedBy || !issueDate || !expiryDate) {
+  if (!name || !certType || !effectiveIssuedBy || !issueDate || !expiryDate) {
     showToast('error','Required Fields','Please fill all required fields.'); return;
+  }
+  if (isTechnician && !effectiveClient) {
+    showToast('error','Client Mapping Missing','Your technician account is not linked to a client. Contact administrator.');
+    return;
   }
   if (certType === 'LIFTING' && !liftingSubtype) {
     showToast('error','Lifting Sub-type Required','Please select a lifting sub-type.'); return;
@@ -1589,8 +1630,8 @@ async function saveCert() {
     cert_type:   certType,
     lifting_subtype: liftingSubtype || null,
     asset_id:    assetId   || undefined,
-    client_id:   client    || undefined,
-    issued_by:   issuedBy,
+    client_id:   effectiveClient || undefined,
+    issued_by:   effectiveIssuedBy,
     issue_date:  issueDate,
     expiry_date: expiryDate,
     notes:       jobNumber || null,
@@ -2485,6 +2526,16 @@ async function loadAssetDropdown() {
 async function loadInspectorDropdown(selectedValue) {
   const sel = document.getElementById('f_issuedBy');
   if (!sel) return;
+  if (session?.role === 'technician') {
+    const inspectorName = (session.name || '').trim();
+    sel.innerHTML = inspectorName
+      ? `<option value="${inspectorName}">${inspectorName}</option>`
+      : '<option value="">Technician account missing display name</option>';
+    sel.value = inspectorName;
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
   // Only admin/manager can call GET /api/inspectors; for others keep existing options
   if (!['admin', 'manager'].includes(session?.role)) return;
   try {
@@ -2501,6 +2552,22 @@ async function loadInspectorDropdown(selectedValue) {
 }
 
 async function loadClientDropdown(selectedValue) {
+  if (session?.role === 'technician') {
+    const modalSel = document.getElementById('f_client');
+    const cid = (session.customerId || '').trim();
+    if (modalSel) {
+      if (cid) {
+        const label = CLIENTS_MAP[cid] ? `${CLIENTS_MAP[cid]} (${cid})` : cid;
+        modalSel.innerHTML = `<option value="${cid}">${label}</option>`;
+        modalSel.value = cid;
+      } else {
+        modalSel.innerHTML = '<option value="">Technician account missing client mapping</option>';
+        modalSel.value = '';
+      }
+      modalSel.disabled = true;
+    }
+    return;
+  }
   if (!['admin', 'manager'].includes(session?.role)) return;
   try {
     const res  = await apiFetch('/api/clients?status=active&limit=200');
