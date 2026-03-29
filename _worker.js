@@ -999,6 +999,7 @@ async function handleCertificates(request, env, path) {
     const { valid, errors } = validate(body, {
       name: { required: true, type: 'string', minLength: 2, maxLength: 200 },
       cert_type: { required: true, type: 'string', minLength: 2, maxLength: 100 },
+      lifting_subtype: { required: false, type: 'string', maxLength: 100 },
       asset_id: { required: true, type: 'string' },
       issued_by: { required: true, type: 'string', minLength: 2, maxLength: 200 },
       issue_date: { required: true, type: 'string', pattern: /^\d{4}-\d{2}-\d{2}$/ },
@@ -1021,6 +1022,7 @@ async function handleCertificates(request, env, path) {
     const { data, error } = await db.insert('certificates', {
       name: body.name,
       cert_type: body.cert_type,
+      lifting_subtype: body.lifting_subtype || null,
       asset_id: body.asset_id,
       client_id: body.client_id || asset.client_id || null,
       inspector_id: body.inspector_id || null,
@@ -1058,8 +1060,8 @@ async function handleCertificates(request, env, path) {
       return forbidden(env);
 
     const allowed = isApprover
-      ? ['name', 'cert_type', 'issued_by', 'issue_date', 'expiry_date', 'file_name', 'file_url', 'notes', 'approval_status', 'rejection_reason', 'inspector_id']
-      : ['name', 'cert_type', 'issued_by', 'issue_date', 'expiry_date', 'file_name', 'file_url', 'notes'];
+      ? ['name', 'cert_type', 'lifting_subtype', 'issued_by', 'issue_date', 'expiry_date', 'file_name', 'file_url', 'notes', 'approval_status', 'rejection_reason', 'inspector_id']
+      : ['name', 'cert_type', 'lifting_subtype', 'issued_by', 'issue_date', 'expiry_date', 'file_name', 'file_url', 'notes'];
 
     const update = compact({
       ...pick(body, allowed),
@@ -1280,6 +1282,7 @@ async function _recordCertificateHistory(db, cert, session, action) {
       cert_number: cert.cert_number || null,
       name: cert.name || null,
       cert_type: cert.cert_type || null,
+      lifting_subtype: cert.lifting_subtype || null,
       asset_id: cert.asset_id || null,
       client_id: cert.client_id || null,
       issued_by: cert.issued_by || null,
@@ -1302,6 +1305,7 @@ function _createHistorySnapshot(cert) {
     cert_number: cert.cert_number || null,
     name: cert.name || null,
     cert_type: cert.cert_type || null,
+    lifting_subtype: cert.lifting_subtype || null,
     asset_id: cert.asset_id || null,
     client_id: cert.client_id || null,
     inspector_id: cert.inspector_id || null,

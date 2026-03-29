@@ -253,6 +253,7 @@ input, select, textarea { font-family: inherit; }
   transition: border-color var(--transition);
 }
 .sap-shell__avatar:hover { border-color: rgba(255,255,255,.6); }
+.sap-mobile-menu-btn { display: none; }
 
 /* ---------- User Dropdown ----------------------------------- */
 .sap-user-menu {
@@ -1471,6 +1472,12 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
   .sap-shell__logo { font-size: 13px; }
   .sap-shell__logo svg { width: 18px; height: auto; }
   .sap-shell__app-title { display: none; } /* Space saver */
+  #shellAvatar { display: none; }
+  .sap-mobile-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
   
   /* User Dropdown constraints */
   .sap-user-menu {
