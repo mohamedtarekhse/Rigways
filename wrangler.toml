@@ -22,7 +22,6 @@ JWT_EXPIRES_SEC       = "86400"
 
 # Rotated on 2026-03-29 (P-256, base64url)
 VAPID_PUBLIC_KEY  = "BD87Oh4ZIo9Sc5I0nIxOrXsL_Nll-c6yY8EY-YZqIFGF9YtRzduM2OGPcBfDgpRpx95lf8BmC9WSFPrclOjkg_Q"
-VAPID_PRIVATE_KEY = "9IBAz3Ks3d_aBri4eT5D3FhogrDAKWgvetw_sI15nBc"
 VAPID_SUBJECT     = "mailto:mohamedtarekhse@gmail.com"
 CRON_SECRET      = "acPF080P5DjTPf0DDX0QHOwUmyg9gnvfPo1MlDgKZ7U" # Also set as secret in Cloudflare Dashboard
 CRON_WORKER_URL  = "https://rigways-cron.mohamedtarekhse.workers.dev"
