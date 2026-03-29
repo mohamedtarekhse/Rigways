@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jobs - Rigways ACM</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="app.js"></script>
+</head>
+<body>
+<header class="sap-shell">
+  <a href="dashboard.html" class="sap-shell__logo"><span>Rigways</span><span class="sap-shell__logo-badge">ACM</span></a>
+  <div class="sap-shell__divider"></div>
+  <span class="sap-shell__app-title">Jobs</span>
+  <div class="sap-shell__spacer"></div>
+  <div class="sap-shell__actions">
+    <button class="sap-shell__btn" onclick="window.location.href='notifications.html'">🔔</button>
+    <div class="sap-shell__avatar" id="shellAvatar" onclick="toggleUserMenu()">AD</div>
+  </div>
+  <div class="sap-user-menu" id="userMenu">
+    <div class="sap-user-menu__header">
+      <div class="sap-user-menu__name" id="menuUserName">Admin</div>
+      <div class="sap-user-menu__role" id="menuUserRole">Administrator</div>
+    </div>
+    <div class="sap-user-menu__item sap-user-menu__item--danger" onclick="logout()"><span>Sign Out</span></div>
+  </div>
+</header>
+
+<nav class="sap-navbar"><div class="sap-navbar__inner">
+  <a href="dashboard.html" class="sap-nav-item"><span>Dashboard</span></a>
+  <a href="assets.html" class="sap-nav-item"><span>Assets</span></a>
+  <a href="certificates.html" class="sap-nav-item"><span>Certificates</span></a>
+  <a href="jobs.html" class="sap-nav-item active"><span>Jobs</span></a>
+  <a href="notifications.html" class="sap-nav-item"><span>Notifications</span></a>
+  <a href="reports.html" class="sap-nav-item"><span>Reports</span></a>
+</div></nav>
+
+<main class="sap-main" style="padding-top:calc(var(--sap-shell-height) + var(--sap-navbar-height) + 12px);">
+  <div class="sap-page-header"><h1 class="sap-page-title">Jobs</h1></div>
+  <div class="sap-card">
+    <div class="sap-form-grid sap-form-grid--3col">
+      <div class="sap-field"><label class="sap-label">Job Number (optional)</label><input id="jobNumber" class="sap-input" placeholder="Auto if empty" /></div>
+      <div class="sap-field"><label class="sap-label">Client ID</label><input id="jobClient" class="sap-input" placeholder="C001" /></div>
+      <div class="sap-field"><label class="sap-label">Title</label><input id="jobTitle" class="sap-input" /></div>
+      <div class="sap-field" style="grid-column:1/-1;"><label class="sap-label">Inspector IDs (comma-separated)</label><input id="jobInspectors" class="sap-input" placeholder="uuid1,uuid2" /></div>
+    </div>
+    <button class="btn btn-primary" onclick="createJob()">Create Job</button>
+  </div>
+
+  <div class="sap-card" style="margin-top:12px;">
+    <table class="sap-table">
+      <thead><tr><th>Job Number</th><th>Client</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody id="jobsBody"></tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+let session = null;
+function getSession(){ return (typeof SapSession!=='undefined') ? SapSession.get() : JSON.parse(sessionStorage.getItem('sap_session')||'null'); }
+function logout(){ if (typeof SapSession !== 'undefined') return SapSession.logout(); sessionStorage.removeItem('sap_session'); location.href='/'; }
+function toggleUserMenu(){ document.getElementById('userMenu')?.classList.toggle('open'); }
+document.addEventListener('click', e => { if (!e.target.closest('#shellAvatar') && !e.target.closest('#mobileMenuBtn') && !e.target.closest('#userMenu')) document.getElementById('userMenu')?.classList.remove('open'); });
+
+async function loadJobs(){
+  const res = await apiFetch('/api/jobs?limit=200'); const raw = await res.json(); const jobs = (raw.data||raw).jobs || [];
+  document.getElementById('jobsBody').innerHTML = jobs.map(j => `<tr>
+    <td>${j.job_number||''}</td><td>${j.client_id||''}</td><td>${j.status||''}</td>
+    <td>
+      <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','close')">Close</button>
+      <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','reopen')">Reopen</button>
+      <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','mark_done')">Mark Done</button>
+    </td></tr>`).join('');
+}
+async function createJob(){
+  const inspector_ids = document.getElementById('jobInspectors').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const body = {
+    job_number: document.getElementById('jobNumber').value.trim() || undefined,
+    client_id: document.getElementById('jobClient').value.trim(),
+    title: document.getElementById('jobTitle').value.trim() || null,
+    inspector_ids
+  };
+  const res = await apiFetch('/api/jobs',{method:'POST',body:JSON.stringify(body)}); const raw = await res.json();
+  if(!raw.success) return alert(raw.error||'Create failed');
+  await loadJobs();
+}
+async function jobAction(id, action){
+  const res = await apiFetch('/api/jobs/'+id,{method:'PATCH',body:JSON.stringify({action})}); const raw = await res.json();
+  if(!raw.success) return alert(raw.error||'Action failed');
+  await loadJobs();
+}
+document.addEventListener('DOMContentLoaded', async ()=>{
+  session = getSession(); if(!session) return location.href='/';
+  if (!['admin','manager'].includes(session.role)) return location.href='dashboard.html';
+  document.getElementById('menuUserName').textContent = session.name || '';
+  document.getElementById('menuUserRole').textContent = session.role || '';
+  await loadJobs();
+});
+</script>
+</body>
+</html>

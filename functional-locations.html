@@ -462,7 +462,7 @@ function logout() {
 }
 function toggleUserMenu() { document.getElementById('userMenu').classList.toggle('open'); }
 document.addEventListener('click', e => {
-  if (!e.target.closest('#shellAvatar') && !e.target.closest('#userMenu'))
+  if (!e.target.closest('#shellAvatar') && !e.target.closest('#mobileMenuBtn') && !e.target.closest('#userMenu'))
     document.getElementById('userMenu').classList.remove('open');
 });
 
