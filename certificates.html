@@ -606,8 +606,16 @@
       </div>
     </div>
     <div class="sap-pagination" id="pagination">
-      <div class="sap-pagination__info" id="paginationInfo">Showing 1–15 of 114</div>
+      <div class="sap-pagination__info" id="paginationInfo">Showing 1–25 of 114</div>
       <div class="sap-pagination__controls" id="paginationControls"></div>
+      <div class="sap-pagination__size">
+        <label for="pageSizeSelect" style="font-size:12px;color:var(--sap-text-secondary);">Rows:</label>
+        <select id="pageSizeSelect" class="sap-select" style="height:30px;padding:2px 8px;" onchange="setPageSize(this.value)">
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
     </div>
   </div>
 </main>
@@ -878,7 +886,9 @@ function toggleLang() {}
 /* ── State ── */
 let session = null;
 let sortCol = 'expiryDate'; let sortDir = 1;
-let currentPage = 1; const PAGE_SIZE = 15;
+let currentPage = 1;
+let PAGE_SIZE = Number(localStorage.getItem('sap_cert_page_size') || 25);
+if (![25,50,100].includes(PAGE_SIZE)) PAGE_SIZE = 25;
 let activeStatusFilter = 'all';
 let filteredData = [];
 let selectedFile = null;
@@ -1257,6 +1267,15 @@ function goPage(p) {
   currentPage = p; renderTable();
 }
 
+function setPageSize(size) {
+  const parsed = Number(size);
+  if (![25,50,100].includes(parsed)) return;
+  PAGE_SIZE = parsed;
+  localStorage.setItem('sap_cert_page_size', String(parsed));
+  currentPage = 1;
+  renderTable();
+}
+
 /* ── Filters ── */
 function filterStatus(val, el) {
   activeStatusFilter = val;
@@ -1567,7 +1586,8 @@ async function saveCert() {
   /* ── Step 1: Save/update the cert record (without file fields) ── */
   const payload = {
     name,
-    cert_type:   certType + (liftingSubtype ? ' — ' + liftingSubtype : ''),
+    cert_type:   certType,
+    lifting_subtype: liftingSubtype || null,
     asset_id:    assetId   || undefined,
     client_id:   client    || undefined,
     issued_by:   issuedBy,
@@ -2523,10 +2543,17 @@ async function loadCerts() {
     const assetMap = {};
     (ad.assets || ad || []).forEach(a => { if (a.id) assetMap[a.id] = a.asset_number || a.id; });
     window._assetMap = assetMap;
-    CERTS = (cd.certificates || cd || []).map(cert => ({
+    CERTS = (cd.certificates || cd || []).map(cert => {
+      const rawType = String(cert.cert_type || '');
+      const parts = rawType.split(' — ');
+      const baseType = parts[0] || rawType;
+      const inferredSubtype = parts.length > 1 ? parts.slice(1).join(' — ') : '';
+      const liftingSubtype = cert.lifting_subtype || inferredSubtype || '';
+      return ({
       ...cert,
       certId:          cert.cert_number || cert.id,
-      certType:        cert.cert_type,
+      certType:        baseType,
+      liftingSubtype,
       approvalStatus:  cert.approval_status,
       expiryDate:      cert.expiry_date,
       issueDate:       cert.issue_date,
@@ -2540,7 +2567,7 @@ async function loadCerts() {
       uploadTime:      cert.created_at || '',   // full ISO timestamp for accurate 24hr window
       uploadedBy:      cert.uploaded_by_username || cert.uploaded_by || '',
       uploaded_by:     cert.uploaded_by || '',
-    }));
+    })});
     window._certUrls = {};
     CERTS.forEach(cert => { if (cert.file_url) window._certUrls[cert.id] = cert.file_url; });
   } catch(e) { CERTS = []; }
@@ -2548,6 +2575,8 @@ async function loadCerts() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  const pageSizeSelect = document.getElementById('pageSizeSelect');
+  if (pageSizeSelect) pageSizeSelect.value = String(PAGE_SIZE);
   session = getSession();
   if (!session) return;
   const role = session.role;
