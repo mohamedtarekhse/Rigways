@@ -1276,6 +1276,15 @@ function setPageSize(size) {
   renderTable();
 }
 
+function setPageSize(size) {
+  const parsed = Number(size);
+  if (![25,50,100].includes(parsed)) return;
+  PAGE_SIZE = parsed;
+  localStorage.setItem('sap_cert_page_size', String(parsed));
+  currentPage = 1;
+  renderTable();
+}
+
 /* ── Filters ── */
 function filterStatus(val, el) {
   activeStatusFilter = val;
