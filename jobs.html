@@ -9,9 +9,11 @@
 </head>
 <body>
 <header class="sap-shell">
-  <a href="dashboard.html" class="sap-shell__logo"><span>Rigways</span><span class="sap-shell__logo-badge">ACM</span></a>
+  <a href="dashboard.html" class="sap-shell__logo">
+    <span>Rigways</span><span class="sap-shell__logo-badge">ACM</span>
+  </a>
   <div class="sap-shell__divider"></div>
-  <span class="sap-shell__app-title">Jobs</span>
+  <span class="sap-shell__app-title">Jobs Workflow</span>
   <div class="sap-shell__spacer"></div>
   <div class="sap-shell__actions">
     <button class="sap-shell__btn" onclick="window.location.href='notifications.html'">🔔</button>
@@ -22,27 +24,49 @@
       <div class="sap-user-menu__name" id="menuUserName">Admin</div>
       <div class="sap-user-menu__role" id="menuUserRole">Administrator</div>
     </div>
+    <div class="sap-user-menu__item" onclick="window.location.href='dashboard.html'"><span>Dashboard</span></div>
+    <div class="sap-user-menu__sep"></div>
     <div class="sap-user-menu__item sap-user-menu__item--danger" onclick="logout()"><span>Sign Out</span></div>
   </div>
 </header>
 
-<nav class="sap-navbar"><div class="sap-navbar__inner">
-  <a href="dashboard.html" class="sap-nav-item"><span>Dashboard</span></a>
-  <a href="assets.html" class="sap-nav-item"><span>Assets</span></a>
-  <a href="certificates.html" class="sap-nav-item"><span>Certificates</span></a>
-  <a href="jobs.html" class="sap-nav-item active"><span>Jobs</span></a>
-  <a href="notifications.html" class="sap-nav-item"><span>Notifications</span></a>
-  <a href="reports.html" class="sap-nav-item"><span>Reports</span></a>
-</div></nav>
+<nav class="sap-navbar">
+  <div class="sap-navbar__inner">
+    <a href="dashboard.html" class="sap-nav-item"><span>Dashboard</span></a>
+    <a href="assets.html" class="sap-nav-item"><span>Assets</span></a>
+    <a href="certificates.html" class="sap-nav-item"><span>Certificates</span></a>
+    <a href="jobs.html" class="sap-nav-item active"><span>Jobs</span></a>
+    <a href="notifications.html" class="sap-nav-item"><span>Notifications</span></a>
+    <a href="reports.html" class="sap-nav-item"><span>Reports</span></a>
+    <a href="clients.html" class="sap-nav-item" id="adminClientsLink"><span>Clients</span></a>
+    <a href="inspectors.html" class="sap-nav-item" id="inspectorsLink"><span>Inspectors</span></a>
+    <a href="functional-locations.html" class="sap-nav-item" id="funcLocsLink"><span>Func. Locations</span></a>
+  </div>
+</nav>
 
 <main class="sap-main" style="padding-top:calc(var(--sap-shell-height) + var(--sap-navbar-height) + 12px);">
-  <div class="sap-page-header"><h1 class="sap-page-title">Jobs</h1></div>
+  <div class="sap-page-header"><h1 class="sap-page-title">Jobs Dashboard</h1></div>
+
   <div class="sap-card">
-    <div class="sap-form-grid sap-form-grid--3col">
-      <div class="sap-field"><label class="sap-label">Job Number (optional)</label><input id="jobNumber" class="sap-input" placeholder="Auto if empty" /></div>
-      <div class="sap-field"><label class="sap-label">Client ID</label><input id="jobClient" class="sap-input" placeholder="C001" /></div>
-      <div class="sap-field"><label class="sap-label">Title</label><input id="jobTitle" class="sap-input" /></div>
-      <div class="sap-field" style="grid-column:1/-1;"><label class="sap-label">Inspector IDs (comma-separated)</label><input id="jobInspectors" class="sap-input" placeholder="uuid1,uuid2" /></div>
+    <div class="sap-form-grid sap-form-grid--2col">
+      <div class="sap-field">
+        <label class="sap-label">Job Number (optional)</label>
+        <input id="jobNumber" class="sap-input" placeholder="Auto if empty" />
+      </div>
+      <div class="sap-field">
+        <label class="sap-label">Client (active)</label>
+        <select id="jobClientSelect" class="sap-select">
+          <option value="">Select client…</option>
+        </select>
+      </div>
+      <div class="sap-field" style="grid-column:1/-1;">
+        <label class="sap-label">Inspectors (active, multi-select)</label>
+        <select id="jobInspectorsSelect" class="sap-select" multiple size="6"></select>
+      </div>
+      <div class="sap-field" style="grid-column:1/-1;">
+        <label class="sap-label">Title</label>
+        <input id="jobTitle" class="sap-input" />
+      </div>
     </div>
     <button class="btn btn-primary" onclick="createJob()">Create Job</button>
   </div>
@@ -60,10 +84,42 @@ let session = null;
 function getSession(){ return (typeof SapSession!=='undefined') ? SapSession.get() : JSON.parse(sessionStorage.getItem('sap_session')||'null'); }
 function logout(){ if (typeof SapSession !== 'undefined') return SapSession.logout(); sessionStorage.removeItem('sap_session'); location.href='/'; }
 function toggleUserMenu(){ document.getElementById('userMenu')?.classList.toggle('open'); }
-document.addEventListener('click', e => { if (!e.target.closest('#shellAvatar') && !e.target.closest('#mobileMenuBtn') && !e.target.closest('#userMenu')) document.getElementById('userMenu')?.classList.remove('open'); });
+document.addEventListener('click', e => {
+  if (!e.target.closest('#shellAvatar') && !e.target.closest('#mobileMenuBtn') && !e.target.closest('#userMenu'))
+    document.getElementById('userMenu')?.classList.remove('open');
+});
+
+async function loadClientsDropdown() {
+  const sel = document.getElementById('jobClientSelect');
+  if (!sel) return;
+  const res = await apiFetch('/api/clients?status=active&limit=500');
+  const raw = await res.json();
+  const list = (raw.data?.clients || raw.data || []).filter(c => c.status === 'active');
+  sel.innerHTML = '<option value="">Select client…</option>' + list.map(c => {
+    const val = c.client_id || c.id;
+    return `<option value="${val}">${c.name} (${val})</option>`;
+  }).join('');
+}
+
+async function loadInspectorsDropdown() {
+  const sel = document.getElementById('jobInspectorsSelect');
+  if (!sel) return;
+  const res = await apiFetch('/api/inspectors?status=active&limit=500');
+  const raw = await res.json();
+  const list = (raw.data?.inspectors || raw.data || []).filter(i => i.status === 'active');
+  sel.innerHTML = list.map(i => `<option value="${i.id}">${i.name}${i.title ? ' — ' + i.title : ''}</option>`).join('');
+}
+
+function selectedInspectorIds() {
+  const sel = document.getElementById('jobInspectorsSelect');
+  if (!sel) return [];
+  return Array.from(sel.selectedOptions || []).map(o => o.value).filter(Boolean);
+}
 
 async function loadJobs(){
-  const res = await apiFetch('/api/jobs?limit=200'); const raw = await res.json(); const jobs = (raw.data||raw).jobs || [];
+  const res = await apiFetch('/api/jobs?limit=200');
+  const raw = await res.json();
+  const jobs = (raw.data||raw).jobs || [];
   document.getElementById('jobsBody').innerHTML = jobs.map(j => `<tr>
     <td>${j.job_number||''}</td><td>${j.client_id||''}</td><td>${j.status||''}</td>
     <td>
@@ -72,29 +128,45 @@ async function loadJobs(){
       <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','mark_done')">Mark Done</button>
     </td></tr>`).join('');
 }
+
 async function createJob(){
-  const inspector_ids = document.getElementById('jobInspectors').value.split(',').map(s=>s.trim()).filter(Boolean);
   const body = {
     job_number: document.getElementById('jobNumber').value.trim() || undefined,
-    client_id: document.getElementById('jobClient').value.trim(),
+    client_id: document.getElementById('jobClientSelect').value.trim(),
     title: document.getElementById('jobTitle').value.trim() || null,
-    inspector_ids
+    inspector_ids: selectedInspectorIds(),
   };
-  const res = await apiFetch('/api/jobs',{method:'POST',body:JSON.stringify(body)}); const raw = await res.json();
+  if (!body.client_id) return alert('Client is required');
+  if (!body.inspector_ids.length) return alert('Select at least one inspector');
+  const res = await apiFetch('/api/jobs',{method:'POST',body:JSON.stringify(body)});
+  const raw = await res.json();
   if(!raw.success) return alert(raw.error||'Create failed');
   await loadJobs();
 }
+
 async function jobAction(id, action){
-  const res = await apiFetch('/api/jobs/'+id,{method:'PATCH',body:JSON.stringify({action})}); const raw = await res.json();
+  const res = await apiFetch('/api/jobs/'+id,{method:'PATCH',body:JSON.stringify({action})});
+  const raw = await res.json();
   if(!raw.success) return alert(raw.error||'Action failed');
   await loadJobs();
 }
+
 document.addEventListener('DOMContentLoaded', async ()=>{
-  session = getSession(); if(!session) return location.href='/';
+  session = getSession();
+  if(!session) return location.href='/';
   if (!['admin','manager'].includes(session.role)) return location.href='dashboard.html';
   document.getElementById('menuUserName').textContent = session.name || '';
   document.getElementById('menuUserRole').textContent = session.role || '';
-  await loadJobs();
+
+  if (session.role !== 'admin') document.getElementById('adminClientsLink').style.display = 'none';
+  if (session.role !== 'admin' && session.role !== 'manager') {
+    document.getElementById('inspectorsLink').style.display = 'none';
+    document.getElementById('funcLocsLink').style.display = 'none';
+  } else if (session.role === 'manager') {
+    document.getElementById('funcLocsLink').style.display = 'none';
+  }
+
+  await Promise.all([loadClientsDropdown(), loadInspectorsDropdown(), loadJobs()]);
 });
 </script>
 </body>
