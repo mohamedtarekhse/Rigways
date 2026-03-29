@@ -441,6 +441,150 @@ async function handleUsers(request, env, path) {
   return badReq('Not found', 'NOT_FOUND', env);
 }
 
+// ── jobs.js ──
+// Job workflow: one job belongs to one client, many inspectors can be assigned.
+async function handleJobs(request, env, path) {
+  const method = request.method;
+  const db = createSupabase(env);
+  const session = await getSession(request, env);
+  if (!session) return unauth(env);
+
+  const idM = path.match(/^\/jobs\/([^/]+)$/);
+  const inspectorsM = path.match(/^\/jobs\/([^/]+)\/inspectors$/);
+  const jobId = idM?.[1];
+  const jobInspectorsId = inspectorsM?.[1];
+
+  const isAdminOrManager = requireRole(session, ['admin', 'manager']);
+  const isTechnician = session.role === 'technician';
+
+  function buildJobNumber() {
+    const y = new Date().getUTCFullYear();
+    const rnd = String(Math.floor(Math.random() * 100000)).padStart(5, '0');
+    return `JOB-${y}-${rnd}`;
+  }
+
+  async function addJobEvent(job_id, event_type, payload = {}) {
+    try {
+      await db.insert('job_events', {
+        job_id,
+        event_type,
+        actor_user_id: session.sub,
+        payload_json: payload,
+      });
+    } catch (e) { console.warn('job event failed:', e); }
+  }
+
+  if (!jobId && !jobInspectorsId && method === 'GET') {
+    const limit = Math.min(parseInt(new URL(request.url).searchParams.get('limit') || '50', 10), 200);
+    const offset = parseInt(new URL(request.url).searchParams.get('offset') || '0', 10);
+    const url = new URL(request.url);
+    const filters = {};
+    if (url.searchParams.get('status')) filters['status.eq'] = url.searchParams.get('status');
+    if (url.searchParams.get('client_id') && isAdminOrManager) filters['client_id.eq'] = url.searchParams.get('client_id');
+    if (!isAdminOrManager && session.customerId) filters['client_id.eq'] = session.customerId;
+    const { data, error } = await db.from('jobs', { select: '*', filters, limit, offset, order: 'created_at.desc' });
+    if (error) return serverErr(env, error.message || JSON.stringify(error));
+    return ok({ jobs: data || [], limit, offset }, env);
+  }
+
+  if (!jobId && !jobInspectorsId && method === 'POST') {
+    if (!isAdminOrManager) return forbidden(env);
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    const { valid, errors } = validate(body, {
+      client_id: { required: true, type: 'string', minLength: 1, maxLength: 20 },
+      title: { required: false, type: 'string', maxLength: 200 },
+      notes: { required: false, type: 'string', maxLength: 4000 },
+    });
+    if (!valid) return badReq(errors.join('; '), 'VALIDATION', env);
+
+    const inspectorIds = Array.isArray(body.inspector_ids) ? body.inspector_ids.filter(Boolean) : [];
+    if (!inspectorIds.length) return badReq('At least one inspector is required', 'VALIDATION', env);
+
+    const jobNumber = String(body.job_number || '').trim() || buildJobNumber();
+    const { data, error } = await db.insert('jobs', {
+      job_number: jobNumber,
+      client_id: body.client_id,
+      title: body.title || null,
+      notes: body.notes || null,
+      status: 'active',
+      created_by: session.sub,
+    });
+    if (error) return serverErr(env, error.message || JSON.stringify(error));
+    const job = Array.isArray(data) ? data[0] : data;
+    if (!job?.id) return serverErr(env, 'Failed to create job');
+
+    for (const inspector_id of inspectorIds) {
+      await db.insert('job_inspectors', { job_id: job.id, inspector_id, assigned_by: session.sub }).catch(() => {});
+    }
+    await addJobEvent(job.id, 'created', { inspector_ids: inspectorIds });
+    return created(job, env);
+  }
+
+  if (jobId && method === 'GET') {
+    const { data } = await db.from('jobs', { filters: { 'id.eq': jobId }, select: '*', limit: 1 });
+    const job = Array.isArray(data) ? data[0] : data;
+    if (!job) return notFound('Job', env);
+    if (!isAdminOrManager && session.customerId && job.client_id !== session.customerId) return forbidden(env);
+    return ok(job, env);
+  }
+
+  if (jobId && method === 'PATCH') {
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    const { data: ex } = await db.from('jobs', { filters: { 'id.eq': jobId }, select: '*', limit: 1 });
+    const existing = Array.isArray(ex) ? ex[0] : ex;
+    if (!existing) return notFound('Job', env);
+    if (!isAdminOrManager && (!session.customerId || existing.client_id !== session.customerId)) return forbidden(env);
+
+    let patch = {};
+    const action = String(body.action || '').trim();
+    if (action === 'mark_done') {
+      if (!isTechnician && !isAdminOrManager) return forbidden(env);
+      patch = { status: 'technician_done', finished_by: session.sub, finished_at: new Date().toISOString() };
+      await _notifyRoles(db, env, ['admin', 'manager'], 'job_finished', 'Job Finished by Technician', `Job ${existing.job_number} is marked as finished by ${session.name}.`, 'job', jobId, [session.sub]);
+      await addJobEvent(jobId, 'technician_done');
+    } else if (action === 'close') {
+      if (!isAdminOrManager) return forbidden(env);
+      patch = { status: 'closed', closed_by: session.sub, closed_at: new Date().toISOString() };
+      await addJobEvent(jobId, 'closed', { reason: body.reason || null });
+    } else if (action === 'reopen') {
+      if (!isAdminOrManager) return forbidden(env);
+      patch = { status: 'reopened', reopened_by: session.sub, reopened_at: new Date().toISOString() };
+      await addJobEvent(jobId, 'reopened', { reason: body.reason || null });
+    } else {
+      if (!isAdminOrManager) return forbidden(env);
+      patch = compact(pick(body, ['title', 'notes']));
+    }
+    patch.updated_at = new Date().toISOString();
+    const { data, error } = await db.update('jobs', patch, { filters: { 'id.eq': jobId } });
+    if (error) return serverErr(env, error.message || JSON.stringify(error));
+    return ok(Array.isArray(data) ? data[0] : data, env);
+  }
+
+  if (jobInspectorsId && method === 'GET') {
+    const { data, error } = await db.from('job_inspectors', {
+      filters: { 'job_id.eq': jobInspectorsId },
+      select: '*',
+      order: 'created_at.asc',
+    });
+    if (error) return serverErr(env, error.message || JSON.stringify(error));
+    return ok({ inspectors: data || [] }, env);
+  }
+
+  if (jobInspectorsId && method === 'POST') {
+    if (!isAdminOrManager) return forbidden(env);
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    const inspectorIds = Array.isArray(body.inspector_ids) ? body.inspector_ids.filter(Boolean) : [];
+    if (!inspectorIds.length) return badReq('inspector_ids is required', 'VALIDATION', env);
+    for (const inspector_id of inspectorIds) {
+      await db.insert('job_inspectors', { job_id: jobInspectorsId, inspector_id, assigned_by: session.sub }).catch(() => {});
+    }
+    await addJobEvent(jobInspectorsId, 'inspectors_assigned', { inspector_ids: inspectorIds });
+    return ok({ assigned: inspectorIds.length }, env);
+  }
+
+  return badReq('Not found', 'NOT_FOUND', env);
+}
+
 // ── assets.js ──
 // worker/src/routes/assets.js
 
@@ -2381,6 +2525,7 @@ export default {
 
       if (path.startsWith('/auth')) return await handleAuth(request, env, path);
       if (path.startsWith('/users')) return await handleUsers(request, env, path);
+      if (path.startsWith('/jobs')) return await handleJobs(request, env, path);
       if (path.startsWith('/assets')) return await handleAssets(request, env, path);
       if (path.startsWith('/certificates/upload') || path.startsWith('/certificates/file/')) {
         const uploadResult = await handleCertUpload(request, env, path);
