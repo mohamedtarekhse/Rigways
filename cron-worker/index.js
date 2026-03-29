@@ -15,14 +15,21 @@ export default {
 
     try {
       const response = await fetch(`${apiBase}/api/cron/check-expiry`, {
-        method: 'GET',
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${secret}`,
-          'User-Agent': 'Rigways-Cron-Worker'
-        }
+          'User-Agent': 'Rigways-Cron-Worker',
+          'Cache-Control': 'no-store',
+        },
       });
 
-      const result = await response.json();
+      const rawText = await response.text();
+      let result = null;
+      try { result = JSON.parse(rawText); } catch (_) { result = { raw: rawText.slice(0, 300) }; }
+      if (!response.ok) {
+        console.error('Cron trigger failed:', response.status, JSON.stringify(result));
+        return;
+      }
       console.log('Cron trigger result:', JSON.stringify(result));
     } catch (e) {
       console.error('Failed to trigger cron via API:', e);
