@@ -11,7 +11,12 @@
 function json(body, status = 200, env = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json', ...cors(env) },
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      ...cors(env),
+    },
   });
 }
 
@@ -431,6 +436,150 @@ async function handleUsers(request, env, path) {
     if (session.sub === uid) return badReq('Cannot disable your own account', 'SELF_DISABLE', env);
     await db.update('users', { is_active: false, updated_at: new Date().toISOString() }, { filters: { 'id.eq': uid } });
     return ok({ id: uid, is_active: false }, env);
+  }
+
+  return badReq('Not found', 'NOT_FOUND', env);
+}
+
+// ── jobs.js ──
+// Job workflow: one job belongs to one client, many inspectors can be assigned.
+async function handleJobs(request, env, path) {
+  const method = request.method;
+  const db = createSupabase(env);
+  const session = await getSession(request, env);
+  if (!session) return unauth(env);
+
+  const idM = path.match(/^\/jobs\/([^/]+)$/);
+  const inspectorsM = path.match(/^\/jobs\/([^/]+)\/inspectors$/);
+  const jobId = idM?.[1];
+  const jobInspectorsId = inspectorsM?.[1];
+
+  const isAdminOrManager = requireRole(session, ['admin', 'manager']);
+  const isTechnician = session.role === 'technician';
+
+  function buildJobNumber() {
+    const y = new Date().getUTCFullYear();
+    const rnd = String(Math.floor(Math.random() * 100000)).padStart(5, '0');
+    return `JOB-${y}-${rnd}`;
+  }
+
+  async function addJobEvent(job_id, event_type, payload = {}) {
+    try {
+      await db.insert('job_events', {
+        job_id,
+        event_type,
+        actor_user_id: session.sub,
+        payload_json: payload,
+      });
+    } catch (e) { console.warn('job event failed:', e); }
+  }
+
+  if (!jobId && !jobInspectorsId && method === 'GET') {
+    const limit = Math.min(parseInt(new URL(request.url).searchParams.get('limit') || '50', 10), 200);
+    const offset = parseInt(new URL(request.url).searchParams.get('offset') || '0', 10);
+    const url = new URL(request.url);
+    const filters = {};
+    if (url.searchParams.get('status')) filters['status.eq'] = url.searchParams.get('status');
+    if (url.searchParams.get('client_id') && isAdminOrManager) filters['client_id.eq'] = url.searchParams.get('client_id');
+    if (!isAdminOrManager && session.customerId) filters['client_id.eq'] = session.customerId;
+    const { data, error } = await db.from('jobs', { select: '*', filters, limit, offset, order: 'created_at.desc' });
+    if (error) return serverErr(env, error.message || JSON.stringify(error));
+    return ok({ jobs: data || [], limit, offset }, env);
+  }
+
+  if (!jobId && !jobInspectorsId && method === 'POST') {
+    if (!isAdminOrManager) return forbidden(env);
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    const { valid, errors } = validate(body, {
+      client_id: { required: true, type: 'string', minLength: 1, maxLength: 20 },
+      title: { required: false, type: 'string', maxLength: 200 },
+      notes: { required: false, type: 'string', maxLength: 4000 },
+    });
+    if (!valid) return badReq(errors.join('; '), 'VALIDATION', env);
+
+    const inspectorIds = Array.isArray(body.inspector_ids) ? body.inspector_ids.filter(Boolean) : [];
+    if (!inspectorIds.length) return badReq('At least one inspector is required', 'VALIDATION', env);
+
+    const jobNumber = String(body.job_number || '').trim() || buildJobNumber();
+    const { data, error } = await db.insert('jobs', {
+      job_number: jobNumber,
+      client_id: body.client_id,
+      title: body.title || null,
+      notes: body.notes || null,
+      status: 'active',
+      created_by: session.sub,
+    });
+    if (error) return serverErr(env, error.message || JSON.stringify(error));
+    const job = Array.isArray(data) ? data[0] : data;
+    if (!job?.id) return serverErr(env, 'Failed to create job');
+
+    for (const inspector_id of inspectorIds) {
+      await db.insert('job_inspectors', { job_id: job.id, inspector_id, assigned_by: session.sub }).catch(() => {});
+    }
+    await addJobEvent(job.id, 'created', { inspector_ids: inspectorIds });
+    return created(job, env);
+  }
+
+  if (jobId && method === 'GET') {
+    const { data } = await db.from('jobs', { filters: { 'id.eq': jobId }, select: '*', limit: 1 });
+    const job = Array.isArray(data) ? data[0] : data;
+    if (!job) return notFound('Job', env);
+    if (!isAdminOrManager && session.customerId && job.client_id !== session.customerId) return forbidden(env);
+    return ok(job, env);
+  }
+
+  if (jobId && method === 'PATCH') {
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    const { data: ex } = await db.from('jobs', { filters: { 'id.eq': jobId }, select: '*', limit: 1 });
+    const existing = Array.isArray(ex) ? ex[0] : ex;
+    if (!existing) return notFound('Job', env);
+    if (!isAdminOrManager && (!session.customerId || existing.client_id !== session.customerId)) return forbidden(env);
+
+    let patch = {};
+    const action = String(body.action || '').trim();
+    if (action === 'mark_done') {
+      if (!isTechnician && !isAdminOrManager) return forbidden(env);
+      patch = { status: 'technician_done', finished_by: session.sub, finished_at: new Date().toISOString() };
+      await _notifyRoles(db, env, ['admin', 'manager'], 'job_finished', 'Job Finished by Technician', `Job ${existing.job_number} is marked as finished by ${session.name}.`, 'job', jobId, [session.sub]);
+      await addJobEvent(jobId, 'technician_done');
+    } else if (action === 'close') {
+      if (!isAdminOrManager) return forbidden(env);
+      patch = { status: 'closed', closed_by: session.sub, closed_at: new Date().toISOString() };
+      await addJobEvent(jobId, 'closed', { reason: body.reason || null });
+    } else if (action === 'reopen') {
+      if (!isAdminOrManager) return forbidden(env);
+      patch = { status: 'reopened', reopened_by: session.sub, reopened_at: new Date().toISOString() };
+      await addJobEvent(jobId, 'reopened', { reason: body.reason || null });
+    } else {
+      if (!isAdminOrManager) return forbidden(env);
+      patch = compact(pick(body, ['title', 'notes']));
+    }
+    patch.updated_at = new Date().toISOString();
+    const { data, error } = await db.update('jobs', patch, { filters: { 'id.eq': jobId } });
+    if (error) return serverErr(env, error.message || JSON.stringify(error));
+    return ok(Array.isArray(data) ? data[0] : data, env);
+  }
+
+  if (jobInspectorsId && method === 'GET') {
+    const { data, error } = await db.from('job_inspectors', {
+      filters: { 'job_id.eq': jobInspectorsId },
+      select: '*',
+      order: 'created_at.asc',
+    });
+    if (error) return serverErr(env, error.message || JSON.stringify(error));
+    return ok({ inspectors: data || [] }, env);
+  }
+
+  if (jobInspectorsId && method === 'POST') {
+    if (!isAdminOrManager) return forbidden(env);
+    let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    const inspectorIds = Array.isArray(body.inspector_ids) ? body.inspector_ids.filter(Boolean) : [];
+    if (!inspectorIds.length) return badReq('inspector_ids is required', 'VALIDATION', env);
+    for (const inspector_id of inspectorIds) {
+      await db.insert('job_inspectors', { job_id: jobInspectorsId, inspector_id, assigned_by: session.sub }).catch(() => {});
+    }
+    await addJobEvent(jobInspectorsId, 'inspectors_assigned', { inspector_ids: inspectorIds });
+    return ok({ assigned: inspectorIds.length }, env);
   }
 
   return badReq('Not found', 'NOT_FOUND', env);
@@ -994,6 +1143,7 @@ async function handleCertificates(request, env, path) {
     const { valid, errors } = validate(body, {
       name: { required: true, type: 'string', minLength: 2, maxLength: 200 },
       cert_type: { required: true, type: 'string', minLength: 2, maxLength: 100 },
+      lifting_subtype: { required: false, type: 'string', maxLength: 100 },
       asset_id: { required: true, type: 'string' },
       issued_by: { required: true, type: 'string', minLength: 2, maxLength: 200 },
       issue_date: { required: true, type: 'string', pattern: /^\d{4}-\d{2}-\d{2}$/ },
@@ -1016,6 +1166,7 @@ async function handleCertificates(request, env, path) {
     const { data, error } = await db.insert('certificates', {
       name: body.name,
       cert_type: body.cert_type,
+      lifting_subtype: body.lifting_subtype || null,
       asset_id: body.asset_id,
       client_id: body.client_id || asset.client_id || null,
       inspector_id: body.inspector_id || null,
@@ -1053,8 +1204,8 @@ async function handleCertificates(request, env, path) {
       return forbidden(env);
 
     const allowed = isApprover
-      ? ['name', 'cert_type', 'issued_by', 'issue_date', 'expiry_date', 'file_name', 'file_url', 'notes', 'approval_status', 'rejection_reason', 'inspector_id']
-      : ['name', 'cert_type', 'issued_by', 'issue_date', 'expiry_date', 'file_name', 'file_url', 'notes'];
+      ? ['name', 'cert_type', 'lifting_subtype', 'issued_by', 'issue_date', 'expiry_date', 'file_name', 'file_url', 'notes', 'approval_status', 'rejection_reason', 'inspector_id']
+      : ['name', 'cert_type', 'lifting_subtype', 'issued_by', 'issue_date', 'expiry_date', 'file_name', 'file_url', 'notes'];
 
     const update = compact({
       ...pick(body, allowed),
@@ -1066,10 +1217,20 @@ async function handleCertificates(request, env, path) {
     const updated = Array.isArray(data) ? data[0] : data;
     await _recordCertificateHistory(db, updated || existing, session, 'update');
 
-    // Notify uploader of decision
-    if (body.approval_status && body.approval_status !== existing.approval_status && existing.uploaded_by)
-      await _notifyUser(db, env, existing.uploaded_by, 'cert_reviewed', `Certificate ${body.approval_status}`,
-        `Your certificate "${updated.name}" has been ${body.approval_status}.`, 'certificate', certId);
+    // Notify uploader + admins/managers of approval status changes
+    if (body.approval_status && body.approval_status !== existing.approval_status) {
+      if (existing.uploaded_by) {
+        await _notifyUser(db, env, existing.uploaded_by, 'cert_reviewed', `Certificate ${body.approval_status}`,
+          `Your certificate "${updated.name}" has been ${body.approval_status}.`, 'certificate', certId);
+      }
+      await _notifyRoles(
+        db, env, ['admin', 'manager'], 'cert_status_changed',
+        `Certificate ${body.approval_status}`,
+        `${session.name} changed "${updated.name}" to ${body.approval_status}.`,
+        'certificate', certId,
+        [session.sub]
+      );
+    }
 
     // Instant notification for manual expiry status change
     if (body.expiry_date && body.expiry_date !== existing.expiry_date && updated.approval_status !== 'rejected') {
@@ -1218,6 +1379,27 @@ async function _notifyUser(db, env, userId, type, title, body, refType, refId) {
   } catch (e) { console.warn('_notifyUser failed:', e); }
 }
 
+async function _notifyRoles(db, env, roles, type, title, body, refType, refId, excludeUserIds = []) {
+  try {
+    const excluded = new Set((Array.isArray(excludeUserIds) ? excludeUserIds : [excludeUserIds]).filter(Boolean));
+    const { data: users } = await db.from('users', {
+      filters: { 'role.in': roles, 'is_active.is': true },
+      select: 'id',
+      limit: 300,
+    });
+    const recipients = (Array.isArray(users) ? users : [])
+      .map(u => u.id)
+      .filter(Boolean)
+      .filter(id => !excluded.has(id));
+    if (!recipients.length) return;
+    await Promise.allSettled(
+      recipients.map(uid => _notifyUser(db, env, uid, type, title, body, refType, refId))
+    );
+  } catch (e) {
+    console.warn('_notifyRoles failed:', e);
+  }
+}
+
 async function _withUploaderUsername(db, rows, field = 'uploaded_by') {
   if (!Array.isArray(rows) || !rows.length) return [];
   const userIds = [...new Set(rows.map(r => r?.[field]).filter(Boolean))];
@@ -1244,6 +1426,7 @@ async function _recordCertificateHistory(db, cert, session, action) {
       cert_number: cert.cert_number || null,
       name: cert.name || null,
       cert_type: cert.cert_type || null,
+      lifting_subtype: cert.lifting_subtype || null,
       asset_id: cert.asset_id || null,
       client_id: cert.client_id || null,
       issued_by: cert.issued_by || null,
@@ -1266,6 +1449,7 @@ function _createHistorySnapshot(cert) {
     cert_number: cert.cert_number || null,
     name: cert.name || null,
     cert_type: cert.cert_type || null,
+    lifting_subtype: cert.lifting_subtype || null,
     asset_id: cert.asset_id || null,
     client_id: cert.client_id || null,
     inspector_id: cert.inspector_id || null,
@@ -1964,21 +2148,41 @@ async function sendPushNotification(subscription, payload, vapid) {
   try {
     const body = await encryptWebPushPayload(subscription, payload);
     const token = await signVapidJwt(subscription.endpoint, vapid.subject, vapid.publicKey, vapid.privateKey);
+    const commonHeaders = {
+      'TTL': '86400',
+      'Urgency': 'high',
+      'Content-Encoding': 'aes128gcm',
+      'Content-Type': 'application/octet-stream',
+    };
 
-    const response = await fetch(subscription.endpoint, {
+    // Primary (RFC 8292): Authorization: WebPush <JWT> + Crypto-Key
+    let response = await fetch(subscription.endpoint, {
       method: 'POST',
       headers: {
-        'TTL': '86400',
-        'Urgency': 'high',
-        'Content-Encoding': 'aes128gcm',
-        'Content-Type': 'application/octet-stream',
-        'Authorization': `vapid t=${token},k=${vapid.publicKey}`,
+        ...commonHeaders,
+        'Authorization': `WebPush ${token}`,
+        'Crypto-Key': `p256ecdsa=${vapid.publicKey}`,
       },
       body,
     });
 
-    const ok = response.ok || response.status === 201;
-    const gone = response.status === 410 || response.status === 404;
+    let ok = response.ok || response.status === 201;
+    let gone = response.status === 410 || response.status === 404;
+
+    // Compatibility fallback for some push services that still expect legacy VAPID auth format.
+    if (!ok && !gone && (response.status === 400 || response.status === 401 || response.status === 403)) {
+      response = await fetch(subscription.endpoint, {
+        method: 'POST',
+        headers: {
+          ...commonHeaders,
+          'Authorization': `vapid t=${token},k=${vapid.publicKey}`,
+        },
+        body,
+      });
+      ok = response.ok || response.status === 201;
+      gone = response.status === 410 || response.status === 404;
+    }
+
     if (!ok && !gone) {
       const text = await response.text().catch(() => '');
       console.warn(`[Push] Non-ok response ${response.status} for endpoint ${subscription.endpoint.slice(0, 60)}: ${text.slice(0, 200)}`);
@@ -1996,14 +2200,15 @@ async function sendPushNotification(subscription, payload, vapid) {
  * On HTTP 410/404: soft-deletes the subscription (active = false).
  */
 async function sendPushToUser(db, env, userId, payload) {
-  if (!userId || !env.VAPID_PRIVATE_KEY) return { sent: 0, total: 0 };
+  if (!userId) return { sent: 0, total: 0, reason: 'missing_user' };
+  if (!env.VAPID_PRIVATE_KEY || !env.VAPID_PUBLIC_KEY) return { sent: 0, total: 0, reason: 'missing_vapid' };
   try {
     const { data: subs } = await db.from('push_subscriptions', {
       filters: { 'user_id.eq': userId, 'active.is': true },
       select: '*',
       limit: 20,
     });
-    if (!Array.isArray(subs) || !subs.length) return { sent: 0, total: 0 };
+    if (!Array.isArray(subs) || !subs.length) return { sent: 0, total: 0, reason: 'no_subscriptions' };
 
     const vapid = getVapidConfig(env);
     const now = new Date().toISOString();
@@ -2027,13 +2232,21 @@ async function sendPushToUser(db, env, userId, payload) {
       )
     );
 
+    const sent = results.filter(r => r.status === 'fulfilled' && r.value.ok).length;
+    const statusCounts = results.reduce((acc, r) => {
+      const code = (r.status === 'fulfilled' && r.value?.status !== undefined) ? String(r.value.status) : 'rejected';
+      acc[code] = (acc[code] || 0) + 1;
+      return acc;
+    }, {});
     return {
-      sent: results.filter(r => r.status === 'fulfilled' && r.value.ok).length,
+      sent,
       total: subs.length,
+      reason: sent > 0 ? null : 'dispatch_failed',
+      statusCounts,
     };
   } catch (e) {
     console.warn('[Push] sendPushToUser failed:', e);
-    return { sent: 0, total: 0 };
+    return { sent: 0, total: 0, reason: 'internal_error' };
   }
 }
 
@@ -2043,24 +2256,25 @@ async function sendPushToUser(db, env, userId, payload) {
  * @param {string|null} excludeUserId  optional user to skip
  */
 async function sendPushToRoles(db, env, roles, payload, excludeUserId = null) {
-  if (!env.VAPID_PRIVATE_KEY) return { users: 0, sent: 0 };
+  if (!env.VAPID_PRIVATE_KEY || !env.VAPID_PUBLIC_KEY) return { users: 0, sent: 0, reason: 'missing_vapid' };
   try {
     const { data: users } = await db.from('users', {
       filters: { 'role.in': roles, 'is_active.is': true },
       select: 'id',
     });
-    if (!Array.isArray(users) || !users.length) return { users: 0, sent: 0 };
+    if (!Array.isArray(users) || !users.length) return { users: 0, sent: 0, reason: 'no_users' };
 
     const eligible = users.filter(u => u.id !== excludeUserId);
+    if (!eligible.length) return { users: 0, sent: 0, reason: 'no_eligible_users' };
     const results = await Promise.allSettled(
       eligible.map(u => sendPushToUser(db, env, u.id, payload))
     );
 
     const sent = results.reduce((acc, r) => acc + (r.status === 'fulfilled' ? (r.value?.sent || 0) : 0), 0);
-    return { users: eligible.length, sent };
+    return { users: eligible.length, sent, reason: sent > 0 ? null : 'dispatch_failed' };
   } catch (e) {
     console.warn('[Push] sendPushToRoles failed:', e);
-    return { users: 0, sent: 0 };
+    return { users: 0, sent: 0, reason: 'internal_error' };
   }
 }
 
@@ -2189,25 +2403,46 @@ async function handlePush(request, env, path) {
     return ok({ notified: true, count }, env);
   }
 
-  /* ── GET /api/push/test — send a test notification to yourself ── */
-  if (path === '/push/test' && method === 'GET') {
+  /* ── POST /api/push/test — send a test notification to yourself ── */
+  if (path === '/push/test' && method === 'POST') {
     const payload = { title: 'Test Notification', body: 'This is a test notification for your device.', url: '/notifications.html', tag: 'test-push-individual', event_type: 'test' };
     const stats = await sendPushToUser(db, env, session.sub, payload);
+    let message = '';
+    if (stats.sent > 0) {
+      message = `Triggered for ${stats.sent} of your ${stats.total} registered device(s). Check your notification center.`;
+    } else if (stats.reason === 'missing_vapid') {
+      message = 'Push server keys are missing or invalid. Configure VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY in Worker settings.';
+    } else if (stats.reason === 'no_subscriptions') {
+      message = 'No active push subscriptions found for your account. Enable push notifications above, then retry.';
+    } else if (stats.reason === 'dispatch_failed') {
+      const sc = stats.statusCounts ? ` Statuses: ${JSON.stringify(stats.statusCounts)}.` : '';
+      message = `Push request was attempted for ${stats.total} device(s), but all were rejected by the push service.${sc} Check worker logs for [Push] warnings.`;
+    } else {
+      message = 'Push test completed with no successful deliveries. Check worker logs for details.';
+    }
     return ok({
       success: true,
       stats,
-      message: stats.total > 0
-        ? `Triggered for ${stats.sent} of your ${stats.total} registered device(s). Check your notification center.`
-        : 'No active push subscriptions found for your account. Please enable them above.',
+      message,
     }, env);
   }
 
-  /* ── GET /api/push/test-all — broadcast test to all admins/managers ── */
-  if (path === '/push/test-all' && method === 'GET') {
+  /* ── POST /api/push/test-all — broadcast test to all admins/managers ── */
+  if (path === '/push/test-all' && method === 'POST') {
     if (!isAdminOrManager(session)) return forbidden(env);
     const payload = { title: 'Global Push Test', body: `Broadcast test triggered by ${session.name}.`, url: '/notifications.html', tag: 'test-push-global', event_type: 'test' };
     const stats = await sendPushToRoles(db, env, ['admin', 'manager'], payload);
-    return ok({ success: true, stats, message: `Broadcasted to ${stats.users} qualified users. Total of ${stats.sent} push notification(s) triggered.` }, env);
+    let message = `Broadcasted to ${stats.users} qualified users. Total of ${stats.sent} push notification(s) triggered.`;
+    if (stats.sent === 0) {
+      if (stats.reason === 'missing_vapid') {
+        message = 'Broadcast blocked: VAPID keys are not configured in Worker settings.';
+      } else if (stats.reason === 'no_users' || stats.reason === 'no_eligible_users') {
+        message = 'Broadcast found no eligible admin/manager accounts to notify.';
+      } else {
+        message = `Broadcast reached ${stats.users} users but no device accepted the push. Check active subscriptions and worker logs.`;
+      }
+    }
+    return ok({ success: true, stats, message }, env);
   }
 
   return badReq('Not found', 'NOT_FOUND', env);
@@ -2290,6 +2525,7 @@ export default {
 
       if (path.startsWith('/auth')) return await handleAuth(request, env, path);
       if (path.startsWith('/users')) return await handleUsers(request, env, path);
+      if (path.startsWith('/jobs')) return await handleJobs(request, env, path);
       if (path.startsWith('/assets')) return await handleAssets(request, env, path);
       if (path.startsWith('/certificates/upload') || path.startsWith('/certificates/file/')) {
         const uploadResult = await handleCertUpload(request, env, path);
@@ -2352,7 +2588,7 @@ export default {
       }
 
       // Cron manual trigger (Admin or Secret)
-      if (path === '/cron/check-expiry' && request.method === 'GET') {
+      if (path === '/cron/check-expiry' && (request.method === 'GET' || request.method === 'POST')) {
         const cronSecret = env.CRON_SECRET;
         const authHeader = request.headers.get('Authorization');
         const isSecretMatch = cronSecret && (authHeader === `Bearer ${cronSecret}` || url.searchParams.get('secret') === cronSecret);

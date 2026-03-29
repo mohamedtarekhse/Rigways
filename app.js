@@ -356,9 +356,22 @@ const SapShell = (() => {
 
   function init(session) {
     if (!session) return;
+    _ensureMobileMenuButton();
     _setAvatar(session);
     _setUserMenu(session);
     _bindUserMenu();
+  }
+
+  function _ensureMobileMenuButton() {
+    const actions = document.querySelector('.sap-shell__actions');
+    if (!actions || document.getElementById('mobileMenuBtn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'mobileMenuBtn';
+    btn.className = 'sap-shell__btn sap-mobile-menu-btn';
+    btn.setAttribute('aria-label', 'Open user menu');
+    btn.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>';
+    btn.onclick = () => toggleUserMenu();
+    actions.appendChild(btn);
   }
 
   function _setAvatar(session) {
@@ -377,7 +390,7 @@ const SapShell = (() => {
 
   function _bindUserMenu() {
     document.addEventListener('click', e => {
-      if (!e.target.closest('#shellAvatar') && !e.target.closest('#userMenu')) {
+      if (!e.target.closest('#shellAvatar') && !e.target.closest('#mobileMenuBtn') && !e.target.closest('#userMenu')) {
         const menu = document.getElementById('userMenu');
         if (menu) menu.classList.remove('open');
       }

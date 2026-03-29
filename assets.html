@@ -681,8 +681,16 @@
 
     <!-- Pagination -->
     <div class="sap-pagination" id="pagination">
-      <div class="sap-pagination__info" id="paginationInfo">Showing 1–15 of 174</div>
+      <div class="sap-pagination__info" id="paginationInfo">Showing 1–25 of 174</div>
       <div class="sap-pagination__controls" id="paginationControls"></div>
+      <div class="sap-pagination__size">
+        <label for="pageSizeSelect" style="font-size:12px;color:var(--sap-text-secondary);">Rows:</label>
+        <select id="pageSizeSelect" class="sap-select" style="height:30px;padding:2px 8px;" onchange="setPageSize(this.value)">
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
     </div>
   </div>
 
@@ -1395,7 +1403,9 @@ let session = null;
 let deleteTargetId = null;
 let statusTargetId = null;
 let sortCol = 'assetId'; let sortDir = 1;
-let currentPage = 1; const PAGE_SIZE = 15;
+let currentPage = 1;
+let PAGE_SIZE = Number(localStorage.getItem('sap_assets_page_size') || 25);
+if (![25,50,100].includes(PAGE_SIZE)) PAGE_SIZE = 25;
 let activeStatusFilter = 'all';
 let filteredData = [];
 
@@ -1733,6 +1743,15 @@ function goPage(p) {
   const max = Math.ceil(total / PAGE_SIZE);
   if (p < 1 || p > max) return;
   currentPage = p; renderTable();
+}
+
+function setPageSize(size) {
+  const parsed = Number(size);
+  if (![25,50,100].includes(parsed)) return;
+  PAGE_SIZE = parsed;
+  localStorage.setItem('sap_assets_page_size', String(parsed));
+  currentPage = 1;
+  renderTable();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -3407,6 +3426,8 @@ async function loadAssets() {
    INIT
 ═══════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
+  const pageSizeSelect = document.getElementById('pageSizeSelect');
+  if (pageSizeSelect) pageSizeSelect.value = String(PAGE_SIZE);
   session = getSession();
   if (!session) return;
 
