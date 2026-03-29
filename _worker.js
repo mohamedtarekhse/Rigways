@@ -1969,21 +1969,41 @@ async function sendPushNotification(subscription, payload, vapid) {
   try {
     const body = await encryptWebPushPayload(subscription, payload);
     const token = await signVapidJwt(subscription.endpoint, vapid.subject, vapid.publicKey, vapid.privateKey);
+    const commonHeaders = {
+      'TTL': '86400',
+      'Urgency': 'high',
+      'Content-Encoding': 'aes128gcm',
+      'Content-Type': 'application/octet-stream',
+    };
 
-    const response = await fetch(subscription.endpoint, {
+    // Primary (RFC 8292): Authorization: WebPush <JWT> + Crypto-Key
+    let response = await fetch(subscription.endpoint, {
       method: 'POST',
       headers: {
-        'TTL': '86400',
-        'Urgency': 'high',
-        'Content-Encoding': 'aes128gcm',
-        'Content-Type': 'application/octet-stream',
-        'Authorization': `vapid t=${token},k=${vapid.publicKey}`,
+        ...commonHeaders,
+        'Authorization': `WebPush ${token}`,
+        'Crypto-Key': `p256ecdsa=${vapid.publicKey}`,
       },
       body,
     });
 
-    const ok = response.ok || response.status === 201;
-    const gone = response.status === 410 || response.status === 404;
+    let ok = response.ok || response.status === 201;
+    let gone = response.status === 410 || response.status === 404;
+
+    // Compatibility fallback for some push services that still expect legacy VAPID auth format.
+    if (!ok && !gone && (response.status === 400 || response.status === 401 || response.status === 403)) {
+      response = await fetch(subscription.endpoint, {
+        method: 'POST',
+        headers: {
+          ...commonHeaders,
+          'Authorization': `vapid t=${token},k=${vapid.publicKey}`,
+        },
+        body,
+      });
+      ok = response.ok || response.status === 201;
+      gone = response.status === 410 || response.status === 404;
+    }
+
     if (!ok && !gone) {
       const text = await response.text().catch(() => '');
       console.warn(`[Push] Non-ok response ${response.status} for endpoint ${subscription.endpoint.slice(0, 60)}: ${text.slice(0, 200)}`);
@@ -2034,10 +2054,16 @@ async function sendPushToUser(db, env, userId, payload) {
     );
 
     const sent = results.filter(r => r.status === 'fulfilled' && r.value.ok).length;
+    const statusCounts = results.reduce((acc, r) => {
+      const code = (r.status === 'fulfilled' && r.value?.status !== undefined) ? String(r.value.status) : 'rejected';
+      acc[code] = (acc[code] || 0) + 1;
+      return acc;
+    }, {});
     return {
       sent,
       total: subs.length,
       reason: sent > 0 ? null : 'dispatch_failed',
+      statusCounts,
     };
   } catch (e) {
     console.warn('[Push] sendPushToUser failed:', e);
@@ -2210,7 +2236,8 @@ async function handlePush(request, env, path) {
     } else if (stats.reason === 'no_subscriptions') {
       message = 'No active push subscriptions found for your account. Enable push notifications above, then retry.';
     } else if (stats.reason === 'dispatch_failed') {
-      message = `Push request was attempted for ${stats.total} device(s), but all were rejected by the push service. Check worker logs for [Push] warnings.`;
+      const sc = stats.statusCounts ? ` Statuses: ${JSON.stringify(stats.statusCounts)}.` : '';
+      message = `Push request was attempted for ${stats.total} device(s), but all were rejected by the push service.${sc} Check worker logs for [Push] warnings.`;
     } else {
       message = 'Push test completed with no successful deliveries. Check worker logs for details.';
     }
