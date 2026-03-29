@@ -57,6 +57,7 @@ const SAP_CONFIG = {
     { id:'dashboard',     href:'dashboard.html',     iconKey:'grid',   en:'Dashboard',     ar:'لوحة التحكم',  roles:['admin','manager','technician','user'] },
     { id:'assets',        href:'assets.html',        iconKey:'asset',  en:'Assets',        ar:'الأصول',       roles:['admin','manager','technician','user'] },
     { id:'certificates',  href:'certificates.html',  iconKey:'cert',   en:'Certificates',  ar:'الشهادات',     roles:['admin','manager','technician','user'] },
+    { id:'jobs',          href:'jobs.html',          iconKey:'chart',  en:'Jobs',          ar:'الوظائف',      roles:['admin','manager'] },
     { id:'notifications', href:'notifications.html', iconKey:'notif',  en:'Notifications', ar:'الإشعارات',    roles:['admin','manager','technician','user'] },
     { id:'reports',       href:'reports.html',       iconKey:'chart',  en:'Reports',       ar:'التقارير',     roles:['admin','manager','technician','user'] },
     { id:'clients',       href:'clients.html',       iconKey:'users',  en:'Clients',       ar:'العملاء',      roles:['admin'] },
@@ -356,9 +357,25 @@ const SapShell = (() => {
 
   function init(session) {
     if (!session) return;
+    _ensureMobileMenuButton();
     _setAvatar(session);
     _setUserMenu(session);
     _bindUserMenu();
+  }
+
+  function _ensureMobileMenuButton() {
+    const actions = document.querySelector('.sap-shell__actions');
+    if (!actions || document.getElementById('mobileMenuBtn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'mobileMenuBtn';
+    btn.className = 'sap-shell__btn sap-mobile-menu-btn';
+    btn.setAttribute('aria-label', 'Open user menu');
+    btn.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>';
+    btn.onclick = () => {
+      if (typeof window.toggleUserMenu === 'function') window.toggleUserMenu();
+      else toggleUserMenu();
+    };
+    actions.appendChild(btn);
   }
 
   function _setAvatar(session) {
@@ -377,7 +394,7 @@ const SapShell = (() => {
 
   function _bindUserMenu() {
     document.addEventListener('click', e => {
-      if (!e.target.closest('#shellAvatar') && !e.target.closest('#userMenu')) {
+      if (!e.target.closest('#shellAvatar') && !e.target.closest('#mobileMenuBtn') && !e.target.closest('#userMenu')) {
         const menu = document.getElementById('userMenu');
         if (menu) menu.classList.remove('open');
       }
@@ -836,6 +853,52 @@ const SapEventBus = (() => {
 /* ================================================================
    14. AUTO-INIT
 ================================================================ */
+function ensureJobsNavForRole(role) {
+  if (!['admin', 'manager'].includes(role)) return;
+  document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
+    if (inner.querySelector('a[href="jobs.html"]')) return;
+    const a = document.createElement('a');
+    a.href = 'jobs.html';
+    a.className = 'sap-nav-item';
+    if (location.pathname.endsWith('/jobs.html')) a.classList.add('active');
+    a.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Jobs</span>';
+    const reports = inner.querySelector('a[href="reports.html"]');
+    if (reports) inner.insertBefore(a, reports);
+    else inner.appendChild(a);
+  });
+}
+
+
+
+function applyPageBodyClass() {
+  const page = (window.location.pathname.split('/').pop() || '').toLowerCase();
+  const slug = page.replace(/\.html$/, '').replace(/[^a-z0-9-]/g, '');
+  if (slug) document.body.classList.add(`page-${slug}`);
+}
+
+function applyPlanBMobileLayout() {
+  const page = (window.location.pathname.split('/').pop() || '').toLowerCase();
+  const targets = new Set(['assets.html','certificates.html','inspectors.html','clients.html','functional-locations.html','jobs.html']);
+  if (!targets.has(page)) return;
+
+  document.body.classList.add('mobile-plan-b');
+
+  document.querySelectorAll('.sap-table').forEach(table => {
+    const headers = [...table.querySelectorAll('thead th')].map(th => (th.textContent || '').trim());
+    if (!headers.length) return;
+    table.querySelectorAll('tbody tr').forEach(tr => {
+      [...tr.children].forEach((td, idx) => {
+        if (td.tagName !== 'TD') return;
+        if (!td.hasAttribute('data-label')) td.setAttribute('data-label', headers[idx] || `Column ${idx + 1}`);
+      });
+      const actionCell = tr.querySelector('td:last-child');
+      if (actionCell && actionCell.querySelector('button, .btn, [role="button"], a.btn')) {
+        actionCell.classList.add('sap-mobile-actions-cell');
+      }
+    });
+  });
+}
+
 (function autoInit() {
   document.addEventListener('DOMContentLoaded', () => {
 
@@ -873,10 +936,14 @@ const SapEventBus = (() => {
 
     /* ── Sidebar ── */
     SapSidebar.init();
+    ensureJobsNavForRole(session.role);
 
     /* ── Role visibility ── */
     SapRoles.applyVisibility(session.role);
     SapRoles.applyReadOnly(session.role);
+
+    applyPageBodyClass();
+    applyPlanBMobileLayout();
 
     /* ── Wire global buttons ── */
     const langBtn = document.getElementById('langBtn');
