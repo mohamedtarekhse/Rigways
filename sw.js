@@ -49,76 +49,71 @@ self.addEventListener('fetch', (event) => {
 // ── Push Event — show notification ──────────────────
 self.addEventListener('push', (event) => {
   console.log('[Service Worker] Push Received.');
-  let data = { title: 'Rigways ACM', body: 'You have a new notification.', url: '/notifications.html' };
-
-    if (event.data) {
-      const rawData = event.data.text();
-      console.log('[Service Worker] Push Received. Raw Data:', rawData);
-      
-      try {
-        // Trim whitespace or non-printable chars that might break JSON.parse
-        data = JSON.parse(rawData.trim());
-      } catch (e) {
-        console.warn('[Service Worker] Push data is not valid JSON, using fallback.');
-        data = { title: 'Rigways ACM Update', body: rawData };
-      }
-    }
- else {
-    console.error('[Service Worker] Push event contains NO data (this usually means decryption failed at the browser level).');
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch (_) {
+    payload = { body: event.data ? event.data.text() : '' };
   }
 
+  const title = payload.title || 'Rigways ACM';
   const options = {
-    body: data.body,
-    icon: data.icon || '/favicon.ico',
-    badge: data.badge || '/favicon.ico',
-    tag: data.tag || 'rigways-notification',
-    data: { url: data.url || '/notifications.html' },
-    requireInteraction: data.requireInteraction || false,
+    body: payload.body || 'You have a new update.',
+    icon: payload.icon || '/favicon.ico',
+    badge: payload.badge || '/favicon.ico',
+    tag: payload.tag || 'app-notification',
+    renotify: true,
     vibrate: [200, 100, 200],
+    data: {
+      url: payload.url || '/notifications.html',
+      event_type: payload.event_type || null
+    },
     actions: [
       { action: 'open', title: 'View' },
       { action: 'dismiss', title: 'Dismiss' },
     ],
   };
 
-  event.waitUntil(
-    self.registration.showNotification(data.title, options)
-  );
+  event.waitUntil(self.registration.showNotification(title, options));
 });
 
 // ── Notification Click — open relevant page ─────────
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-
+  
   if (event.action === 'dismiss') return;
+  
+  const targetUrl = event.notification?.data?.url || '/notifications.html';
+  const fullDestUrl = new URL(targetUrl, self.location.origin).href;
 
-  const urlPath = event.notification.data?.url || '/notifications.html';
-  const fullDestUrl = new URL(urlPath, self.location.origin).href;
-
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // 1. Search for a tab already on this exact page
-      for (const client of clientList) {
-        if (client.url === fullDestUrl) {
-          if ('focus' in client) return client.focus();
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    
+    // 1. Search for a tab already on this exact page
+    for (const client of clients) {
+      if (client.url === fullDestUrl) {
+        if ('focus' in client) {
+          client.postMessage({ type: 'open-url', url: fullDestUrl });
+          return client.focus();
         }
       }
+    }
 
-      // 2. Search for a tab from our app (same origin) to reuse
-      for (const client of clientList) {
-        const clientUrl = new URL(client.url);
-        if (clientUrl.origin === self.location.origin) {
-          if ('navigate' in client && 'focus' in client) {
-            client.navigate(fullDestUrl);
-            return client.focus();
-          }
+    // 2. Search for any tab from our app to reuse
+    for (const client of clients) {
+      const clientUrl = new URL(client.url);
+      if (clientUrl.origin === self.location.origin) {
+        if ('navigate' in client && 'focus' in client) {
+          await client.navigate(fullDestUrl);
+          client.postMessage({ type: 'open-url', url: fullDestUrl });
+          return client.focus();
         }
       }
+    }
 
-      // 3. Last fallback: Open a new window
-      if (clients.openWindow) {
-        return clients.openWindow(fullDestUrl);
-      }
-    })
-  );
+    // 3. Fallback: Open a new window
+    if (self.clients.openWindow) return self.clients.openWindow(fullDestUrl);
+    return null;
+  })());
 });
+
