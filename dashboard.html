@@ -23,7 +23,6 @@
   <script src="app.js"></script>
   <link rel="stylesheet" href="styles.css"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-nPCPRPnIBJCWXtBekdcSyI7BbEaIbKk/KonEPO1HP8Bv0SLJT3stePfStaDoL7N" crossorigin="anonymous"></script>
   <style>
     /* ── Dashboard-specific styles ── */
     .dash-grid {
@@ -147,8 +146,55 @@
     }
     .alert-strip__link { font-size: 12px; color: #0070f2; font-weight: 600; white-space: nowrap; }
 
-    /* Chart containers */
-    .chart-container--tall { height: 280px; }
+    /* Compact KPI cards */
+    .sap-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: var(--sp-md);
+    }
+    .kpi-card {
+      background: var(--sap-card-bg);
+      border: var(--sap-card-border);
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+      padding: 10px 12px;
+      min-height: 78px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: box-shadow var(--transition), transform var(--transition);
+    }
+    .kpi-card:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      transform: translateY(-1px);
+    }
+    .kpi-card__icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 9px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .kpi-card__icon svg { width: 20px; height: 20px; }
+    .kpi-card__body { min-width: 0; }
+    .kpi-card__value {
+      font-size: 20px;
+      line-height: 1.1;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .kpi-card__label {
+      margin-top: 2px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--sap-text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
 
     /* Expiry list */
     .expiry-list { display: flex; flex-direction: column; gap: 1px; }
@@ -241,6 +287,19 @@
       .dash-col-2, .dash-col-3 { grid-column: span 1; }
       .welcome-banner { flex-direction: column; align-items: flex-start; }
       .welcome-banner__right { text-align: left; }
+      .sap-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .kpi-card { min-height: 72px; padding: 9px 10px; gap: 8px; }
+      .kpi-card__icon { width: 32px; height: 32px; border-radius: 8px; }
+      .kpi-card__icon svg { width: 18px; height: 18px; }
+      .kpi-card__value { font-size: 18px; }
+    }
+    @media(max-width:640px) {
+      .sap-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .kpi-card { min-height: 68px; padding: 8px 9px; }
+      .kpi-card__label { font-size: 10px; }
+    }
+    @media(max-width:420px) {
+      .sap-kpi-grid { grid-template-columns: 1fr; }
     }
   
   /* ── Rigways Logo ── */
@@ -439,24 +498,6 @@
       <div class="sap-card__body--no-pad" id="approvalList"></div>
       <div class="sap-card__footer">
         <a href="certificates.html" class="btn btn-secondary btn-sm">View All Certs</a>
-      </div>
-    </div>
-
-    <!-- Monthly Trend Chart — 2 col -->
-    <div class="sap-card dash-col-2">
-      <div class="sap-card__header">
-        <div>
-          <div class="sap-card__title">
-            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-            <span>Monthly Activity Trend</span>
-          </div>
-          <div class="sap-card__subtitle">Assets added vs Certificates uploaded – last 6 months</div>
-        </div>
-      </div>
-      <div class="sap-card__body">
-        <div class="chart-container--tall" style="position:relative;">
-          <canvas id="trendChart"></canvas>
-        </div>
       </div>
     </div>
 
@@ -731,87 +772,6 @@ function rejectItem(id, btn) {
 ═══════════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════════
-   CHARTS
-═══════════════════════════════════════════════════════ */
-/* _chartInstances tracks Chart objects so we can destroy before redraw */
-const _chartInstances = {};
-function _makeChart(id, config) {
-  if (_chartInstances[id]) { try { _chartInstances[id].destroy(); } catch(e) {} }
-  const el = document.getElementById(id);
-  if (!el) return;
-  _chartInstances[id] = new Chart(el, config);
-}
-
-function initCharts(as, cs) {
-  if (typeof Chart === 'undefined') {
-    setTimeout(() => initCharts(as, cs), 400);
-    return;
-  }
-  Chart.defaults.font.family = "'Inter', sans-serif";
-  Chart.defaults.font.size   = 12;
-
-  const asActive      = as?.active      ?? as?.operation ?? 0;
-  const asMaintenance = as?.maintenance ?? as?.stacked   ?? 0;
-  const asInactive    = Math.max(0, (as?.total ?? 0) - asActive - asMaintenance);
-
-  const csValid    = cs?.valid    ?? 0;
-  const csExpiring = cs?.expiring ?? 0;
-  const csExpired  = cs?.expired  ?? 0;
-  const csPending  = cs?.pending  ?? 0;
-
-  /* Update stat numbers below charts */
-  const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-
-  /* Monthly Trend Line */
-  const months = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
-  _makeChart('trendChart', {
-    type: 'bar',
-    data: {
-      labels: months,
-      datasets: [
-        {
-          label: 'Assets Added',
-          data: [18, 24, 15, 30, 22, 28],
-          backgroundColor: 'rgba(0,112,242,.15)',
-          borderColor: '#0070f2',
-          borderWidth: 2,
-          borderRadius: 4,
-          type: 'bar',
-        },
-        {
-          label: 'Certificates Uploaded',
-          data: [32, 28, 40, 35, 29, 38],
-          borderColor: '#188918',
-          backgroundColor: 'rgba(24,137,24,.08)',
-          borderWidth: 2,
-          fill: true,
-          tension: 0.4,
-          type: 'line',
-          pointBackgroundColor: '#188918',
-          pointRadius: 4,
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { position: 'top', align: 'end', labels: { usePointStyle: true, pointStyle: 'circle', padding: 16 } },
-        tooltip: { mode: 'index' }
-      },
-      scales: {
-        x: { grid: { display: false }, border: { display: false } },
-        y: { grid: { color: '#f0f1f2' }, border: { display: false }, beginAtZero: true,
-          ticks: { stepSize: 10 }
-        }
-      },
-      animation: { duration: 900 },
-    }
-  });
-}
-
-/* ═══════════════════════════════════════════════════════
    CLIENT FILTER (admin/manager)
 ═══════════════════════════════════════════════════════ */
 function filterByClient(val) {
@@ -878,7 +838,6 @@ async function loadDashboardData(role) {
   renderKPIs(as, cs, role);
   renderExpiryList(expiring);
   renderApprovalQueue(pending, role);
-  initCharts(as, cs);
 
   // Notification badge
   const badge = document.getElementById('notifBadge');
@@ -1092,7 +1051,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('clientFilterBar').style.display = 'flex';
   }
 
-  /* Init clock and quick actions; charts are now rendered inside loadDashboardData after API data arrives */
+  /* Init clock and load dashboard data */
   if (typeof startClock === 'function') startClock();
 
   /* Load all data from API */
