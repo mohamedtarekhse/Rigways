@@ -301,7 +301,6 @@
   <span class="sap-shell__app-title" data-en="Inspector Management" data-ar="إدارة المفتشين">Inspector Management</span>
   <div class="sap-shell__spacer"></div>
   <div class="sap-shell__actions">
-    <button class="sap-shell__lang-btn" onclick="toggleLang()" id="langBtn">AR</button>
     <button class="sap-shell__btn" onclick="window.location.href='notifications.html'">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
       <span class="sap-shell__badge" id="notifBadge" style="display:none;"></span>
@@ -733,12 +732,13 @@ function applyLang(lang) {
   document.querySelectorAll('[data-ph-en]').forEach(el => {
     el.placeholder = el.getAttribute('data-ph-' + lang) || el.getAttribute('data-ph-en');
   });
-  document.getElementById('langBtn').textContent = lang === 'en' ? 'AR' : 'EN';
+  const langBtn = document.getElementById('langBtn');
+  if (langBtn) langBtn.textContent = lang === 'en' ? 'AR' : 'EN';
 }
 function toggleLang() { applyLang(currentLang === 'en' ? 'ar' : 'en'); renderTable(); }
 function toggleUserMenu() { document.getElementById('userMenu').classList.toggle('open'); }
 document.addEventListener('click', e => {
-  if (!e.target.closest('#shellAvatar') && !e.target.closest('#userMenu'))
+  if (!e.target.closest('#shellAvatar') && !e.target.closest('#mobileMenuBtn') && !e.target.closest('#userMenu'))
     document.getElementById('userMenu').classList.remove('open');
   if (!e.target.closest('#colSelectorWrap') && !e.target.closest('.col-selector-wrap'))
     document.querySelectorAll('.col-dropdown').forEach(d => d.classList.remove('open'));
