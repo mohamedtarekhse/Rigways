@@ -1380,18 +1380,50 @@ async function handleFiles(request, env, path) {
 
   if (path === '/files' && method === 'GET') {
     const q = url.searchParams;
-    const filters = {};
-    if (q.get('job_number')) filters['job_number.eq'] = q.get('job_number');
-    if (q.get('client_id')) filters['client_id.eq'] = q.get('client_id');
-    if (q.get('cert_type')) filters['cert_type.eq'] = q.get('cert_type');
-    if (q.get('date_from')) filters['uploaded_at.gte'] = q.get('date_from') + 'T00:00:00.000Z';
-    if (q.get('date_to')) filters['uploaded_at.lte'] = q.get('date_to') + 'T23:59:59.999Z';
+    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
     const limit = Math.min(Math.max(parseInt(q.get('limit') || '200', 10), 1), 500);
-    const offset = Math.max(parseInt(q.get('offset') || '0', 10), 0);
-    const { data, error } = await db.from('certificate_files', { select: '*', filters, limit, offset, order: 'uploaded_at.desc' });
-    if (error) return serverErr(env, error.message || 'Could not list files');
-    const rows = await _withUploaderUsername(db, data || [], 'uploaded_by');
-    return ok({ files: rows, limit, offset }, env);
+    const jobNumber = q.get('job_number') || '';
+    const prefix = q.get('prefix') || (jobNumber ? `files/jobs/${jobNumber}/` : 'files/');
+    const listRes = await env.CERT_BUCKET.list({ prefix, limit });
+    const objects = (listRes.objects || []);
+
+    const { data: metaRows } = await db.from('certificate_files', { select: '*', filters: {}, limit: 5000, order: 'uploaded_at.desc' });
+    const metaMap = new Map((Array.isArray(metaRows) ? metaRows : []).map(r => [r.r2_key, r]));
+    const merged = objects.map(o => {
+      const m = metaMap.get(o.key) || {};
+      return {
+        id: m.id || null,
+        r2_key: o.key,
+        file_name: m.file_name || o.key.split('/').pop(),
+        file_size: m.file_size ?? o.size ?? null,
+        uploaded_at: m.uploaded_at || o.uploaded || null,
+        uploaded_by: m.uploaded_by || null,
+        client_id: m.client_id || null,
+        cert_type: m.cert_type || null,
+        job_number: m.job_number || (o.key.match(/^files\/jobs\/([^/]+)\//)?.[1] || null),
+        status: m.status || 'active',
+        scan_status: m.scan_status || 'pending',
+        is_current: !!m.is_current,
+        deleted_at: m.deleted_at || null,
+      };
+    });
+
+    const filtered = merged.filter(r => {
+      if (q.get('client_id') && r.client_id !== q.get('client_id')) return false;
+      if (q.get('cert_type') && r.cert_type !== q.get('cert_type')) return false;
+      if (q.get('filename') && !(r.file_name || '').toLowerCase().includes(q.get('filename').toLowerCase())) return false;
+      if (q.get('date_from')) {
+        const d = new Date(r.uploaded_at || 0); if (isNaN(d)) return false;
+        if (d < new Date(q.get('date_from') + 'T00:00:00.000Z')) return false;
+      }
+      if (q.get('date_to')) {
+        const d = new Date(r.uploaded_at || 0); if (isNaN(d)) return false;
+        if (d > new Date(q.get('date_to') + 'T23:59:59.999Z')) return false;
+      }
+      return true;
+    });
+    const withNames = await _withUploaderUsername(db, filtered, 'uploaded_by');
+    return ok({ files: withNames, prefix, truncated: !!listRes.truncated }, env);
   }
 
   if (path === '/files/upload' && method === 'POST') {
@@ -1480,6 +1512,51 @@ async function handleFiles(request, env, path) {
     }
 
     return created({ file: data || payload }, env);
+  }
+
+  if (path === '/files/object/signed-url' && method === 'GET') {
+    const key = url.searchParams.get('key') || '';
+    if (!key) return badReq('key is required', 'MISSING_KEY', env);
+    const ttl = Math.min(Math.max(parseInt(url.searchParams.get('ttl') || '300', 10), 30), 900);
+    const exp = Math.floor(Date.now() / 1000) + ttl;
+    const sig = await _signFileToken(env, key, exp);
+    const dl = new URL(request.url);
+    dl.pathname = `/api/files/object/download`;
+    dl.search = `key=${encodeURIComponent(key)}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
+    return ok({ url: dl.toString(), expires_at: exp }, env);
+  }
+
+  if (path === '/files/object/download' && method === 'GET') {
+    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    const key = url.searchParams.get('key') || '';
+    const exp = parseInt(url.searchParams.get('exp') || '0', 10);
+    const sig = url.searchParams.get('sig') || '';
+    if (!key || !exp || exp < Math.floor(Date.now() / 1000)) return forbidden(env);
+    const valid = await _verifyFileToken(env, key, exp, sig);
+    if (!valid) return forbidden(env);
+    const obj = await env.CERT_BUCKET.get(key);
+    if (!obj) return notFound('file', env);
+    const headers = new Headers();
+    headers.set('Content-Type', obj.httpMetadata?.contentType || 'application/octet-stream');
+    headers.set('Content-Disposition', `inline; filename=\"${(key.split('/').pop() || 'file').replace(/\"/g, '')}\"`);
+    headers.set('Cache-Control', 'private, max-age=30');
+    return new Response(obj.body, { status: 200, headers });
+  }
+
+  if (path === '/files/object' && method === 'DELETE') {
+    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    const key = url.searchParams.get('key') || '';
+    const mode = (url.searchParams.get('mode') || 'hard').toLowerCase();
+    if (!key) return badReq('key is required', 'MISSING_KEY', env);
+    const { data: rows } = await db.from('certificate_files', { select: 'id', filters: { 'r2_key.eq': key }, limit: 1 });
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    if (mode === 'soft' && row?.id) {
+      await db.update('certificate_files', { status: 'deleted', deleted_at: new Date().toISOString(), is_current: false }, { filters: { 'id.eq': row.id } });
+      return ok({ key, deleted: true, mode: 'soft' }, env);
+    }
+    try { await env.CERT_BUCKET.delete(key); } catch (e) { console.warn('R2 delete warning:', e.message); }
+    if (row?.id) await db.delete('certificate_files', { filters: { 'id.eq': row.id } }).catch(() => {});
+    return ok({ key, deleted: true, mode: 'hard' }, env);
   }
 
   const signedM = path.match(/^\/files\/([^/]+)\/signed-url$/);
