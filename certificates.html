@@ -1009,12 +1009,36 @@ function getExpiryBar(cert) {
 }
 
 /* ── 24-hour edit window check ── */
+function parseCertDateTime(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value === 'number') {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const candidates = [
+    raw,
+    raw.replace(' ', 'T'),
+    raw.replace(' ', 'T') + 'Z',
+  ];
+
+  for (const candidate of candidates) {
+    const d = new Date(candidate);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
 function canTechnicianEdit(cert) {
-  if (!cert.uploadTime) return false;
-  const uploaded = new Date(cert.uploadTime);
+  const uploaded = parseCertDateTime(cert.uploadTime);
+  if (!uploaded) return false;
   const now      = new Date();
   const hours    = (now - uploaded) / 3600000;
-  return hours <= 24;
+  return hours >= 0 && hours <= 24;
 }
 
 /* Can the current user delete this cert's file?
@@ -1035,8 +1059,8 @@ function isAdmin() {
 }
 
 function getEditWindowBadge(cert) {
-  if (!cert.uploadTime) return '';
-  const uploaded = new Date(cert.uploadTime);
+  const uploaded = parseCertDateTime(cert.uploadTime);
+  if (!uploaded) return '';
   const now = new Date();
   const hoursLeft = 24 - (now - uploaded) / 3600000;
   if (hoursLeft > 0) {
@@ -2123,7 +2147,13 @@ function openCertDeleteModal(id) {
     </div>`;
 
   if (role === 'technician') {
-    const uploaded = new Date(c.uploadTime);
+    const uploaded = parseCertDateTime(c.uploadTime);
+    if (!uploaded) {
+      noteEl.textContent = '⏱ Upload time unavailable.';
+      noteEl.style.color = 'var(--sap-text-secondary)';
+      document.getElementById('certDeleteConfirmModal').classList.add('open');
+      return;
+    }
     const hoursLeft = Math.max(0, 24 - (Date.now() - uploaded.getTime()) / 3600000);
     const hh = Math.floor(hoursLeft);
     const mm = Math.floor((hoursLeft % 1) * 60);
@@ -2671,7 +2701,7 @@ async function loadCerts() {
       fileUrl:         cert.file_url  || '',
       rejectionReason: cert.rejection_reason || '',
       jobNumber:       cert.notes || '',
-      uploadTime:      cert.created_at || '',   // full ISO timestamp for accurate 24hr window
+      uploadTime:      cert.created_at || cert.uploaded_at || cert.createdAt || '',   // full timestamp for 24h edit window
       uploadedBy:      cert.uploaded_by_username || cert.uploaded_by || '',
       uploaded_by:     cert.uploaded_by || '',
     })});
