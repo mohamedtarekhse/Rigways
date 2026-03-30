@@ -1381,26 +1381,47 @@ async function handleFiles(request, env, path) {
   if (path === '/files' && method === 'GET') {
     const q = url.searchParams;
     if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
-    const limit = Math.min(Math.max(parseInt(q.get('limit') || '200', 10), 1), 500);
+    const limit = Math.min(Math.max(parseInt(q.get('limit') || '500', 10), 1), 1000);
     const jobNumber = q.get('job_number') || '';
-    const prefix = q.get('prefix') || (jobNumber ? `files/jobs/${jobNumber}/` : 'files/');
+    const prefix = q.get('prefix') || '';
     const listRes = await env.CERT_BUCKET.list({ prefix, limit });
     const objects = (listRes.objects || []);
 
     const { data: metaRows } = await db.from('certificate_files', { select: '*', filters: {}, limit: 5000, order: 'uploaded_at.desc' });
     const metaMap = new Map((Array.isArray(metaRows) ? metaRows : []).map(r => [r.r2_key, r]));
-    const merged = objects.map(o => {
-      const m = metaMap.get(o.key) || {};
+    const { data: certRows } = await db.from('certificates', {
+      select: 'id,cert_type,client_id,file_name,file_url,uploaded_by,created_at',
+      filters: {},
+      limit: 5000,
+      order: 'created_at.desc',
+    });
+    const legacyMap = new Map(
+      (Array.isArray(certRows) ? certRows : [])
+        .filter(r => r.file_url)
+        .map(r => [r.file_url, r])
+    );
+
+    const allKeys = new Set([
+      ...objects.map(o => o.key),
+      ...Array.from(metaMap.keys()).filter(Boolean),
+      ...Array.from(legacyMap.keys()).filter(Boolean),
+    ]);
+
+    const objectMap = new Map(objects.map(o => [o.key, o]));
+    const merged = Array.from(allKeys).map(key => {
+      const o = objectMap.get(key) || {};
+      const m = metaMap.get(key) || {};
+      const c = legacyMap.get(key) || {};
       return {
         id: m.id || null,
-        r2_key: o.key,
-        file_name: m.file_name || o.key.split('/').pop(),
+        r2_key: key,
+        file_name: m.file_name || c.file_name || key.split('/').pop(),
         file_size: m.file_size ?? o.size ?? null,
-        uploaded_at: m.uploaded_at || o.uploaded || null,
-        uploaded_by: m.uploaded_by || null,
-        client_id: m.client_id || null,
-        cert_type: m.cert_type || null,
-        job_number: m.job_number || (o.key.match(/^files\/jobs\/([^/]+)\//)?.[1] || null),
+        uploaded_at: m.uploaded_at || c.created_at || o.uploaded || null,
+        uploaded_by: m.uploaded_by || c.uploaded_by || null,
+        client_id: m.client_id || c.client_id || null,
+        cert_type: m.cert_type || c.cert_type || null,
+        job_number: m.job_number || (key.match(/\/jobs\/([^/]+)\//)?.[1] || key.match(/^files\/jobs\/([^/]+)\//)?.[1] || null),
         status: m.status || 'active',
         scan_status: m.scan_status || 'pending',
         is_current: !!m.is_current,
@@ -1409,6 +1430,7 @@ async function handleFiles(request, env, path) {
     });
 
     const filtered = merged.filter(r => {
+      if (jobNumber && !(r.job_number === jobNumber || (r.r2_key || '').includes(`/jobs/${jobNumber}/`))) return false;
       if (q.get('client_id') && r.client_id !== q.get('client_id')) return false;
       if (q.get('cert_type') && r.cert_type !== q.get('cert_type')) return false;
       if (q.get('filename') && !(r.file_name || '').toLowerCase().includes(q.get('filename').toLowerCase())) return false;
