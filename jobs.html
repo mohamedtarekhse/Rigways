@@ -47,7 +47,16 @@
 <main class="sap-main jobs-main">
   <div class="sap-page-header"><h1 class="sap-page-title">Jobs Dashboard</h1></div>
 
-  <div class="sap-card">
+  <div class="sap-card" id="jobsReadOnlyBanner" style="display:none; margin-bottom:12px;">
+    <div class="sap-card__body">
+      <div class="sap-badge sap-badge--info">Read Only</div>
+      <div style="margin-top:8px; font-size:13px; color:var(--sap-text-secondary);">
+        Technician role can view jobs and status only (Open / Closed / Reopened).
+      </div>
+    </div>
+  </div>
+
+  <div class="sap-card" id="jobsCreateCard">
     <div class="sap-form-grid sap-form-grid--2col">
       <div class="sap-field">
         <label class="sap-label">Job Number (optional)</label>
@@ -83,6 +92,7 @@
 
 <script>
 let session = null;
+let jobsReadOnly = false;
 function getSession(){ return (typeof SapSession!=='undefined') ? SapSession.get() : JSON.parse(sessionStorage.getItem('sap_session')||'null'); }
 function logout(){ if (typeof SapSession !== 'undefined') return SapSession.logout(); sessionStorage.removeItem('sap_session'); location.href='/'; }
 function toggleUserMenu(){ document.getElementById('userMenu')?.classList.toggle('open'); }
@@ -118,17 +128,26 @@ function selectedInspectorIds() {
   return Array.from(sel.selectedOptions || []).map(o => o.value).filter(Boolean);
 }
 
+function formatJobStatus(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'closed' || s === 'done' || s === 'technician_done') return '<span class="sap-badge sap-badge--neutral">Closed</span>';
+  if (s === 'reopened') return '<span class="sap-badge sap-badge--warning">Reopened</span>';
+  return '<span class="sap-badge sap-badge--success">Open</span>';
+}
+
 async function loadJobs(){
   const res = await apiFetch('/api/jobs?limit=200');
   const raw = await res.json();
   const jobs = (raw.data||raw).jobs || [];
   document.getElementById('jobsBody').innerHTML = jobs.map(j => `<tr>
-    <td>${j.job_number||''}</td><td>${j.client_id||''}</td><td>${j.status||''}</td>
-    <td><div class="jobs-actions">
-      <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','close')">Close</button>
-      <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','reopen')">Reopen</button>
-      <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','mark_done')">Mark Done</button>
-    </div></td></tr>`).join('');
+    <td>${j.job_number||''}</td><td>${j.client_id||''}</td><td>${formatJobStatus(j.status)}</td>
+    <td>${jobsReadOnly
+      ? '<span class="sap-badge sap-badge--neutral">View only</span>'
+      : `<div class="jobs-actions">
+          <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','close')">Close</button>
+          <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','reopen')">Reopen</button>
+          <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','mark_done')">Mark Done</button>
+        </div>`}</td></tr>`).join('');
 }
 
 async function createJob(){
@@ -156,9 +175,17 @@ async function jobAction(id, action){
 document.addEventListener('DOMContentLoaded', async ()=>{
   session = getSession();
   if(!session) return location.href='/';
-  if (!['admin','manager'].includes(session.role)) return location.href='dashboard.html';
+  if (!['admin','manager','technician'].includes(session.role)) return location.href='dashboard.html';
+  jobsReadOnly = session.role === 'technician';
   document.getElementById('menuUserName').textContent = session.name || '';
   document.getElementById('menuUserRole').textContent = session.role || '';
+
+  if (jobsReadOnly) {
+    const createCard = document.getElementById('jobsCreateCard');
+    const readOnlyBanner = document.getElementById('jobsReadOnlyBanner');
+    if (createCard) createCard.style.display = 'none';
+    if (readOnlyBanner) readOnlyBanner.style.display = '';
+  }
 
   if (session.role !== 'admin') document.getElementById('adminClientsLink').style.display = 'none';
   if (session.role !== 'admin' && session.role !== 'manager') {
@@ -168,7 +195,11 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     document.getElementById('funcLocsLink').style.display = 'none';
   }
 
-  await Promise.all([loadClientsDropdown(), loadInspectorsDropdown(), loadJobs()]);
+  if (jobsReadOnly) {
+    await loadJobs();
+  } else {
+    await Promise.all([loadClientsDropdown(), loadInspectorsDropdown(), loadJobs()]);
+  }
 });
 </script>
 </body>
