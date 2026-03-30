@@ -58,6 +58,7 @@ const SAP_CONFIG = {
     { id:'assets',        href:'assets.html',        iconKey:'asset',  en:'Assets',        ar:'الأصول',       roles:['admin','manager','technician','user'] },
     { id:'certificates',  href:'certificates.html',  iconKey:'cert',   en:'Certificates',  ar:'الشهادات',     roles:['admin','manager','technician','user'] },
     { id:'jobs',          href:'jobs.html',          iconKey:'chart',  en:'Jobs',          ar:'الوظائف',      roles:['admin','manager','technician'] },
+    { id:'files',         href:'files.html',         iconKey:'asset',  en:'Files',         ar:'الملفات',      roles:['admin'] },
     { id:'notifications', href:'notifications.html', iconKey:'notif',  en:'Notifications', ar:'الإشعارات',    roles:['admin','manager','technician','user'] },
     { id:'clients',       href:'clients.html',       iconKey:'users',  en:'Clients',       ar:'العملاء',      roles:['admin'] },
   ],
@@ -864,6 +865,21 @@ function ensureJobsNavForRole(role) {
   });
 }
 
+function ensureFilesNavForRole(role) {
+  if (role !== 'admin') return;
+  document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
+    if (inner.querySelector('a[href="files.html"]')) return;
+    const a = document.createElement('a');
+    a.href = 'files.html';
+    a.className = 'sap-nav-item sap-nav-item--admin';
+    if (location.pathname.endsWith('/files.html')) a.classList.add('active');
+    a.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Files</span>';
+    const clients = inner.querySelector('a[href="clients.html"]');
+    if (clients) inner.insertBefore(a, clients);
+    else inner.appendChild(a);
+  });
+}
+
 
 
 function applyPageBodyClass() {
@@ -933,6 +949,7 @@ function applyPlanBMobileLayout() {
     /* ── Sidebar ── */
     SapSidebar.init();
     ensureJobsNavForRole(session.role);
+    ensureFilesNavForRole(session.role);
 
     /* ── Role visibility ── */
     SapRoles.applyVisibility(session.role);

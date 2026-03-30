@@ -10,14 +10,23 @@
 <body class="jobs-page">
 <header class="sap-shell">
   <a href="dashboard.html" class="sap-shell__logo">
-    <span>Rigways</span><span class="sap-shell__logo-badge">ACM</span>
+    <span>Rigways Group</span><span class="sap-shell__logo-badge">ACM</span>
   </a>
   <div class="sap-shell__divider"></div>
-  <span class="sap-shell__app-title">Jobs Workflow</span>
+  <span class="sap-shell__app-title">Asset &amp; Certificate Management</span>
   <div class="sap-shell__spacer"></div>
   <div class="sap-shell__actions">
-    <button class="sap-shell__btn" onclick="window.location.href='notifications.html'">🔔</button>
+    <button class="sap-shell__btn" onclick="window.location.href='notifications.html'">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span class="sap-shell__badge" id="notifBadge" style="display:none;"></span>
+    </button>
+    <button class="sap-shell__btn" id="settingsBtn" title="Settings">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h.01A1.65 1.65 0 0010 3.09V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h.01a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v.01a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </button>
     <div class="sap-shell__avatar" id="shellAvatar" onclick="toggleUserMenu()">AD</div>
+    <button class="sap-shell__btn sap-mobile-menu-btn" id="mobileMenuBtn" onclick="toggleUserMenu()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
   </div>
   <div class="sap-user-menu" id="userMenu">
     <div class="sap-user-menu__header">
@@ -32,14 +41,38 @@
 
 <nav class="sap-navbar">
   <div class="sap-navbar__inner">
-    <a href="dashboard.html" class="sap-nav-item"><span>Dashboard</span></a>
-    <a href="assets.html" class="sap-nav-item"><span>Assets</span></a>
-    <a href="certificates.html" class="sap-nav-item"><span>Certificates</span></a>
-    <a href="jobs.html" class="sap-nav-item active"><span>Jobs</span></a>
-    <a href="notifications.html" class="sap-nav-item"><span>Notifications</span></a>
-    <a href="clients.html" class="sap-nav-item" id="adminClientsLink"><span>Clients</span></a>
-    <a href="inspectors.html" class="sap-nav-item" id="inspectorsLink"><span>Inspectors</span></a>
-    <a href="functional-locations.html" class="sap-nav-item" id="funcLocsLink"><span>Func. Locations</span></a>
+    <a href="dashboard.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span>Dashboard</span>
+    </a>
+    <a href="assets.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      <span>Assets</span>
+    </a>
+    <a href="certificates.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+      <span>Certificates</span>
+    </a>
+    <a href="jobs.html" class="sap-nav-item active">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      <span>Jobs</span>
+    </a>
+    <a href="notifications.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span>Notifications</span>
+    </a>
+    <a href="clients.html" class="sap-nav-item sap-nav-item--admin" id="adminClientsLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+      <span>Clients</span>
+    </a>
+    <a href="inspectors.html" class="sap-nav-item sap-nav-item--admin" id="inspectorsLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M9 12l2 2 4-4"/></svg>
+      <span>Inspectors</span>
+    </a>
+    <a href="functional-locations.html" class="sap-nav-item sap-nav-item--admin" id="funcLocsLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      <span>Func. Locations</span>
+    </a>
   </div>
 </nav>
 
@@ -187,6 +220,10 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   }
 
   if (session.role !== 'admin') document.getElementById('adminClientsLink').style.display = 'none';
+  if (session.role !== 'admin') {
+    const settingsBtn = document.getElementById('settingsBtn');
+    if (settingsBtn) settingsBtn.style.display = 'none';
+  }
   if (session.role !== 'admin' && session.role !== 'manager') {
     document.getElementById('inspectorsLink').style.display = 'none';
     document.getElementById('funcLocsLink').style.display = 'none';

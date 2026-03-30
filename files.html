@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Files - Rigways ACM</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="app.js"></script>
+</head>
+<body>
+<header class="sap-shell">
+  <a href="dashboard.html" class="sap-shell__logo"><span>Rigways Group</span><span class="sap-shell__logo-badge">ACM</span></a>
+  <div class="sap-shell__divider"></div>
+  <span class="sap-shell__app-title">Asset &amp; Certificate Management</span>
+  <div class="sap-shell__spacer"></div>
+  <div class="sap-shell__actions">
+    <button class="sap-shell__btn" onclick="window.location.href='notifications.html'"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg><span class="sap-shell__badge" id="notifBadge" style="display:none;"></span></button>
+    <div class="sap-shell__avatar" id="shellAvatar" onclick="toggleUserMenu()">AD</div>
+    <button class="sap-shell__btn sap-mobile-menu-btn" id="mobileMenuBtn" onclick="toggleUserMenu()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+  </div>
+  <div class="sap-user-menu" id="userMenu">
+    <div class="sap-user-menu__header"><div class="sap-user-menu__name" id="menuUserName">Admin</div><div class="sap-user-menu__role" id="menuUserRole">Administrator</div></div>
+    <div class="sap-user-menu__item" onclick="window.location.href='dashboard.html'"><span>Dashboard</span></div>
+    <div class="sap-user-menu__sep"></div>
+    <div class="sap-user-menu__item sap-user-menu__item--danger" onclick="logout()"><span>Sign Out</span></div>
+  </div>
+</header>
+
+<nav class="sap-navbar"><div class="sap-navbar__inner" id="filesNav"></div></nav>
+
+<main class="sap-main">
+  <div class="sap-page-header"><h1 class="sap-page-title">Files Explorer</h1></div>
+
+  <div class="sap-card" style="margin-bottom:12px;">
+    <div class="sap-card__header"><div class="sap-card__title">Upload File</div></div>
+    <div class="sap-card__body">
+      <div class="sap-form-grid sap-form-grid--3col">
+        <div class="sap-field"><label class="sap-label">Job Number</label><input id="upJob" class="sap-input" /></div>
+        <div class="sap-field"><label class="sap-label">Certificate ID</label><input id="upCert" class="sap-input" /></div>
+        <div class="sap-field"><label class="sap-label">Client ID</label><input id="upClient" class="sap-input" /></div>
+        <div class="sap-field"><label class="sap-label">Certificate Type</label><input id="upType" class="sap-input" /></div>
+        <div class="sap-field" style="grid-column: span 2;"><label class="sap-label">File (PDF + images + docs, max 150MB)</label><input id="upFile" type="file" class="sap-input"/></div>
+      </div>
+      <button class="btn btn-primary" onclick="uploadFile()">Upload</button>
+    </div>
+  </div>
+
+  <div class="sap-card">
+    <div class="sap-card__header"><div class="sap-card__title">Global File Explorer</div></div>
+    <div class="sap-card__body">
+      <div class="sap-toolbar" style="margin-bottom:10px;">
+        <input id="fJob" class="sap-input" placeholder="Job" oninput="loadFiles()" />
+        <input id="fClient" class="sap-input" placeholder="Client" oninput="loadFiles()" />
+        <input id="fType" class="sap-input" placeholder="Cert Type" oninput="loadFiles()" />
+        <input id="fDateFrom" class="sap-input" type="date" onchange="loadFiles()" />
+        <input id="fDateTo" class="sap-input" type="date" onchange="loadFiles()" />
+      </div>
+      <div class="sap-table-wrapper">
+        <table class="sap-table">
+          <thead><tr><th>Job</th><th>Cert Type</th><th>Filename</th><th>Size</th><th>Uploaded By</th><th>Uploaded At</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="filesBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+let session = null;
+function getSession(){ return (typeof SapSession!=='undefined') ? SapSession.get() : JSON.parse(sessionStorage.getItem('sap_session')||'null'); }
+function logout(){ if (typeof SapSession !== 'undefined') return SapSession.logout(); sessionStorage.removeItem('sap_session'); location.href='/'; }
+function toggleUserMenu(){ document.getElementById('userMenu')?.classList.toggle('open'); }
+document.addEventListener('click', e => { if (!e.target.closest('#shellAvatar') && !e.target.closest('#mobileMenuBtn') && !e.target.closest('#userMenu')) document.getElementById('userMenu')?.classList.remove('open'); });
+
+function bytes(n){ if(!n&&n!==0) return '—'; const u=['B','KB','MB','GB']; let i=0,v=Number(n); while(v>=1024&&i<u.length-1){v/=1024;i++;} return `${v.toFixed(v>=10||i===0?0:1)} ${u[i]}`; }
+function statusBadge(r){
+  const del = r.deleted_at || r.status === 'deleted';
+  const scan = (r.scan_status || 'pending').toLowerCase();
+  const main = del ? '<span class="sap-badge sap-badge--neutral">Deleted</span>' : '<span class="sap-badge sap-badge--success">Active</span>';
+  const scanB = scan === 'clean' ? '<span class="sap-badge sap-badge--success">Scanned</span>' : scan === 'infected' ? '<span class="sap-badge sap-badge--error">Infected</span>' : '<span class="sap-badge sap-badge--warning">Scan Pending</span>';
+  return `${main} ${scanB}`;
+}
+
+async function loadFiles(){
+  const p = new URLSearchParams();
+  const map = { job_number:fJob.value, client_id:fClient.value, cert_type:fType.value, date_from:fDateFrom.value, date_to:fDateTo.value };
+  Object.entries(map).forEach(([k,v])=>{ if(v) p.set(k,v); });
+  const res = await apiFetch('/api/files' + (p.toString() ? `?${p}` : ''));
+  const raw = await res.json();
+  const rows = (raw.data||raw).files || [];
+  filesBody.innerHTML = rows.map(r => `<tr>
+    <td>${r.job_number||'—'}</td>
+    <td>${r.cert_type||'—'}</td>
+    <td>${r.file_name||'—'} ${r.is_current ? '<span class="sap-badge sap-badge--info">Current</span>' : ''}</td>
+    <td>${bytes(r.file_size)}</td>
+    <td>${r.uploaded_by_username||r.uploaded_by||'—'}</td>
+    <td>${r.uploaded_at ? new Date(r.uploaded_at).toLocaleString() : '—'}</td>
+    <td>${statusBadge(r)}</td>
+    <td>
+      <button class="btn btn-secondary btn-sm" onclick="downloadFile('${r.id}')">Download</button>
+      <button class="btn btn-warning btn-sm" onclick="softDeleteFile('${r.id}')">Soft Delete</button>
+      <button class="btn btn-danger btn-sm" onclick="hardDeleteFile('${r.id}')">Hard Delete</button>
+      <button class="btn btn-ghost btn-sm" onclick="makeCurrent('${r.id}')">Set Current</button>
+    </td>
+  </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--sap-text-secondary);">No files found</td></tr>';
+}
+
+async function uploadFile(){
+  const f = document.getElementById('upFile').files[0];
+  if(!f) return alert('Select a file');
+  const fd = new FormData();
+  fd.append('file', f);
+  fd.append('job_number', upJob.value.trim());
+  fd.append('certificate_id', upCert.value.trim());
+  fd.append('client_id', upClient.value.trim());
+  fd.append('cert_type', upType.value.trim());
+  const token = JSON.parse(sessionStorage.getItem('sap_session')||'{}').token || '';
+  const res = await fetch('/api/files/upload', { method:'POST', headers: token ? { Authorization:'Bearer '+token } : {}, body: fd });
+  const raw = await res.json();
+  if(!raw.success) return alert(raw.error||'Upload failed');
+  upFile.value = '';
+  loadFiles();
+}
+
+async function downloadFile(id){
+  const res = await apiFetch('/api/files/' + id + '/signed-url?ttl=300');
+  const raw = await res.json();
+  const url = (raw.data||raw).url;
+  if(url) window.open(url, '_blank');
+}
+async function softDeleteFile(id){ if(!confirm('Soft delete this file?')) return; await apiFetch('/api/files/' + id + '?mode=soft', { method:'DELETE' }); loadFiles(); }
+async function hardDeleteFile(id){ if(!confirm('Permanent delete from R2 and DB?')) return; await apiFetch('/api/files/' + id + '?mode=hard', { method:'DELETE' }); loadFiles(); }
+async function makeCurrent(id){ await apiFetch('/api/files/' + id + '/make-current', { method:'POST' }); loadFiles(); }
+
+function buildNav(){
+  const items = [
+    ['dashboard.html','Dashboard'],['assets.html','Assets'],['certificates.html','Certificates'],['jobs.html','Jobs'],['notifications.html','Notifications'],['files.html','Files']
+  ];
+  const n = document.getElementById('filesNav');
+  n.innerHTML = items.map(i => `<a href="${i[0]}" class="sap-nav-item${i[0]==='files.html'?' active':''}"><span>${i[1]}</span></a>`).join('');
+}
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+  session = getSession();
+  if(!session) return location.href='/';
+  if(session.role !== 'admin') return location.href='dashboard.html';
+  menuUserName.textContent = session.name || '';
+  menuUserRole.textContent = session.role || '';
+  shellAvatar.textContent = (session.name||'AD').split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase();
+  buildNav();
+  await loadFiles();
+});
+</script>
+</body>
+</html>
