@@ -57,7 +57,7 @@ const SAP_CONFIG = {
     { id:'dashboard',     href:'dashboard.html',     iconKey:'grid',   en:'Dashboard',     ar:'لوحة التحكم',  roles:['admin','manager','technician','user'] },
     { id:'assets',        href:'assets.html',        iconKey:'asset',  en:'Assets',        ar:'الأصول',       roles:['admin','manager','technician','user'] },
     { id:'certificates',  href:'certificates.html',  iconKey:'cert',   en:'Certificates',  ar:'الشهادات',     roles:['admin','manager','technician','user'] },
-    { id:'jobs',          href:'jobs.html',          iconKey:'chart',  en:'Jobs',          ar:'الوظائف',      roles:['admin','manager'] },
+    { id:'jobs',          href:'jobs.html',          iconKey:'chart',  en:'Jobs',          ar:'الوظائف',      roles:['admin','manager','technician'] },
     { id:'notifications', href:'notifications.html', iconKey:'notif',  en:'Notifications', ar:'الإشعارات',    roles:['admin','manager','technician','user'] },
     { id:'reports',       href:'reports.html',       iconKey:'chart',  en:'Reports',       ar:'التقارير',     roles:['admin','manager','technician','user'] },
     { id:'clients',       href:'clients.html',       iconKey:'users',  en:'Clients',       ar:'العملاء',      roles:['admin'] },
@@ -854,7 +854,7 @@ const SapEventBus = (() => {
    14. AUTO-INIT
 ================================================================ */
 function ensureJobsNavForRole(role) {
-  if (!['admin', 'manager'].includes(role)) return;
+  if (!['admin', 'manager', 'technician'].includes(role)) return;
   document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
     if (inner.querySelector('a[href="jobs.html"]')) return;
     const a = document.createElement('a');
