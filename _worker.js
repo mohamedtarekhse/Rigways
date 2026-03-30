@@ -8,7 +8,33 @@
 // worker/src/utils/response.js
 // Consistent { success, data?, error?, code? } shape on every response
 
-function json(body, status = 200, env = {}) {
+function securityHeaders(request, env = {}) {
+  const isHttps = String(request?.url || '').startsWith('https://');
+  const csp = [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'self'",
+    "form-action 'self'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https: wss:",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "upgrade-insecure-requests",
+  ].join('; ');
+  return {
+    'X-Frame-Options': 'SAMEORIGIN',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    'Content-Security-Policy': csp,
+    ...(isHttps ? { 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload' } : {}),
+    ...(env.SECURITY_XDNS_PREFETCH_CONTROL ? { 'X-DNS-Prefetch-Control': env.SECURITY_XDNS_PREFETCH_CONTROL } : { 'X-DNS-Prefetch-Control': 'off' }),
+  };
+}
+
+function json(body, status = 200, env = {}, request = null) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -16,6 +42,7 @@ function json(body, status = 200, env = {}) {
       'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
       'Pragma': 'no-cache',
       ...cors(env),
+      ...securityHeaders(request),
     },
   });
 }
@@ -31,17 +58,17 @@ function cors(env = {}) {
 }
 
 function handleOptions(request, env) {
-  return new Response(null, { status: 204, headers: cors(env) });
+  return new Response(null, { status: 204, headers: { ...cors(env), ...securityHeaders(request, env) } });
 }
 
-const ok = (data, env) => json({ success: true, data }, 200, env);
-const created = (data, env) => json({ success: true, data }, 201, env);
-const badReq = (error, code, env) => json({ success: false, error, code }, 400, env);
-const unauth = (env) => json({ success: false, error: 'Unauthorized', code: 'UNAUTH' }, 401, env);
-const forbidden = (env) => json({ success: false, error: 'Forbidden', code: 'FORBIDDEN' }, 403, env);
-const notFound = (res, env) => json({ success: false, error: `${res} not found`, code: 'NOT_FOUND' }, 404, env);
-const conflict = (error, env) => json({ success: false, error, code: 'CONFLICT' }, 409, env);
-const serverErr = (env, msg) => json({ success: false, error: msg ? 'Server error: ' + msg : 'Internal server error', code: 'SERVER_ERROR' }, 500, env);
+const ok = (data, env, request = null) => json({ success: true, data }, 200, env, request);
+const created = (data, env, request = null) => json({ success: true, data }, 201, env, request);
+const badReq = (error, code, env, request = null) => json({ success: false, error, code }, 400, env, request);
+const unauth = (env, request = null) => json({ success: false, error: 'Unauthorized', code: 'UNAUTH' }, 401, env, request);
+const forbidden = (env, request = null) => json({ success: false, error: 'Forbidden', code: 'FORBIDDEN' }, 403, env, request);
+const notFound = (res, env, request = null) => json({ success: false, error: `${res} not found`, code: 'NOT_FOUND' }, 404, env, request);
+const conflict = (error, env, request = null) => json({ success: false, error, code: 'CONFLICT' }, 409, env, request);
+const serverErr = (env, msg, request = null) => json({ success: false, error: msg ? 'Server error: ' + msg : 'Internal server error', code: 'SERVER_ERROR' }, 500, env, request);
 
 // ── validate.js ──
 // worker/src/utils/validate.js
@@ -2857,7 +2884,11 @@ export default {
 
     // Serve static files for non-API requests
     if (!url.pathname.startsWith('/api/')) {
-      return env.ASSETS.fetch(request);
+      const assetRes = await env.ASSETS.fetch(request);
+      const headers = new Headers(assetRes.headers);
+      const sec = securityHeaders(request, env);
+      Object.entries(sec).forEach(([k, v]) => headers.set(k, v));
+      return new Response(assetRes.body, { status: assetRes.status, statusText: assetRes.statusText, headers });
     }
 
     // Handle CORS preflight
@@ -2941,18 +2972,18 @@ export default {
           const session = await getSession(request, env);
           if (!session || !requireRole(session, ['admin'])) {
             const reason = !cronSecret ? 'CRON_SECRET_NOT_CONFIGURED' : 'INVALID_SECRET_PROVIDED';
-            return json({ success: false, error: `Forbidden: ${reason}`, code: 'FORBIDDEN' }, 403, env);
+            return json({ success: false, error: `Forbidden: ${reason}`, code: 'FORBIDDEN' }, 403, env, request);
           }
         }
 
         const result = await handleCheckExpiry(env);
-        return json({ success: true, data: result }, 200, env);
+        return json({ success: true, data: result }, 200, env, request);
       }
 
-      return json({ success: false, error: 'Route not found' }, 404, env);
+      return json({ success: false, error: 'Route not found' }, 404, env, request);
     } catch (err) {
       console.error('Worker error:', err);
-      return json({ success: false, error: 'Error: ' + (err?.message || String(err)), code: 'SERVER_ERROR' }, 500, env);
+      return json({ success: false, error: 'Error: ' + (err?.message || String(err)), code: 'SERVER_ERROR' }, 500, env, request);
     }
   }
 };
