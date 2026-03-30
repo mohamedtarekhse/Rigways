@@ -27,7 +27,7 @@
 const SAP_CONFIG = {
   APP_NAME:    'SAP S/4HANA ACM',
   APP_VERSION: '1.0.0',
-  SUPPORTED_LANGS: ['en', 'ar'],
+  SUPPORTED_LANGS: ['en'],
   DEFAULT_LANG:    'en',
   PAGE_SIZE:       15,
   SESSION_KEY:     'sap_session',
@@ -57,9 +57,9 @@ const SAP_CONFIG = {
     { id:'dashboard',     href:'dashboard.html',     iconKey:'grid',   en:'Dashboard',     ar:'لوحة التحكم',  roles:['admin','manager','technician','user'] },
     { id:'assets',        href:'assets.html',        iconKey:'asset',  en:'Assets',        ar:'الأصول',       roles:['admin','manager','technician','user'] },
     { id:'certificates',  href:'certificates.html',  iconKey:'cert',   en:'Certificates',  ar:'الشهادات',     roles:['admin','manager','technician','user'] },
-    { id:'jobs',          href:'jobs.html',          iconKey:'chart',  en:'Jobs',          ar:'الوظائف',      roles:['admin','manager'] },
+    { id:'jobs',          href:'jobs.html',          iconKey:'chart',  en:'Jobs',          ar:'الوظائف',      roles:['admin','manager','technician'] },
+    { id:'files',         href:'files.html',         iconKey:'asset',  en:'Files',         ar:'الملفات',      roles:['admin'] },
     { id:'notifications', href:'notifications.html', iconKey:'notif',  en:'Notifications', ar:'الإشعارات',    roles:['admin','manager','technician','user'] },
-    { id:'reports',       href:'reports.html',       iconKey:'chart',  en:'Reports',       ar:'التقارير',     roles:['admin','manager','technician','user'] },
     { id:'clients',       href:'clients.html',       iconKey:'users',  en:'Clients',       ar:'العملاء',      roles:['admin'] },
   ],
 };
@@ -203,61 +203,58 @@ const SapSession = (() => {
    3. LANGUAGE MANAGER
 ================================================================ */
 const SapLang = (() => {
-  let _lang = localStorage.getItem(SAP_CONFIG.LANG_KEY) || SAP_CONFIG.DEFAULT_LANG;
+  let _lang = SAP_CONFIG.DEFAULT_LANG;
 
   function current() { return _lang; }
-  function isAr()    { return _lang === 'ar'; }
+  function isAr()    { return false; }
 
   /**
    * Apply language: update DOM attributes, dir, font, placeholders.
    */
   function apply(lang, skipRender) {
-    if (!SAP_CONFIG.SUPPORTED_LANGS.includes(lang)) return;
-    _lang = lang;
-    localStorage.setItem(SAP_CONFIG.LANG_KEY, lang);
+    _lang = SAP_CONFIG.DEFAULT_LANG;
+    localStorage.setItem(SAP_CONFIG.LANG_KEY, SAP_CONFIG.DEFAULT_LANG);
 
     const html = document.documentElement;
-    html.lang  = lang;
-    html.dir   = lang === 'ar' ? 'rtl' : 'ltr';
-    document.body.classList.toggle('lang-ar', lang === 'ar');
+    html.lang  = SAP_CONFIG.DEFAULT_LANG;
+    html.dir   = 'ltr';
+    document.body.classList.remove('lang-ar');
 
     /* Text nodes */
     document.querySelectorAll('[data-en]').forEach(el => {
       if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return;
-      const val = el.getAttribute('data-' + lang) || el.getAttribute('data-en');
+      const val = el.getAttribute('data-en');
       if (val !== null) el.textContent = val;
     });
 
     /* Placeholders */
     document.querySelectorAll('[data-ph-en]').forEach(el => {
-      el.placeholder = el.getAttribute('data-ph-' + lang) || el.getAttribute('data-ph-en');
+      el.placeholder = el.getAttribute('data-ph-en');
     });
 
     /* Select options */
     document.querySelectorAll('option[data-en]').forEach(opt => {
-      opt.textContent = opt.getAttribute('data-' + lang) || opt.getAttribute('data-en');
+      opt.textContent = opt.getAttribute('data-en');
     });
 
     /* Lang button */
     const btn = document.getElementById('langBtn');
-    if (btn) btn.textContent = lang === 'en' ? 'AR' : 'EN';
+    if (btn) btn.style.display = 'none';
 
-    if (!skipRender) SapEventBus.emit('lang:changed', lang);
+    if (!skipRender) SapEventBus.emit('lang:changed', SAP_CONFIG.DEFAULT_LANG);
   }
 
-  function toggle() { apply(_lang === 'en' ? 'ar' : 'en'); }
+  function toggle() { apply(SAP_CONFIG.DEFAULT_LANG); }
 
   /**
    * Quick translation helper: t('English text', 'نص عربي')
    */
-  function t(en, ar) { return _lang === 'ar' ? ar : en; }
+  function t(en, ar) { return en; }
 
   /**
    * Pluralize helper
    */
-  function plural(n, en, ar) {
-    return _lang === 'ar' ? `${n} ${ar}` : `${n} ${en}`;
-  }
+  function plural(n, en, ar) { return `${n} ${en}`; }
 
   return { current, isAr, apply, toggle, t, plural };
 })();
@@ -854,7 +851,7 @@ const SapEventBus = (() => {
    14. AUTO-INIT
 ================================================================ */
 function ensureJobsNavForRole(role) {
-  if (!['admin', 'manager'].includes(role)) return;
+  if (!['admin', 'manager', 'technician'].includes(role)) return;
   document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
     if (inner.querySelector('a[href="jobs.html"]')) return;
     const a = document.createElement('a');
@@ -862,8 +859,23 @@ function ensureJobsNavForRole(role) {
     a.className = 'sap-nav-item';
     if (location.pathname.endsWith('/jobs.html')) a.classList.add('active');
     a.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Jobs</span>';
-    const reports = inner.querySelector('a[href="reports.html"]');
-    if (reports) inner.insertBefore(a, reports);
+    const notifications = inner.querySelector('a[href="notifications.html"]');
+    if (notifications) inner.insertBefore(a, notifications);
+    else inner.appendChild(a);
+  });
+}
+
+function ensureFilesNavForRole(role) {
+  if (role !== 'admin') return;
+  document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
+    if (inner.querySelector('a[href="files.html"]')) return;
+    const a = document.createElement('a');
+    a.href = 'files.html';
+    a.className = 'sap-nav-item sap-nav-item--admin';
+    if (location.pathname.endsWith('/files.html')) a.classList.add('active');
+    a.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Files</span>';
+    const clients = inner.querySelector('a[href="clients.html"]');
+    if (clients) inner.insertBefore(a, clients);
     else inner.appendChild(a);
   });
 }
@@ -914,7 +926,7 @@ function applyPlanBMobileLayout() {
     if (isLoginPage) {
       /* On login page: wire language toggle only */
       const langBtn = document.getElementById('langBtn');
-      if (langBtn) langBtn.onclick = () => SapLang.toggle();
+      if (langBtn) langBtn.style.display = 'none';
 
       /* Auto-redirect if already logged in */
       if (SapSession.get()) {
@@ -937,6 +949,7 @@ function applyPlanBMobileLayout() {
     /* ── Sidebar ── */
     SapSidebar.init();
     ensureJobsNavForRole(session.role);
+    ensureFilesNavForRole(session.role);
 
     /* ── Role visibility ── */
     SapRoles.applyVisibility(session.role);
@@ -947,7 +960,7 @@ function applyPlanBMobileLayout() {
 
     /* ── Wire global buttons ── */
     const langBtn = document.getElementById('langBtn');
-    if (langBtn) langBtn.onclick = () => SapLang.toggle();
+    if (langBtn) langBtn.style.display = 'none';
 
     const shellAvatar = document.getElementById('shellAvatar');
     if (shellAvatar) shellAvatar.onclick = () => SapShell.toggleUserMenu();
