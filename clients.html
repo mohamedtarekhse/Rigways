@@ -974,13 +974,23 @@ async function confirmDelete() {
   const cl  = CLIENTS.find(x => x.customerId === deleteTargetId);
   const uuid = cl?._uuid || deleteTargetId;
   document.getElementById('deleteModal')?.classList.remove('open');
-  try {
-    const res  = await apiFetch('/api/clients/' + uuid, { method:'DELETE' });
-    const data = await res.json();
-    if (!data.success) { showToast('error','Failed',(data.data||data).error||'Could not delete.'); return; }
-    showToast('success','Deactivated','"' + (cl?.name||deleteTargetId) + '" deactivated.');
-    await loadClients();
-  } catch(e) { showToast('error','Network Error','Could not delete.'); }
+  const commit = async () => {
+    try {
+      const res  = await apiFetch('/api/clients/' + uuid, { method:'DELETE' });
+      const data = await res.json();
+      if (!data.success) { showToast('error','Failed',(data.data||data).error||'Could not delete.'); return; }
+      showToast('success','Deactivated','"' + (cl?.name||deleteTargetId) + '" deactivated.');
+      await loadClients();
+    } catch(e) { showToast('error','Network Error','Could not delete.'); }
+  };
+  if (!window.SapUndo) { await commit(); return; }
+  SapUndo.schedule({
+    title: 'Delete queued',
+    message: `Client "${cl?.name||deleteTargetId}" will be deactivated in 10 seconds.`,
+    windowMs: 10000,
+    onUndo: () => showToast('info', 'Delete Canceled', 'Client deactivation canceled.'),
+    onCommit: commit
+  });
 }
 
 /* ═══════════════════════════════════════════════════════

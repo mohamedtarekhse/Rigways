@@ -487,6 +487,62 @@ const SapToast = (() => {
 })();
 
 /* ================================================================
+   6.1 UNDO MANAGER (deferred actions)
+================================================================ */
+const SapUndo = (() => {
+  const DEFAULT_MS = 10000;
+
+  function schedule(opts = {}) {
+    const windowMs = Number(opts.windowMs) > 0 ? Number(opts.windowMs) : DEFAULT_MS;
+    const title = opts.title || 'Delete scheduled';
+    const message = opts.message || `Item will be deleted in ${Math.round(windowMs / 1000)} seconds.`;
+    const undoLabel = opts.undoLabel || 'Undo';
+    const onCommit = typeof opts.onCommit === 'function' ? opts.onCommit : async () => {};
+    const onUndo = typeof opts.onUndo === 'function' ? opts.onUndo : () => {};
+    const onError = typeof opts.onError === 'function' ? opts.onError : (err) => {
+      SapToast.error('Delete Failed', err?.message || 'Could not complete delete.');
+    };
+
+    const toast = SapToast.show('warning', title, message, 0);
+    const body = toast.querySelector('.sap-toast__body');
+    if (body) {
+      const actions = document.createElement('div');
+      actions.className = 'sap-toast__actions';
+      const btn = document.createElement('button');
+      btn.className = 'sap-toast__action';
+      btn.type = 'button';
+      btn.textContent = undoLabel;
+      actions.appendChild(btn);
+      body.appendChild(actions);
+
+      let finalized = false;
+      const timer = setTimeout(async () => {
+        if (finalized) return;
+        finalized = true;
+        if (toast.parentElement) toast.remove();
+        try {
+          await onCommit();
+        } catch (err) {
+          onError(err);
+        }
+      }, windowMs);
+
+      btn.addEventListener('click', () => {
+        if (finalized) return;
+        finalized = true;
+        clearTimeout(timer);
+        if (toast.parentElement) toast.remove();
+        try { onUndo(); } catch (e) {}
+      });
+    }
+
+    return toast;
+  }
+
+  return { schedule, DEFAULT_MS };
+})();
+
+/* ================================================================
    7. MODAL MANAGER
 ================================================================ */
 const SapModal = (() => {

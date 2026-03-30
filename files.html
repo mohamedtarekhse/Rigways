@@ -26,7 +26,46 @@
   </div>
 </header>
 
-<nav class="sap-navbar"><div class="sap-navbar__inner" id="filesNav"></div></nav>
+<nav class="sap-navbar">
+  <div class="sap-navbar__inner">
+    <a href="dashboard.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span>Dashboard</span>
+    </a>
+    <a href="assets.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      <span>Assets</span>
+    </a>
+    <a href="certificates.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+      <span>Certificates</span>
+    </a>
+    <a href="jobs.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      <span>Jobs</span>
+    </a>
+    <a href="notifications.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span>Notifications</span>
+    </a>
+    <a href="files.html" class="sap-nav-item active">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span>Files</span>
+    </a>
+    <a href="clients.html" class="sap-nav-item sap-nav-item--admin" id="adminClientsLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+      <span>Clients</span>
+    </a>
+    <a href="inspectors.html" class="sap-nav-item sap-nav-item--admin" id="inspectorsLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M9 12l2 2 4-4"/></svg>
+      <span>Inspectors</span>
+    </a>
+    <a href="functional-locations.html" class="sap-nav-item sap-nav-item--admin" id="funcLocsLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      <span>Func. Locations</span>
+    </a>
+  </div>
+</nav>
 
 <main class="sap-main">
   <div class="sap-page-header"><h1 class="sap-page-title">Files Explorer</h1></div>
@@ -35,12 +74,15 @@
     <div class="sap-card__header"><div class="sap-card__title">Global File Explorer</div></div>
     <div class="sap-card__body">
       <div class="sap-toolbar" style="margin-bottom:10px;">
-        <input id="fJob" class="sap-input" placeholder="Job" oninput="loadFiles()" />
-        <input id="fClient" class="sap-input" placeholder="Client" oninput="loadFiles()" />
-        <input id="fType" class="sap-input" placeholder="Cert Type" oninput="loadFiles()" />
-        <input id="fName" class="sap-input" placeholder="Filename contains..." oninput="loadFiles()" />
-        <input id="fDateFrom" class="sap-input" type="date" onchange="loadFiles()" />
-        <input id="fDateTo" class="sap-input" type="date" onchange="loadFiles()" />
+        <input id="fJob" class="sap-input" placeholder="Job" oninput="loadFiles()" style="max-width:180px;" />
+        <input id="fClient" class="sap-input" placeholder="Client" oninput="loadFiles()" style="max-width:180px;" />
+        <input id="fType" class="sap-input" placeholder="Cert Type" oninput="loadFiles()" style="max-width:180px;" />
+        <input id="fName" class="sap-input" placeholder="Filename contains..." oninput="loadFiles()" style="max-width:220px;" />
+        <input id="fDateFrom" class="sap-input" type="date" onchange="loadFiles()" style="max-width:165px;" />
+        <input id="fDateTo" class="sap-input" type="date" onchange="loadFiles()" style="max-width:165px;" />
+        <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear</button>
+        <button class="btn btn-primary btn-sm" onclick="loadFiles()">Apply</button>
+        <div class="sap-toolbar__count" id="filesCount">0</div>
       </div>
       <div class="sap-table-wrapper">
         <table class="sap-table">
@@ -75,6 +117,8 @@ async function loadFiles(){
   const res = await apiFetch('/api/files' + (p.toString() ? `?${p}` : ''));
   const raw = await res.json();
   const rows = (raw.data||raw).files || [];
+  const cnt = document.getElementById('filesCount');
+  if (cnt) cnt.textContent = rows.length;
   filesBody.innerHTML = rows.map(r => `<tr>
     <td>${r.job_number||'—'}</td>
     <td>${r.cert_type||'—'}</td>
@@ -87,9 +131,13 @@ async function loadFiles(){
       <button class="btn btn-secondary btn-sm" onclick="downloadFile('${encodeURIComponent(r.r2_key || '')}')">Download</button>
       <button class="btn btn-warning btn-sm" onclick="softDeleteFile('${encodeURIComponent(r.r2_key || '')}')">Soft Delete</button>
       <button class="btn btn-danger btn-sm" onclick="hardDeleteFile('${encodeURIComponent(r.r2_key || '')}')">Hard Delete</button>
-      ${r.id ? `<button class="btn btn-ghost btn-sm" onclick="makeCurrent('${r.id}')">Set Current</button>` : ''}
+  ${r.id ? `<button class="btn btn-ghost btn-sm" onclick="makeCurrent('${r.id}')">Set Current</button>` : '<span class="sap-badge sap-badge--neutral">Legacy</span>'}
     </td>
   </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--sap-text-secondary);">No files found</td></tr>';
+}
+function clearFilters(){
+  ['fJob','fClient','fType','fName','fDateFrom','fDateTo'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  loadFiles();
 }
 async function downloadFile(keyEnc){
   const res = await apiFetch('/api/files/object/signed-url?ttl=300&key=' + keyEnc);
@@ -97,17 +145,37 @@ async function downloadFile(keyEnc){
   const url = (raw.data||raw).url;
   if(url) window.open(url, '_blank');
 }
-async function softDeleteFile(keyEnc){ if(!confirm('Soft delete this file?')) return; await apiFetch('/api/files/object?mode=soft&key=' + keyEnc, { method:'DELETE' }); loadFiles(); }
-async function hardDeleteFile(keyEnc){ if(!confirm('Permanent delete from R2 and DB?')) return; await apiFetch('/api/files/object?mode=hard&key=' + keyEnc, { method:'DELETE' }); loadFiles(); }
-async function makeCurrent(id){ await apiFetch('/api/files/' + id + '/make-current', { method:'POST' }); loadFiles(); }
-
-function buildNav(){
-  const items = [
-    ['dashboard.html','Dashboard'],['assets.html','Assets'],['certificates.html','Certificates'],['jobs.html','Jobs'],['notifications.html','Notifications'],['files.html','Files']
-  ];
-  const n = document.getElementById('filesNav');
-  n.innerHTML = items.map(i => `<a href="${i[0]}" class="sap-nav-item${i[0]==='files.html'?' active':''}"><span>${i[1]}</span></a>`).join('');
+async function softDeleteFile(keyEnc){
+  if(!confirm('Soft delete this file?')) return;
+  if (!window.SapUndo) { await apiFetch('/api/files/object?mode=soft&key=' + keyEnc, { method:'DELETE' }); loadFiles(); return; }
+  SapUndo.schedule({
+    title: 'Soft delete queued',
+    message: 'File will be soft deleted in 10 seconds.',
+    windowMs: 10000,
+    onUndo: () => SapToast.info('Delete canceled', 'File soft delete was canceled.'),
+    onCommit: async () => {
+      await apiFetch('/api/files/object?mode=soft&key=' + keyEnc, { method:'DELETE' });
+      SapToast.success('Deleted', 'File soft deleted.');
+      loadFiles();
+    }
+  });
 }
+async function hardDeleteFile(keyEnc){
+  if(!confirm('Permanent delete from R2 and DB?')) return;
+  if (!window.SapUndo) { await apiFetch('/api/files/object?mode=hard&key=' + keyEnc, { method:'DELETE' }); loadFiles(); return; }
+  SapUndo.schedule({
+    title: 'Hard delete queued',
+    message: 'File will be permanently deleted in 10 seconds.',
+    windowMs: 10000,
+    onUndo: () => SapToast.info('Delete canceled', 'File hard delete was canceled.'),
+    onCommit: async () => {
+      await apiFetch('/api/files/object?mode=hard&key=' + keyEnc, { method:'DELETE' });
+      SapToast.success('Deleted', 'File permanently deleted.');
+      loadFiles();
+    }
+  });
+}
+async function makeCurrent(id){ await apiFetch('/api/files/' + id + '/make-current', { method:'POST' }); loadFiles(); }
 
 document.addEventListener('DOMContentLoaded', async ()=>{
   session = getSession();
@@ -116,7 +184,6 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   menuUserName.textContent = session.name || '';
   menuUserRole.textContent = session.role || '';
   shellAvatar.textContent = (session.name||'AD').split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase();
-  buildNav();
   await loadFiles();
 });
 </script>

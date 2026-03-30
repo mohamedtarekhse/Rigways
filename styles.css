@@ -1157,6 +1157,18 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
 .sap-toast__body { flex: 1; }
 .sap-toast__title { font-size: 13px; font-weight: 700; color: var(--sap-text-primary); }
 .sap-toast__msg   { font-size: 12px; color: var(--sap-text-secondary); margin-top: 2px; }
+.sap-toast__actions { margin-top: 8px; }
+.sap-toast__action {
+  background: transparent;
+  border: 1px solid var(--sap-brand);
+  color: var(--sap-brand);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sap-toast__action:hover { background: var(--sap-brand-light); }
 .sap-toast__close { background: none; border: none; color: var(--sap-text-secondary); cursor: pointer; padding: 2px; display: flex; align-items: center; justify-content: center; border-radius: 2px; }
 .sap-toast__close:hover { background: var(--sap-page-bg); }
 .sap-toast__close svg { width: 12px; height: 12px; }
