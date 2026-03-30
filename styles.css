@@ -238,6 +238,12 @@ input, select, textarea { font-family: inherit; }
 }
 .sap-shell__lang-btn:hover { background: rgba(255,255,255,.22); }
 
+/* Arabic module removed: hide language toggle globally */
+#langBtn,
+.sap-shell__lang-btn {
+  display: none !important;
+}
+
 .sap-shell__avatar {
   width: 32px; height: 32px;
   border-radius: 50%;
