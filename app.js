@@ -450,11 +450,16 @@ const SapToast = (() => {
       container = document.createElement('div');
       container.className = 'sap-toast-container';
       container.id = 'toastContainer';
+      container.setAttribute('aria-live', 'polite');
+      container.setAttribute('aria-atomic', 'false');
+      container.setAttribute('role', 'region');
+      container.setAttribute('aria-label', 'Notifications');
       document.body.appendChild(container);
     }
 
     const toast = document.createElement('div');
     toast.className = `sap-toast sap-toast--${type}`;
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
     toast.innerHTML = `
       <div class="sap-toast__icon">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${ICONS[type] || ICONS.info}</svg>
@@ -463,7 +468,7 @@ const SapToast = (() => {
         <div class="sap-toast__title">${_esc(title)}</div>
         <div class="sap-toast__msg">${_esc(message)}</div>
       </div>
-      <button class="sap-toast__close" onclick="this.parentElement.remove()">
+      <button class="sap-toast__close" aria-label="Dismiss notification" onclick="this.parentElement.remove()">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
@@ -512,6 +517,7 @@ const SapUndo = (() => {
       btn.className = 'sap-toast__action';
       btn.type = 'button';
       btn.textContent = undoLabel;
+      btn.setAttribute('aria-label', `${undoLabel} delete action`);
       actions.appendChild(btn);
       body.appendChild(actions);
 
@@ -546,15 +552,30 @@ const SapUndo = (() => {
    7. MODAL MANAGER
 ================================================================ */
 const SapModal = (() => {
+  const _focusMemory = new Map();
+
+  function _focusFirstInModal(el) {
+    if (!el) return;
+    const target = el.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    if (target && typeof target.focus === 'function') target.focus();
+  }
+
   function open(id) {
     const el = document.getElementById(id);
-    if (el) el.classList.add('open');
+    if (el) {
+      _focusMemory.set(id, document.activeElement || null);
+      el.classList.add('open');
+      _focusFirstInModal(el);
+    }
     document.body.style.overflow = 'hidden';
   }
 
   function close(id) {
     const el = document.getElementById(id);
     if (el) el.classList.remove('open');
+    const prev = _focusMemory.get(id);
+    if (prev && typeof prev.focus === 'function') prev.focus();
+    _focusMemory.delete(id);
     document.body.style.overflow = '';
   }
 
