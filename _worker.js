@@ -8,7 +8,33 @@
 // worker/src/utils/response.js
 // Consistent { success, data?, error?, code? } shape on every response
 
-function json(body, status = 200, env = {}) {
+function securityHeaders(request, env = {}) {
+  const isHttps = String(request?.url || '').startsWith('https://');
+  const csp = [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'self'",
+    "form-action 'self'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https: wss:",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "upgrade-insecure-requests",
+  ].join('; ');
+  return {
+    'X-Frame-Options': 'SAMEORIGIN',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    'Content-Security-Policy': csp,
+    ...(isHttps ? { 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload' } : {}),
+    ...(env.SECURITY_XDNS_PREFETCH_CONTROL ? { 'X-DNS-Prefetch-Control': env.SECURITY_XDNS_PREFETCH_CONTROL } : { 'X-DNS-Prefetch-Control': 'off' }),
+  };
+}
+
+function json(body, status = 200, env = {}, request = null) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -16,6 +42,7 @@ function json(body, status = 200, env = {}) {
       'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
       'Pragma': 'no-cache',
       ...cors(env),
+      ...securityHeaders(request),
     },
   });
 }
@@ -31,17 +58,17 @@ function cors(env = {}) {
 }
 
 function handleOptions(request, env) {
-  return new Response(null, { status: 204, headers: cors(env) });
+  return new Response(null, { status: 204, headers: { ...cors(env), ...securityHeaders(request, env) } });
 }
 
-const ok = (data, env) => json({ success: true, data }, 200, env);
-const created = (data, env) => json({ success: true, data }, 201, env);
-const badReq = (error, code, env) => json({ success: false, error, code }, 400, env);
-const unauth = (env) => json({ success: false, error: 'Unauthorized', code: 'UNAUTH' }, 401, env);
-const forbidden = (env) => json({ success: false, error: 'Forbidden', code: 'FORBIDDEN' }, 403, env);
-const notFound = (res, env) => json({ success: false, error: `${res} not found`, code: 'NOT_FOUND' }, 404, env);
-const conflict = (error, env) => json({ success: false, error, code: 'CONFLICT' }, 409, env);
-const serverErr = (env, msg) => json({ success: false, error: msg ? 'Server error: ' + msg : 'Internal server error', code: 'SERVER_ERROR' }, 500, env);
+const ok = (data, env, request = null) => json({ success: true, data }, 200, env, request);
+const created = (data, env, request = null) => json({ success: true, data }, 201, env, request);
+const badReq = (error, code, env, request = null) => json({ success: false, error, code }, 400, env, request);
+const unauth = (env, request = null) => json({ success: false, error: 'Unauthorized', code: 'UNAUTH' }, 401, env, request);
+const forbidden = (env, request = null) => json({ success: false, error: 'Forbidden', code: 'FORBIDDEN' }, 403, env, request);
+const notFound = (res, env, request = null) => json({ success: false, error: `${res} not found`, code: 'NOT_FOUND' }, 404, env, request);
+const conflict = (error, env, request = null) => json({ success: false, error, code: 'CONFLICT' }, 409, env, request);
+const serverErr = (env, msg, request = null) => json({ success: false, error: msg ? 'Server error: ' + msg : 'Internal server error', code: 'SERVER_ERROR' }, 500, env, request);
 
 // ── validate.js ──
 // worker/src/utils/validate.js
@@ -853,9 +880,22 @@ async function handleAssets(request, env, path) {
     const { data: ex } = await db.from('assets', { filters: { 'id.eq': asId }, select: 'id,asset_number,name', limit: 1 });
     const existing = Array.isArray(ex) ? ex[0] : ex;
     if (!existing) return notFound('Asset', env);
+    const { data: relCerts } = await db.from('certificates', {
+      filters: { 'asset_id.eq': asId },
+      select: 'id,file_url',
+      limit: 5000,
+    });
+    const certs = Array.isArray(relCerts) ? relCerts : [];
+    for (const cert of certs) {
+      if (cert.file_url && env.CERT_BUCKET) {
+        try { await env.CERT_BUCKET.delete(cert.file_url); } catch (e) { console.warn('R2 delete warning:', e.message); }
+      }
+    }
+    await _deleteCertificateFileRecords(db, env, certs.map(c => c.id));
+    if (certs.length) await db.delete('certificates', { filters: { 'asset_id.eq': asId } });
     await audit(db, session, 'assets', asId, 'delete', existing, null);
     await db.delete('assets', { filters: { 'id.eq': asId } });
-    return ok({ id: asId, deleted: true }, env);
+    return ok({ id: asId, deleted: true, related_certificates_deleted: certs.length }, env);
   }
 
   return badReq('Not found', 'NOT_FOUND', env);
@@ -996,6 +1036,7 @@ async function handleCertUpload(request, env, path) {
           'Content-Disposition': `${disposition}; filename="${cert.file_name || 'certificate'}"`,
           'Cache-Control': 'private, max-age=3600',
           ...cors(env),
+          ...securityHeaders(request, env),
         },
       });
     } catch (e) {
@@ -1215,6 +1256,10 @@ async function handleCertificates(request, env, path) {
     const { data, error } = await db.update('certificates', update, { filters: { 'id.eq': certId } });
     if (error) return serverErr(env);
     const updated = Array.isArray(data) ? data[0] : data;
+    await db.update('certificate_files', {
+      client_id: updated?.client_id || null,
+      cert_type: updated?.cert_type || null,
+    }, { filters: { 'certificate_id.eq': certId } }).catch(() => {});
     await _recordCertificateHistory(db, updated || existing, session, 'update');
 
     // Notify uploader + admins/managers of approval status changes
@@ -1287,6 +1332,11 @@ async function handleCertificates(request, env, path) {
       updated_at: new Date().toISOString(),
     }, { filters: { 'id.eq': fileDeleteId } });
     if (updateErr) return serverErr(env);
+    await db.update('certificate_files', {
+      status: 'deleted',
+      is_current: false,
+      deleted_at: new Date().toISOString(),
+    }, { filters: { 'certificate_id.eq': fileDeleteId, 'status.eq': 'active' } }).catch(() => {});
     const updated = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows;
     await _recordCertificateHistory(db, updated || existing, session, 'file_deleted');
     return ok({ id: fileDeleteId, file_deleted: true, certificate: updated || existing }, env);
@@ -1321,6 +1371,7 @@ async function handleCertificates(request, env, path) {
         }
         await _recordCertificateHistory(db, cert, session, 'record_deleted');
       }
+      await _deleteCertificateFileRecords(db, env, related.map(r => r.id));
       await db.delete('certificates', { filters: { 'asset_id.eq': existing.asset_id } });
       return ok({
         deleted_scope: 'asset',
@@ -1335,12 +1386,336 @@ async function handleCertificates(request, env, path) {
       try { await env.CERT_BUCKET.delete(existing.file_url); }
       catch (e) { console.warn('R2 delete warning:', e.message); }
     }
+    await _deleteCertificateFileRecords(db, env, [certId]);
     await _recordCertificateHistory(db, { ...existing, id: certId }, session, 'record_deleted');
     await db.delete('certificates', { filters: { 'id.eq': certId } });
     return ok({ id: certId, deleted: true, deleted_scope: 'single' }, env);
   }
 
   return badReq('Not found', 'NOT_FOUND', env);
+}
+
+// ── files.js ──
+// Admin file explorer for certificate files (1 certificate -> many files)
+async function handleFiles(request, env, path) {
+  const session = await getSession(request, env);
+  if (!session) return unauth(env);
+  if (!requireRole(session, ['admin'])) return forbidden(env);
+
+  const db = createSupabase(env);
+  const method = request.method;
+  const url = new URL(request.url);
+
+  if (path === '/files' && method === 'GET') {
+    const q = url.searchParams;
+    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    const limit = Math.min(Math.max(parseInt(q.get('limit') || '500', 10), 1), 1000);
+    const jobNumber = q.get('job_number') || '';
+    const prefix = q.get('prefix') || '';
+    const listRes = await env.CERT_BUCKET.list({ prefix, limit });
+    const objects = (listRes.objects || []);
+
+    const { data: metaRows } = await db.from('certificate_files', { select: '*', filters: {}, limit: 5000, order: 'uploaded_at.desc' });
+    const metaMap = new Map((Array.isArray(metaRows) ? metaRows : []).map(r => [r.r2_key, r]));
+    const { data: certRows } = await db.from('certificates', {
+      select: 'id,cert_type,client_id,file_name,file_url,uploaded_by,created_at',
+      filters: {},
+      limit: 5000,
+      order: 'created_at.desc',
+    });
+    const legacyMap = new Map(
+      (Array.isArray(certRows) ? certRows : [])
+        .filter(r => r.file_url)
+        .map(r => [r.file_url, r])
+    );
+
+    const allKeys = new Set([
+      ...objects.map(o => o.key),
+      ...Array.from(metaMap.keys()).filter(Boolean),
+      ...Array.from(legacyMap.keys()).filter(Boolean),
+    ]);
+
+    const objectMap = new Map(objects.map(o => [o.key, o]));
+    const merged = Array.from(allKeys).map(key => {
+      const o = objectMap.get(key) || {};
+      const m = metaMap.get(key) || {};
+      const c = legacyMap.get(key) || {};
+      return {
+        id: m.id || null,
+        r2_key: key,
+        file_name: m.file_name || c.file_name || key.split('/').pop(),
+        file_size: m.file_size ?? o.size ?? null,
+        uploaded_at: m.uploaded_at || c.created_at || o.uploaded || null,
+        uploaded_by: m.uploaded_by || c.uploaded_by || null,
+        client_id: m.client_id || c.client_id || null,
+        cert_type: m.cert_type || c.cert_type || null,
+        job_number: m.job_number || (key.match(/\/jobs\/([^/]+)\//)?.[1] || key.match(/^files\/jobs\/([^/]+)\//)?.[1] || null),
+        status: m.status || 'active',
+        scan_status: m.scan_status || 'pending',
+        is_current: !!m.is_current,
+        deleted_at: m.deleted_at || null,
+      };
+    });
+
+    const filtered = merged.filter(r => {
+      if (jobNumber && !(r.job_number === jobNumber || (r.r2_key || '').includes(`/jobs/${jobNumber}/`))) return false;
+      if (q.get('client_id') && r.client_id !== q.get('client_id')) return false;
+      if (q.get('cert_type') && r.cert_type !== q.get('cert_type')) return false;
+      if (q.get('filename') && !(r.file_name || '').toLowerCase().includes(q.get('filename').toLowerCase())) return false;
+      if (q.get('date_from')) {
+        const d = new Date(r.uploaded_at || 0); if (isNaN(d)) return false;
+        if (d < new Date(q.get('date_from') + 'T00:00:00.000Z')) return false;
+      }
+      if (q.get('date_to')) {
+        const d = new Date(r.uploaded_at || 0); if (isNaN(d)) return false;
+        if (d > new Date(q.get('date_to') + 'T23:59:59.999Z')) return false;
+      }
+      return true;
+    });
+    const withNames = await _withUploaderUsername(db, filtered, 'uploaded_by');
+    return ok({ files: withNames, prefix, truncated: !!listRes.truncated }, env);
+  }
+
+  if (path === '/files/upload' && method === 'POST') {
+    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    const form = await request.formData();
+    const file = form.get('file');
+    if (!(file instanceof File)) return badReq('file is required', 'MISSING_FILE', env);
+    const maxBytes = 150 * 1024 * 1024;
+    if (file.size > maxBytes) return badReq('Max file size is 150MB', 'FILE_TOO_LARGE', env);
+
+    const allowed = [
+      'application/pdf',
+      'image/jpeg','image/png','image/webp','image/gif','image/tiff',
+      'application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/plain','application/rtf'
+    ];
+    if (!allowed.includes(file.type)) return badReq('Unsupported file type', 'INVALID_FILE_TYPE', env);
+
+    const certificateId = String(form.get('certificate_id') || '').trim();
+    const jobNumber = String(form.get('job_number') || '').trim();
+    const clientId = String(form.get('client_id') || '').trim();
+    const certType = String(form.get('cert_type') || '').trim();
+    if (!jobNumber || !certificateId) return badReq('job_number and certificate_id are required', 'MISSING_FIELDS', env);
+
+    const safeName = (file.name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const ext = (safeName.split('.').pop() || 'bin').toLowerCase();
+    const base = safeName.replace(/\.[^.]+$/, '');
+    const { data: existingRows } = await db.from('certificate_files', {
+      select: 'id,version_no',
+      filters: { 'certificate_id.eq': certificateId },
+      limit: 200,
+      order: 'version_no.desc',
+    });
+    const nextVersion = ((existingRows || [])[0]?.version_no || 0) + 1;
+    const key = `files/jobs/${jobNumber}/certificates/${certificateId}/v${nextVersion}_${Date.now()}_${base}.${ext}`;
+
+    await env.CERT_BUCKET.put(key, file.stream(), {
+      httpMetadata: { contentType: file.type || 'application/octet-stream' },
+      customMetadata: {
+        originalName: file.name,
+        uploadedBy: session.sub,
+        certificateId,
+        jobNumber,
+        version: String(nextVersion),
+      },
+    });
+
+    // Mark previous versions as non-current
+    await db.update('certificate_files', { is_current: false }, { filters: { 'certificate_id.eq': certificateId } }).catch(() => {});
+    const nowIso = new Date().toISOString();
+    const payload = {
+      certificate_id: certificateId,
+      client_id: clientId || null,
+      job_number: jobNumber,
+      cert_type: certType || null,
+      file_name: file.name,
+      file_size: file.size,
+      mime_type: file.type || 'application/octet-stream',
+      r2_key: key,
+      version_no: nextVersion,
+      is_current: true,
+      status: 'active',
+      scan_status: 'pending',
+      uploaded_by: session.sub,
+      uploaded_at: nowIso,
+    };
+    const { data, error } = await db.insert('certificate_files', payload);
+    if (error) return serverErr(env, error.message || 'Could not save file metadata');
+
+    // Antivirus scanning hook (non-blocking)
+    if (env.ANTIVIRUS_SCAN_HOOK) {
+      fetch(env.ANTIVIRUS_SCAN_HOOK, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'file_uploaded',
+          file_id: data?.id || null,
+          r2_key: key,
+          mime_type: payload.mime_type,
+          size: payload.file_size,
+          certificate_id: certificateId,
+          uploaded_at: nowIso,
+        }),
+      }).catch(() => {});
+    }
+
+    return created({ file: data || payload }, env);
+  }
+
+  if (path === '/files/object/signed-url' && method === 'GET') {
+    const key = url.searchParams.get('key') || '';
+    if (!key) return badReq('key is required', 'MISSING_KEY', env);
+    const ttl = Math.min(Math.max(parseInt(url.searchParams.get('ttl') || '300', 10), 30), 900);
+    const exp = Math.floor(Date.now() / 1000) + ttl;
+    const sig = await _signFileToken(env, key, exp);
+    const dl = new URL(request.url);
+    dl.pathname = `/api/files/object/download`;
+    dl.search = `key=${encodeURIComponent(key)}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
+    return ok({ url: dl.toString(), expires_at: exp }, env);
+  }
+
+  if (path === '/files/object/download' && method === 'GET') {
+    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    const key = url.searchParams.get('key') || '';
+    const exp = parseInt(url.searchParams.get('exp') || '0', 10);
+    const sig = url.searchParams.get('sig') || '';
+    if (!key || !exp || exp < Math.floor(Date.now() / 1000)) return forbidden(env);
+    const valid = await _verifyFileToken(env, key, exp, sig);
+    if (!valid) return forbidden(env);
+    const obj = await env.CERT_BUCKET.get(key);
+    if (!obj) return notFound('file', env);
+    const headers = new Headers();
+    headers.set('Content-Type', obj.httpMetadata?.contentType || 'application/octet-stream');
+    headers.set('Content-Disposition', `inline; filename=\"${(key.split('/').pop() || 'file').replace(/\"/g, '')}\"`);
+    headers.set('Cache-Control', 'private, max-age=30');
+    Object.entries(cors(env)).forEach(([k, v]) => headers.set(k, v));
+    Object.entries(securityHeaders(request, env)).forEach(([k, v]) => headers.set(k, v));
+    return new Response(obj.body, { status: 200, headers });
+  }
+
+  if (path === '/files/object' && method === 'DELETE') {
+    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    const key = url.searchParams.get('key') || '';
+    const mode = (url.searchParams.get('mode') || 'hard').toLowerCase();
+    if (!key) return badReq('key is required', 'MISSING_KEY', env);
+    const { data: rows } = await db.from('certificate_files', { select: 'id', filters: { 'r2_key.eq': key }, limit: 1 });
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    if (mode === 'soft' && row?.id) {
+      await db.update('certificate_files', { status: 'deleted', deleted_at: new Date().toISOString(), is_current: false }, { filters: { 'id.eq': row.id } });
+      return ok({ key, deleted: true, mode: 'soft' }, env);
+    }
+    try { await env.CERT_BUCKET.delete(key); } catch (e) { console.warn('R2 delete warning:', e.message); }
+    if (row?.id) await db.delete('certificate_files', { filters: { 'id.eq': row.id } }).catch(() => {});
+    return ok({ key, deleted: true, mode: 'hard' }, env);
+  }
+
+  const signedM = path.match(/^\/files\/([^/]+)\/signed-url$/);
+  if (signedM && method === 'GET') {
+    const fileId = signedM[1];
+    const ttl = Math.min(Math.max(parseInt(url.searchParams.get('ttl') || '300', 10), 30), 900);
+    const exp = Math.floor(Date.now() / 1000) + ttl;
+    const sig = await _signFileToken(env, fileId, exp);
+    const dl = new URL(request.url);
+    dl.pathname = `/api/files/download/${fileId}`;
+    dl.search = `exp=${exp}&sig=${encodeURIComponent(sig)}`;
+    return ok({ url: dl.toString(), expires_at: exp }, env);
+  }
+
+  const dlM = path.match(/^\/files\/download\/([^/]+)$/);
+  if (dlM && method === 'GET') {
+    const fileId = dlM[1];
+    const exp = parseInt(url.searchParams.get('exp') || '0', 10);
+    const sig = url.searchParams.get('sig') || '';
+    if (!exp || exp < Math.floor(Date.now() / 1000)) return forbidden(env);
+    const valid = await _verifyFileToken(env, fileId, exp, sig);
+    if (!valid) return forbidden(env);
+    const { data: rows, error } = await db.from('certificate_files', { select: 'id,file_name,mime_type,r2_key,status,deleted_at', filters: { 'id.eq': fileId }, limit: 1 });
+    if (error || !rows?.length) return notFound('file', env);
+    const row = rows[0];
+    if (!row.r2_key || row.deleted_at || row.status === 'deleted') return notFound('file', env);
+    const obj = await env.CERT_BUCKET.get(row.r2_key);
+    if (!obj) return notFound('file', env);
+    const headers = new Headers();
+    headers.set('Content-Type', row.mime_type || 'application/octet-stream');
+    headers.set('Content-Disposition', `inline; filename=\"${(row.file_name || 'file').replace(/\"/g, '')}\"`);
+    headers.set('Cache-Control', 'private, max-age=30');
+    Object.entries(cors(env)).forEach(([k, v]) => headers.set(k, v));
+    Object.entries(securityHeaders(request, env)).forEach(([k, v]) => headers.set(k, v));
+    return new Response(obj.body, { status: 200, headers });
+  }
+
+  const makeCurrentM = path.match(/^\/files\/([^/]+)\/make-current$/);
+  if (makeCurrentM && method === 'POST') {
+    const fileId = makeCurrentM[1];
+    const { data: rows } = await db.from('certificate_files', { select: 'id,certificate_id', filters: { 'id.eq': fileId }, limit: 1 });
+    if (!rows?.length) return notFound('file', env);
+    const row = rows[0];
+    await db.update('certificate_files', { is_current: false }, { filters: { 'certificate_id.eq': row.certificate_id } });
+    const { data, error } = await db.update('certificate_files', { is_current: true }, { filters: { 'id.eq': fileId } });
+    if (error) return serverErr(env, error.message || 'Could not set current version');
+    return ok({ file: Array.isArray(data) ? data[0] : data }, env);
+  }
+
+  const fileM = path.match(/^\/files\/([^/]+)$/);
+  if (fileM && method === 'DELETE') {
+    const fileId = fileM[1];
+    const mode = (url.searchParams.get('mode') || 'soft').toLowerCase();
+    const { data: rows, error } = await db.from('certificate_files', { select: '*', filters: { 'id.eq': fileId }, limit: 1 });
+    if (error || !rows?.length) return notFound('file', env);
+    const row = rows[0];
+    if (mode === 'hard') {
+      if (row.r2_key && env.CERT_BUCKET) {
+        try { await env.CERT_BUCKET.delete(row.r2_key); } catch (e) { console.warn('R2 delete warning', e.message); }
+      }
+      await db.delete('certificate_files', { filters: { 'id.eq': fileId } });
+      return ok({ id: fileId, deleted: true, mode: 'hard' }, env);
+    }
+    const { data: updated, error: upErr } = await db.update('certificate_files', {
+      status: 'deleted',
+      deleted_at: new Date().toISOString(),
+      is_current: false,
+    }, { filters: { 'id.eq': fileId } });
+    if (upErr) return serverErr(env, upErr.message || 'Could not soft delete');
+    return ok({ file: Array.isArray(updated) ? updated[0] : updated, mode: 'soft' }, env);
+  }
+
+  return badReq('Not found', 'NOT_FOUND', env);
+}
+
+async function _signFileToken(env, fileId, exp) {
+  const secret = env.JWT_SECRET || 'dev-secret';
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const msg = `${fileId}.${exp}`;
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(msg));
+  return b64(sig);
+}
+
+async function _verifyFileToken(env, fileId, exp, sig) {
+  try {
+    const expected = await _signFileToken(env, fileId, exp);
+    return expected === sig;
+  } catch {
+    return false;
+  }
+}
+
+async function _deleteCertificateFileRecords(db, env, certificateIds = []) {
+  const ids = (Array.isArray(certificateIds) ? certificateIds : [certificateIds]).filter(Boolean);
+  if (!ids.length) return;
+  const { data: rows } = await db.from('certificate_files', {
+    select: 'id,r2_key',
+    filters: { 'certificate_id.in': ids },
+    limit: 5000,
+  });
+  const files = Array.isArray(rows) ? rows : [];
+  for (const file of files) {
+    if (file.r2_key && env.CERT_BUCKET) {
+      try { await env.CERT_BUCKET.delete(file.r2_key); } catch (e) { console.warn('R2 delete warning:', e.message); }
+    }
+  }
+  await db.delete('certificate_files', { filters: { 'certificate_id.in': ids } }).catch(() => {});
 }
 
 async function _notifyApprovers(db, env, session, cert) {
@@ -1646,6 +2021,8 @@ async function handleInspectors(request, env, path) {
       headers: {
         'Content-Type': obj.httpMetadata?.contentType || 'application/octet-stream',
         'Content-Disposition': `inline; filename="${fileName}"`,
+        ...cors(env),
+        ...securityHeaders(request, env),
       },
     });
   }
@@ -1663,6 +2040,8 @@ async function handleInspectors(request, env, path) {
       headers: {
         'Content-Type': obj.httpMetadata?.contentType || 'application/octet-stream',
         'Content-Disposition': `inline; filename="${insp.cv_file || 'inspector-cv'}"`,
+        ...cors(env),
+        ...securityHeaders(request, env),
       },
     });
   }
@@ -2514,7 +2893,12 @@ export default {
 
     // Serve static files for non-API requests
     if (!url.pathname.startsWith('/api/')) {
-      return env.ASSETS.fetch(request);
+      const assetRes = await env.ASSETS.fetch(request);
+      const headers = new Headers(assetRes.headers);
+      const sec = securityHeaders(request, env);
+      Object.entries(sec).forEach(([k, v]) => headers.set(k, v));
+      Object.entries(cors(env)).forEach(([k, v]) => headers.set(k, v));
+      return new Response(assetRes.body, { status: assetRes.status, statusText: assetRes.statusText, headers });
     }
 
     // Handle CORS preflight
@@ -2532,6 +2916,7 @@ export default {
         if (uploadResult) return uploadResult;
       }
       if (path.startsWith('/certificates')) return await handleCertificates(request, env, path);
+      if (path.startsWith('/files')) return await handleFiles(request, env, path);
       if (path.startsWith('/clients')) return await handleClients(request, env, path);
       if (path.startsWith('/inspectors')) return await handleInspectors(request, env, path);
       if (path.startsWith('/functional-locations')) return await handleFunctionalLocations(request, env, path);
@@ -2597,18 +2982,18 @@ export default {
           const session = await getSession(request, env);
           if (!session || !requireRole(session, ['admin'])) {
             const reason = !cronSecret ? 'CRON_SECRET_NOT_CONFIGURED' : 'INVALID_SECRET_PROVIDED';
-            return json({ success: false, error: `Forbidden: ${reason}`, code: 'FORBIDDEN' }, 403, env);
+            return json({ success: false, error: `Forbidden: ${reason}`, code: 'FORBIDDEN' }, 403, env, request);
           }
         }
 
         const result = await handleCheckExpiry(env);
-        return json({ success: true, data: result }, 200, env);
+        return json({ success: true, data: result }, 200, env, request);
       }
 
-      return json({ success: false, error: 'Route not found' }, 404, env);
+      return json({ success: false, error: 'Route not found' }, 404, env, request);
     } catch (err) {
       console.error('Worker error:', err);
-      return json({ success: false, error: 'Error: ' + (err?.message || String(err)), code: 'SERVER_ERROR' }, 500, env);
+      return json({ success: false, error: 'Error: ' + (err?.message || String(err)), code: 'SERVER_ERROR' }, 500, env, request);
     }
   }
 };
