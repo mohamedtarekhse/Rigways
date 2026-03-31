@@ -1009,12 +1009,36 @@ function getExpiryBar(cert) {
 }
 
 /* ── 24-hour edit window check ── */
+function parseCertDateTime(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value === 'number') {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const candidates = [
+    raw,
+    raw.replace(' ', 'T'),
+    raw.replace(' ', 'T') + 'Z',
+  ];
+
+  for (const candidate of candidates) {
+    const d = new Date(candidate);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
 function canTechnicianEdit(cert) {
-  if (!cert.uploadTime) return false;
-  const uploaded = new Date(cert.uploadTime);
+  const uploaded = parseCertDateTime(cert.uploadTime);
+  if (!uploaded) return false;
   const now      = new Date();
   const hours    = (now - uploaded) / 3600000;
-  return hours <= 24;
+  return hours >= 0 && hours <= 24;
 }
 
 /* Can the current user delete this cert's file?
@@ -1035,8 +1059,8 @@ function isAdmin() {
 }
 
 function getEditWindowBadge(cert) {
-  if (!cert.uploadTime) return '';
-  const uploaded = new Date(cert.uploadTime);
+  const uploaded = parseCertDateTime(cert.uploadTime);
+  if (!uploaded) return '';
   const now = new Date();
   const hoursLeft = 24 - (now - uploaded) / 3600000;
   if (hoursLeft > 0) {
@@ -1393,22 +1417,32 @@ async function massDelete() {
   const ids = getSelectedIds();
   if (!ids.length) { showToast('warning','Nothing Selected','Select at least one certificate.'); return; }
   if (!confirm(`Delete file attachment for ${ids.length} certificate${ids.length > 1 ? 's' : ''}? Rows will be kept.`)) return;
-  try {
-    const results = await Promise.all(
-      ids.map(id => {
-        const cert = CERTS.find(x => x.certId === id);
-        return apiFetch('/api/certificates/' + (cert?.id || id) + '/file', { method: 'DELETE' }).then(r => r.json());
-      })
-    );
-    const failed = results.filter(r => !r.success);
-    if (failed.length) {
-      showToast('warning','Partial Delete',`${ids.length - failed.length} files deleted, ${failed.length} failed.`);
-    } else {
-      showToast('success','Deleted',`${ids.length} file attachment${ids.length > 1 ? 's' : ''} deleted.`);
-    }
-    CERTS = CERTS.map(x => ids.includes(x.certId) ? ({ ...x, fileName:'', fileUrl:'' }) : x);
-    clearSelection(); renderTable();
-  } catch(e) { showToast('error','Network Error','Could not delete. Please try again.'); }
+  const commit = async () => {
+    try {
+      const results = await Promise.all(
+        ids.map(id => {
+          const cert = CERTS.find(x => x.certId === id);
+          return apiFetch('/api/certificates/' + (cert?.id || id) + '/file', { method: 'DELETE' }).then(r => r.json());
+        })
+      );
+      const failed = results.filter(r => !r.success);
+      if (failed.length) {
+        showToast('warning','Partial Delete',`${ids.length - failed.length} files deleted, ${failed.length} failed.`);
+      } else {
+        showToast('success','Deleted',`${ids.length} file attachment${ids.length > 1 ? 's' : ''} deleted.`);
+      }
+      CERTS = CERTS.map(x => ids.includes(x.certId) ? ({ ...x, fileName:'', fileUrl:'' }) : x);
+      clearSelection(); renderTable();
+    } catch(e) { showToast('error','Network Error','Could not delete. Please try again.'); }
+  };
+  if (!window.SapUndo) { await commit(); return; }
+  SapUndo.schedule({
+    title: 'Delete queued',
+    message: `${ids.length} file attachment${ids.length > 1 ? 's' : ''} will be deleted in 10 seconds.`,
+    windowMs: 10000,
+    onUndo: () => showToast('info', 'Delete Canceled', 'File delete canceled.'),
+    onCommit: commit
+  });
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2123,7 +2157,13 @@ function openCertDeleteModal(id) {
     </div>`;
 
   if (role === 'technician') {
-    const uploaded = new Date(c.uploadTime);
+    const uploaded = parseCertDateTime(c.uploadTime);
+    if (!uploaded) {
+      noteEl.textContent = '⏱ Upload time unavailable.';
+      noteEl.style.color = 'var(--sap-text-secondary)';
+      document.getElementById('certDeleteConfirmModal').classList.add('open');
+      return;
+    }
     const hoursLeft = Math.max(0, 24 - (Date.now() - uploaded.getTime()) / 3600000);
     const hh = Math.floor(hoursLeft);
     const mm = Math.floor((hoursLeft % 1) * 60);
@@ -2149,28 +2189,35 @@ async function confirmCertDelete() {
   const btn = document.getElementById('certDeleteConfirmBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
 
-  try {
-    const res  = await apiFetch('/api/certificates/' + (cert?.id || targetId) + '/file', { method: 'DELETE' });
-    const data = await res.json();
-
-    if (!data.success) {
-      const errMsg = (data.data || data).error || 'Could not delete.';
-      const friendly = errMsg.includes('window') || errMsg.includes('expired')
-        ? 'Your 24-hour delete window has expired.'
-        : errMsg;
-      showToast('error', 'Delete Failed', friendly);
+  const commit = async () => {
+    try {
+      const res  = await apiFetch('/api/certificates/' + (cert?.id || targetId) + '/file', { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.success) {
+        const errMsg = (data.data || data).error || 'Could not delete.';
+        const friendly = errMsg.includes('window') || errMsg.includes('expired')
+          ? 'Your 24-hour delete window has expired.'
+          : errMsg;
+        showToast('error', 'Delete Failed', friendly);
+        return;
+      }
+      CERTS = CERTS.map(x => x.certId === targetId ? ({ ...x, fileName:'', fileUrl:'' }) : x);
+      showToast('success', 'File Deleted', `File removed from "${cert?.name || targetId}". Row kept with No file.`);
+      renderTable();
+    } catch(e) {
+      showToast('error', 'Network Error', 'Could not delete. Please try again.');
+    } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Delete File'; }
-      return;
     }
-
-    CERTS = CERTS.map(x => x.certId === targetId ? ({ ...x, fileName:'', fileUrl:'' }) : x);
-    showToast('success', 'File Deleted', `File removed from "${cert?.name || targetId}". Row kept with No file.`);
-    renderTable();
-  } catch(e) {
-    showToast('error', 'Network Error', 'Could not delete. Please try again.');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Delete File'; }
-  }
+  };
+  if (!window.SapUndo) { await commit(); return; }
+  SapUndo.schedule({
+    title: 'Delete queued',
+    message: `File for "${cert?.name || targetId}" will be deleted in 10 seconds.`,
+    windowMs: 10000,
+    onUndo: () => { if (btn) { btn.disabled = false; btn.textContent = 'Delete File'; } showToast('info', 'Delete Canceled', 'Certificate file delete canceled.'); },
+    onCommit: commit
+  });
 }
 
 async function confirmDelete() {
@@ -2186,19 +2233,29 @@ async function deleteCertificateRecord(certId) {
   const cert = CERTS.find(x => x.certId === certId);
   if (!cert) return;
   if (!confirm(`Delete certificate row "${cert.name}"? This will remove only this certificate record and its file.`)) return;
-  try {
-    const res = await apiFetch('/api/certificates/' + (cert.id || certId), { method: 'DELETE' });
-    const data = await res.json();
-    if (!data.success) {
-      showToast('error', 'Delete Failed', (data.data || data).error || 'Could not delete certificate row.');
-      return;
+  const commit = async () => {
+    try {
+      const res = await apiFetch('/api/certificates/' + (cert.id || certId), { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.success) {
+        showToast('error', 'Delete Failed', (data.data || data).error || 'Could not delete certificate row.');
+        return;
+      }
+      CERTS = CERTS.filter(x => x.certId !== certId);
+      showToast('success', 'Row Deleted', `Certificate "${cert.name}" was deleted.`);
+      renderTable();
+    } catch (e) {
+      showToast('error', 'Network Error', 'Could not delete certificate row.');
     }
-    CERTS = CERTS.filter(x => x.certId !== certId);
-    showToast('success', 'Row Deleted', `Certificate "${cert.name}" was deleted.`);
-    renderTable();
-  } catch (e) {
-    showToast('error', 'Network Error', 'Could not delete certificate row.');
-  }
+  };
+  if (!window.SapUndo) { await commit(); return; }
+  SapUndo.schedule({
+    title: 'Delete queued',
+    message: `Certificate "${cert.name}" will be deleted in 10 seconds.`,
+    windowMs: 10000,
+    onUndo: () => showToast('info', 'Delete Canceled', 'Certificate row delete canceled.'),
+    onCommit: commit
+  });
 }
 
 async function deleteAssetCertificates(certId) {
@@ -2210,22 +2267,32 @@ async function deleteAssetCertificates(certId) {
   if (!cert) return;
   const assetDisplay = cert.assetId || cert.asset_id || 'Unknown Asset';
   if (!confirm(`Delete ALL certificates for asset ${assetDisplay}? This will remove all related certificate rows and files.`)) return;
-  try {
-    const res = await apiFetch('/api/certificates/' + (cert.id || certId) + '?delete_scope=asset', { method: 'DELETE' });
-    const data = await res.json();
-    if (!data.success) {
-      showToast('error', 'Delete Failed', (data.data || data).error || 'Could not delete related certificates.');
-      return;
+  const commit = async () => {
+    try {
+      const res = await apiFetch('/api/certificates/' + (cert.id || certId) + '?delete_scope=asset', { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.success) {
+        showToast('error', 'Delete Failed', (data.data || data).error || 'Could not delete related certificates.');
+        return;
+      }
+      const deletedIds = new Set((data.data?.deleted_ids || data.deleted_ids || []).map(String));
+      CERTS = CERTS.filter(x => !deletedIds.has(String(x.id)));
+      const deletedCount = data.data?.deleted_count ?? data.deleted_count ?? deletedIds.size;
+      showToast('success', 'Rows Deleted', `${deletedCount} certificate row(s) deleted for asset ${assetDisplay}.`);
+      clearSelection();
+      renderTable();
+    } catch (e) {
+      showToast('error', 'Network Error', 'Could not delete related certificates.');
     }
-    const deletedIds = new Set((data.data?.deleted_ids || data.deleted_ids || []).map(String));
-    CERTS = CERTS.filter(x => !deletedIds.has(String(x.id)));
-    const deletedCount = data.data?.deleted_count ?? data.deleted_count ?? deletedIds.size;
-    showToast('success', 'Rows Deleted', `${deletedCount} certificate row(s) deleted for asset ${assetDisplay}.`);
-    clearSelection();
-    renderTable();
-  } catch (e) {
-    showToast('error', 'Network Error', 'Could not delete related certificates.');
-  }
+  };
+  if (!window.SapUndo) { await commit(); return; }
+  SapUndo.schedule({
+    title: 'Delete queued',
+    message: `All certificates for asset ${assetDisplay} will be deleted in 10 seconds.`,
+    windowMs: 10000,
+    onUndo: () => showToast('info', 'Delete Canceled', 'Asset certificate delete canceled.'),
+    onCommit: commit
+  });
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2641,15 +2708,8 @@ async function loadJobDropdown(selectedJobNumber) {
 
 async function loadCerts() {
   try {
-    const [certRes, assetRes] = await Promise.all([
-      apiFetch('/api/certificates?limit=200').then(r => r.json()),
-      apiFetch('/api/assets?limit=500').then(r => r.json()),
-    ]);
+    const certRes = await apiFetch('/api/certificates?limit=200').then(r => r.json());
     const cd = certRes.data  || certRes;
-    const ad = assetRes.data || assetRes;
-    const assetMap = {};
-    (ad.assets || ad || []).forEach(a => { if (a.id) assetMap[a.id] = a.asset_number || a.id; });
-    window._assetMap = assetMap;
     CERTS = (cd.certificates || cd || []).map(cert => {
       const rawType = String(cert.cert_type || '');
       const parts = rawType.split(' — ');
@@ -2665,13 +2725,13 @@ async function loadCerts() {
       expiryDate:      cert.expiry_date,
       issueDate:       cert.issue_date,
       issuedBy:        cert.issued_by,
-      assetId:         assetMap[cert.asset_id] || cert.asset_id || '—',
+      assetId:         cert.asset_number || cert.asset_id || '—',
       client:          cert.client_id,
       fileName:        cert.file_name || '',
       fileUrl:         cert.file_url  || '',
       rejectionReason: cert.rejection_reason || '',
       jobNumber:       cert.notes || '',
-      uploadTime:      cert.created_at || '',   // full ISO timestamp for accurate 24hr window
+      uploadTime:      cert.created_at || cert.uploaded_at || cert.createdAt || '',   // full timestamp for 24h edit window
       uploadedBy:      cert.uploaded_by_username || cert.uploaded_by || '',
       uploaded_by:     cert.uploaded_by || '',
     })});
@@ -2733,8 +2793,10 @@ document.addEventListener('DOMContentLoaded', () => {
     ha.innerHTML = `<span class="sap-badge sap-badge--neutral" style="font-size:12px;padding:6px 12px;">Read-Only View</span>`;
   }
 
-  loadClientDropdown();
   loadCerts(); // also calls syncCerts() inside
+  const _deferClientLoad = () => loadClientDropdown().catch(() => {});
+  if ('requestIdleCallback' in window) requestIdleCallback(_deferClientLoad, { timeout: 1200 });
+  else setTimeout(_deferClientLoad, 300);
   loadColState();
 
   /* ESC key closes any open modal/drawer */

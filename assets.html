@@ -18,7 +18,6 @@
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <title>Assets – Rigways Group</title>
   <script src="app.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="styles.css"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
   <style>
@@ -1870,25 +1869,52 @@ async function massDelete() {
   const ids = getSelectedIds();
   if (!ids.length) return;
   if (!confirm(`Delete ${ids.length} selected asset${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
-  try {
-    const results = await Promise.all(
-      ids.map(id => {
-        const asset = ASSETS.find(a => a.assetId === id);
-        const uuid  = asset?.id || id;
-        return apiFetch(`/api/assets/${uuid}`, { method: 'DELETE' }).then(r => r.json());
-      })
-    );
-    const failed = results.filter(r => !r.success).length;
-    if (failed) {
-      showToast('warning', 'Partial Delete', `${ids.length - failed} deleted, ${failed} failed.`);
-    } else {
-      showToast('success', 'Deleted', `${ids.length} asset${ids.length > 1 ? 's' : ''} deleted.`);
+  if (!window.SapUndo) {
+    try {
+      const results = await Promise.all(
+        ids.map(id => {
+          const asset = ASSETS.find(a => a.assetId === id);
+          const uuid  = asset?.id || id;
+          return apiFetch(`/api/assets/${uuid}`, { method: 'DELETE' }).then(r => r.json());
+        })
+      );
+      const failed = results.filter(r => !r.success).length;
+      if (failed) showToast('warning', 'Partial Delete', `${ids.length - failed} deleted, ${failed} failed.`);
+      else showToast('success', 'Deleted', `${ids.length} asset${ids.length > 1 ? 's' : ''} deleted.`);
+      clearSelection();
+      await loadAssets();
+    } catch(err) {
+      showToast('error', 'Network Error', 'Could not delete assets. Please try again.');
     }
-    clearSelection();
-    await loadAssets();
-  } catch(err) {
-    showToast('error', 'Network Error', 'Could not delete assets. Please try again.');
+    return;
   }
+  SapUndo.schedule({
+    title: 'Delete queued',
+    message: `${ids.length} asset${ids.length > 1 ? 's' : ''} will be deleted in 10 seconds.`,
+    windowMs: 10000,
+    onUndo: () => showToast('info', 'Delete Canceled', 'Asset delete canceled.'),
+    onCommit: async () => {
+      try {
+        const results = await Promise.all(
+          ids.map(id => {
+            const asset = ASSETS.find(a => a.assetId === id);
+            const uuid  = asset?.id || id;
+            return apiFetch(`/api/assets/${uuid}`, { method: 'DELETE' }).then(r => r.json());
+          })
+        );
+        const failed = results.filter(r => !r.success).length;
+        if (failed) {
+          showToast('warning', 'Partial Delete', `${ids.length - failed} deleted, ${failed} failed.`);
+        } else {
+          showToast('success', 'Deleted', `${ids.length} asset${ids.length > 1 ? 's' : ''} deleted.`);
+        }
+        clearSelection();
+        await loadAssets();
+      } catch(err) {
+        showToast('error', 'Network Error', 'Could not delete assets. Please try again.');
+      }
+    }
+  });
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2408,18 +2434,41 @@ async function confirmDelete() {
   const a    = ASSETS.find(x => x.assetId === deleteTargetId);
   const uuid = a?.id || deleteTargetId;
   closeDeleteModal();
-  try {
-    const res  = await apiFetch(`/api/assets/${uuid}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (!data.success) {
-      showToast('error', 'Delete Failed', (data.data || data).error || 'Could not delete asset.');
-      return;
+  if (!window.SapUndo) {
+    try {
+      const res  = await apiFetch(`/api/assets/${uuid}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.success) {
+        showToast('error', 'Delete Failed', (data.data || data).error || 'Could not delete asset.');
+        return;
+      }
+      showToast('success', 'Deleted', `"${a?.name || deleteTargetId}" deleted successfully.`);
+      await loadAssets();
+    } catch(err) {
+      showToast('error', 'Network Error', 'Could not delete asset. Please try again.');
     }
-    showToast('success', 'Deleted', `"${a?.name || deleteTargetId}" deleted successfully.`);
-    await loadAssets();
-  } catch(err) {
-    showToast('error', 'Network Error', 'Could not delete asset. Please try again.');
+    return;
   }
+  SapUndo.schedule({
+    title: 'Delete queued',
+    message: `"${a?.name || deleteTargetId}" will be deleted in 10 seconds.`,
+    windowMs: 10000,
+    onUndo: () => showToast('info', 'Delete Canceled', 'Asset delete canceled.'),
+    onCommit: async () => {
+      try {
+        const res  = await apiFetch(`/api/assets/${uuid}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!data.success) {
+          showToast('error', 'Delete Failed', (data.data || data).error || 'Could not delete asset.');
+          return;
+        }
+        showToast('success', 'Deleted', `"${a?.name || deleteTargetId}" deleted successfully.`);
+        await loadAssets();
+      } catch(err) {
+        showToast('error', 'Network Error', 'Could not delete asset. Please try again.');
+      }
+    }
+  });
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2636,6 +2685,7 @@ function openImportModal() {
   _importStep = 1;
   _importFile = null;
   document.getElementById('importModal').classList.add('open');
+  ensureXlsxLoaded().catch(() => {});
   importGoStep(1);
 }
 function closeImportModal() {
@@ -2672,7 +2722,22 @@ function importGoStep(n) {
 }
 
 /* ── Template download ── */
-function downloadTemplate(fmt) {
+let _xlsxLoaderPromise = null;
+function ensureXlsxLoaded() {
+  if (typeof XLSX !== 'undefined') return Promise.resolve();
+  if (_xlsxLoaderPromise) return _xlsxLoaderPromise;
+  _xlsxLoaderPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Could not load spreadsheet library'));
+    document.head.appendChild(s);
+  });
+  return _xlsxLoaderPromise;
+}
+
+async function downloadTemplate(fmt) {
   const headers = IMPORT_ALL_COLS;
   const sample  = [
     ['AST-0100','Rig Crane #05','Hoisting Equipment','operation','C001','Rig 7','SN-2025-001','National Oilwell','NC5-90','5-line crown block',''],
@@ -2685,7 +2750,12 @@ function downloadTemplate(fmt) {
     const a    = document.createElement('a'); a.href=url; a.download='asset_import_template.csv'; a.click(); URL.revokeObjectURL(url);
   } else {
     /* Build xlsx with SheetJS */
-    if (typeof XLSX === 'undefined') { showToast('error','Library Missing','SheetJS not loaded.'); return; }
+    try {
+      await ensureXlsxLoaded();
+    } catch (e) {
+      showToast('error','Library Missing', e?.message || 'SheetJS not loaded.');
+      return;
+    }
     const wsData = [headers, ...sample];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
@@ -2729,13 +2799,13 @@ async function parseImportFile(file) {
     const reader = new FileReader();
     const ext = file.name.split('.').pop().toLowerCase();
     reader.onerror = () => reject(new Error('Could not read file'));
-    reader.onload = e => {
+    reader.onload = async e => {
       try {
         let rows = [];
         if (ext === 'csv') {
           rows = parseCSVContent(e.target.result);
         } else {
-          if (typeof XLSX === 'undefined') { reject(new Error('SheetJS not loaded')); return; }
+          await ensureXlsxLoaded();
           const wb   = XLSX.read(e.target.result, { type: 'binary' });
           const ws   = wb.Sheets[wb.SheetNames[0]];
           const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
