@@ -2708,15 +2708,8 @@ async function loadJobDropdown(selectedJobNumber) {
 
 async function loadCerts() {
   try {
-    const [certRes, assetRes] = await Promise.all([
-      apiFetch('/api/certificates?limit=200').then(r => r.json()),
-      apiFetch('/api/assets?limit=500').then(r => r.json()),
-    ]);
+    const certRes = await apiFetch('/api/certificates?limit=200').then(r => r.json());
     const cd = certRes.data  || certRes;
-    const ad = assetRes.data || assetRes;
-    const assetMap = {};
-    (ad.assets || ad || []).forEach(a => { if (a.id) assetMap[a.id] = a.asset_number || a.id; });
-    window._assetMap = assetMap;
     CERTS = (cd.certificates || cd || []).map(cert => {
       const rawType = String(cert.cert_type || '');
       const parts = rawType.split(' — ');
@@ -2732,7 +2725,7 @@ async function loadCerts() {
       expiryDate:      cert.expiry_date,
       issueDate:       cert.issue_date,
       issuedBy:        cert.issued_by,
-      assetId:         assetMap[cert.asset_id] || cert.asset_id || '—',
+      assetId:         cert.asset_number || cert.asset_id || '—',
       client:          cert.client_id,
       fileName:        cert.file_name || '',
       fileUrl:         cert.file_url  || '',
@@ -2800,8 +2793,10 @@ document.addEventListener('DOMContentLoaded', () => {
     ha.innerHTML = `<span class="sap-badge sap-badge--neutral" style="font-size:12px;padding:6px 12px;">Read-Only View</span>`;
   }
 
-  loadClientDropdown();
   loadCerts(); // also calls syncCerts() inside
+  const _deferClientLoad = () => loadClientDropdown().catch(() => {});
+  if ('requestIdleCallback' in window) requestIdleCallback(_deferClientLoad, { timeout: 1200 });
+  else setTimeout(_deferClientLoad, 300);
   loadColState();
 
   /* ESC key closes any open modal/drawer */
