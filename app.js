@@ -54,7 +54,6 @@ const SAP_CONFIG = {
 
   /* Navigation items (ordered) */
   NAV: [
-    { id:'dashboard',     href:'dashboard.html',     iconKey:'grid',   en:'Dashboard',     ar:'لوحة التحكم',  roles:['admin','manager','technician','user'] },
     { id:'assets',        href:'assets.html',        iconKey:'asset',  en:'Assets',        ar:'الأصول',       roles:['admin','manager','technician','user'] },
     { id:'certificates',  href:'certificates.html',  iconKey:'cert',   en:'Certificates',  ar:'الشهادات',     roles:['admin','manager','technician','user'] },
     { id:'jobs',          href:'jobs.html',          iconKey:'chart',  en:'Jobs',          ar:'الوظائف',      roles:['admin','manager','technician'] },
@@ -167,7 +166,7 @@ const SapSession = (() => {
       SapToast.show('error',
         SapLang.t('Access Denied', 'غير مصرح'),
         SapLang.t('You do not have permission to view this page.', 'ليس لديك صلاحية للوصول إلى هذه الصفحة.'));
-      setTimeout(() => { window.location.href = 'dashboard.html'; }, 1500);
+      setTimeout(() => { window.location.href = 'assets.html'; }, 1500);
       return null;
     }
     return s;
@@ -299,7 +298,7 @@ const SapSidebar = (() => {
    * Highlight the nav item matching the current page.
    */
   function _markActive() {
-    const page = window.location.pathname.split('/').pop() || 'dashboard.html';
+    const page = window.location.pathname.split('/').pop() || 'assets.html';
     document.querySelectorAll('.sap-nav-item').forEach(item => {
       const href = item.getAttribute('href') || '';
       const match = href === page || href.endsWith('/' + page);
@@ -324,7 +323,7 @@ const SapSidebar = (() => {
       users: '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>',
     };
 
-    const page = window.location.pathname.split('/').pop() || 'dashboard.html';
+    const page = window.location.pathname.split('/').pop() || 'assets.html';
     const html = SAP_CONFIG.NAV
       .filter(item => item.roles.includes(role))
       .map(item => {
@@ -1007,7 +1006,7 @@ function applyPlanBMobileLayout() {
 
       /* Auto-redirect if already logged in */
       if (SapSession.get()) {
-        window.location.href = 'dashboard.html';
+        window.location.href = 'assets.html';
       }
       return;
     }

@@ -1244,9 +1244,25 @@ async function handleCertificates(request, env, path) {
     if (!isApprover && body.approval_status)
       return forbidden(env);
 
+    // Support re-linking certificate to a different asset during edit.
+    // Accept either UUID or business asset number (AST-xxxx), then normalize to UUID.
+    if (body.asset_id) {
+      const assetFilter = /^AST-/i.test(String(body.asset_id || ''))
+        ? { 'asset_number.ilike': String(body.asset_id || '').trim() }
+        : { 'id.eq': String(body.asset_id || '').trim() };
+      const { data: aRows } = await db.from('assets', { filters: assetFilter, select: 'id,asset_number,client_id', limit: 1 });
+      const asset = Array.isArray(aRows) ? aRows[0] : aRows;
+      if (!asset) return notFound('Asset', env);
+      if (['user', 'technician'].includes(session.role) && session.customerId && asset.client_id !== session.customerId)
+        return forbidden(env);
+      body.asset_id = asset.id;
+      // Keep client in sync with selected asset if client_id was not explicitly sent.
+      if (!body.client_id && asset.client_id) body.client_id = asset.client_id;
+    }
+
     const allowed = isApprover
-      ? ['name', 'cert_type', 'lifting_subtype', 'issued_by', 'issue_date', 'expiry_date', 'file_name', 'file_url', 'notes', 'approval_status', 'rejection_reason', 'inspector_id']
-      : ['name', 'cert_type', 'lifting_subtype', 'issued_by', 'issue_date', 'expiry_date', 'file_name', 'file_url', 'notes'];
+      ? ['name', 'cert_type', 'lifting_subtype', 'issued_by', 'issue_date', 'expiry_date', 'file_name', 'file_url', 'notes', 'asset_id', 'client_id', 'approval_status', 'rejection_reason', 'inspector_id']
+      : ['name', 'cert_type', 'lifting_subtype', 'issued_by', 'issue_date', 'expiry_date', 'file_name', 'file_url', 'notes', 'asset_id', 'client_id'];
 
     const update = compact({
       ...pick(body, allowed),

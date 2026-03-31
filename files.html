@@ -9,7 +9,7 @@
 </head>
 <body>
 <header class="sap-shell">
-  <a href="dashboard.html" class="sap-shell__logo"><span>Rigways Group</span><span class="sap-shell__logo-badge">ACM</span></a>
+  <a href="assets.html" class="sap-shell__logo"><span>Rigways Group</span><span class="sap-shell__logo-badge">ACM</span></a>
   <div class="sap-shell__divider"></div>
   <span class="sap-shell__app-title">Asset &amp; Certificate Management</span>
   <div class="sap-shell__spacer"></div>
@@ -20,7 +20,7 @@
   </div>
   <div class="sap-user-menu" id="userMenu">
     <div class="sap-user-menu__header"><div class="sap-user-menu__name" id="menuUserName">Admin</div><div class="sap-user-menu__role" id="menuUserRole">Administrator</div></div>
-    <div class="sap-user-menu__item" onclick="window.location.href='dashboard.html'"><span>Dashboard</span></div>
+    <div class="sap-user-menu__item" onclick="window.location.href='assets.html'"><span>Assets</span></div>
     <div class="sap-user-menu__sep"></div>
     <div class="sap-user-menu__item sap-user-menu__item--danger" onclick="logout()"><span>Sign Out</span></div>
   </div>
@@ -28,9 +28,9 @@
 
 <nav class="sap-navbar">
   <div class="sap-navbar__inner">
-    <a href="dashboard.html" class="sap-nav-item">
+    <a href="assets.html" class="sap-nav-item">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      <span>Dashboard</span>
+      <span>Assets</span>
     </a>
     <a href="assets.html" class="sap-nav-item">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
@@ -263,7 +263,7 @@ async function makeCurrent(id){ await apiFetch('/api/files/' + id + '/make-curre
 document.addEventListener('DOMContentLoaded', async ()=>{
   session = getSession();
   if(!session) return location.href='/';
-  if(session.role !== 'admin') return location.href='dashboard.html';
+  if(session.role !== 'admin') return location.href='assets.html';
   menuUserName.textContent = session.name || '';
   menuUserRole.textContent = session.role || '';
   shellAvatar.textContent = (session.name||'AD').split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase();

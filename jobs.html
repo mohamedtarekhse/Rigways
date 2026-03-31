@@ -9,7 +9,7 @@
 </head>
 <body class="jobs-page">
 <header class="sap-shell">
-  <a href="dashboard.html" class="sap-shell__logo">
+  <a href="assets.html" class="sap-shell__logo">
     <span>Rigways Group</span><span class="sap-shell__logo-badge">ACM</span>
   </a>
   <div class="sap-shell__divider"></div>
@@ -33,7 +33,7 @@
       <div class="sap-user-menu__name" id="menuUserName">Admin</div>
       <div class="sap-user-menu__role" id="menuUserRole">Administrator</div>
     </div>
-    <div class="sap-user-menu__item" onclick="window.location.href='dashboard.html'"><span>Dashboard</span></div>
+    <div class="sap-user-menu__item" onclick="window.location.href='assets.html'"><span>Assets</span></div>
     <div class="sap-user-menu__sep"></div>
     <div class="sap-user-menu__item sap-user-menu__item--danger" onclick="logout()"><span>Sign Out</span></div>
   </div>
@@ -41,9 +41,9 @@
 
 <nav class="sap-navbar">
   <div class="sap-navbar__inner">
-    <a href="dashboard.html" class="sap-nav-item">
+    <a href="assets.html" class="sap-nav-item">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      <span>Dashboard</span>
+      <span>Assets</span>
     </a>
     <a href="assets.html" class="sap-nav-item">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
@@ -77,7 +77,7 @@
 </nav>
 
 <main class="sap-main jobs-main">
-  <div class="sap-page-header"><h1 class="sap-page-title">Jobs Dashboard</h1></div>
+  <div class="sap-page-header"><h1 class="sap-page-title">Jobs</h1></div>
 
   <div class="sap-card" id="jobsReadOnlyBanner" style="display:none; margin-bottom:12px;">
     <div class="sap-card__body">
@@ -207,7 +207,7 @@ async function jobAction(id, action){
 document.addEventListener('DOMContentLoaded', async ()=>{
   session = getSession();
   if(!session) return location.href='/';
-  if (!['admin','manager','technician'].includes(session.role)) return location.href='dashboard.html';
+  if (!['admin','manager','technician'].includes(session.role)) return location.href='assets.html';
   jobsReadOnly = session.role === 'technician';
   document.getElementById('menuUserName').textContent = session.name || '';
   document.getElementById('menuUserRole').textContent = session.role || '';
