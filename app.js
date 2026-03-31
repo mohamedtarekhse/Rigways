@@ -27,7 +27,7 @@
 const SAP_CONFIG = {
   APP_NAME:    'SAP S/4HANA ACM',
   APP_VERSION: '1.0.0',
-  SUPPORTED_LANGS: ['en', 'ar'],
+  SUPPORTED_LANGS: ['en'],
   DEFAULT_LANG:    'en',
   PAGE_SIZE:       15,
   SESSION_KEY:     'sap_session',
@@ -57,9 +57,9 @@ const SAP_CONFIG = {
     { id:'dashboard',     href:'dashboard.html',     iconKey:'grid',   en:'Dashboard',     ar:'لوحة التحكم',  roles:['admin','manager','technician','user'] },
     { id:'assets',        href:'assets.html',        iconKey:'asset',  en:'Assets',        ar:'الأصول',       roles:['admin','manager','technician','user'] },
     { id:'certificates',  href:'certificates.html',  iconKey:'cert',   en:'Certificates',  ar:'الشهادات',     roles:['admin','manager','technician','user'] },
-    { id:'jobs',          href:'jobs.html',          iconKey:'chart',  en:'Jobs',          ar:'الوظائف',      roles:['admin','manager'] },
+    { id:'jobs',          href:'jobs.html',          iconKey:'chart',  en:'Jobs',          ar:'الوظائف',      roles:['admin','manager','technician'] },
+    { id:'files',         href:'files.html',         iconKey:'asset',  en:'Files',         ar:'الملفات',      roles:['admin'] },
     { id:'notifications', href:'notifications.html', iconKey:'notif',  en:'Notifications', ar:'الإشعارات',    roles:['admin','manager','technician','user'] },
-    { id:'reports',       href:'reports.html',       iconKey:'chart',  en:'Reports',       ar:'التقارير',     roles:['admin','manager','technician','user'] },
     { id:'clients',       href:'clients.html',       iconKey:'users',  en:'Clients',       ar:'العملاء',      roles:['admin'] },
   ],
 };
@@ -203,61 +203,58 @@ const SapSession = (() => {
    3. LANGUAGE MANAGER
 ================================================================ */
 const SapLang = (() => {
-  let _lang = localStorage.getItem(SAP_CONFIG.LANG_KEY) || SAP_CONFIG.DEFAULT_LANG;
+  let _lang = SAP_CONFIG.DEFAULT_LANG;
 
   function current() { return _lang; }
-  function isAr()    { return _lang === 'ar'; }
+  function isAr()    { return false; }
 
   /**
    * Apply language: update DOM attributes, dir, font, placeholders.
    */
   function apply(lang, skipRender) {
-    if (!SAP_CONFIG.SUPPORTED_LANGS.includes(lang)) return;
-    _lang = lang;
-    localStorage.setItem(SAP_CONFIG.LANG_KEY, lang);
+    _lang = SAP_CONFIG.DEFAULT_LANG;
+    localStorage.setItem(SAP_CONFIG.LANG_KEY, SAP_CONFIG.DEFAULT_LANG);
 
     const html = document.documentElement;
-    html.lang  = lang;
-    html.dir   = lang === 'ar' ? 'rtl' : 'ltr';
-    document.body.classList.toggle('lang-ar', lang === 'ar');
+    html.lang  = SAP_CONFIG.DEFAULT_LANG;
+    html.dir   = 'ltr';
+    document.body.classList.remove('lang-ar');
 
     /* Text nodes */
     document.querySelectorAll('[data-en]').forEach(el => {
       if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return;
-      const val = el.getAttribute('data-' + lang) || el.getAttribute('data-en');
+      const val = el.getAttribute('data-en');
       if (val !== null) el.textContent = val;
     });
 
     /* Placeholders */
     document.querySelectorAll('[data-ph-en]').forEach(el => {
-      el.placeholder = el.getAttribute('data-ph-' + lang) || el.getAttribute('data-ph-en');
+      el.placeholder = el.getAttribute('data-ph-en');
     });
 
     /* Select options */
     document.querySelectorAll('option[data-en]').forEach(opt => {
-      opt.textContent = opt.getAttribute('data-' + lang) || opt.getAttribute('data-en');
+      opt.textContent = opt.getAttribute('data-en');
     });
 
     /* Lang button */
     const btn = document.getElementById('langBtn');
-    if (btn) btn.textContent = lang === 'en' ? 'AR' : 'EN';
+    if (btn) btn.style.display = 'none';
 
-    if (!skipRender) SapEventBus.emit('lang:changed', lang);
+    if (!skipRender) SapEventBus.emit('lang:changed', SAP_CONFIG.DEFAULT_LANG);
   }
 
-  function toggle() { apply(_lang === 'en' ? 'ar' : 'en'); }
+  function toggle() { apply(SAP_CONFIG.DEFAULT_LANG); }
 
   /**
    * Quick translation helper: t('English text', 'نص عربي')
    */
-  function t(en, ar) { return _lang === 'ar' ? ar : en; }
+  function t(en, ar) { return en; }
 
   /**
    * Pluralize helper
    */
-  function plural(n, en, ar) {
-    return _lang === 'ar' ? `${n} ${ar}` : `${n} ${en}`;
-  }
+  function plural(n, en, ar) { return `${n} ${en}`; }
 
   return { current, isAr, apply, toggle, t, plural };
 })();
@@ -453,11 +450,16 @@ const SapToast = (() => {
       container = document.createElement('div');
       container.className = 'sap-toast-container';
       container.id = 'toastContainer';
+      container.setAttribute('aria-live', 'polite');
+      container.setAttribute('aria-atomic', 'false');
+      container.setAttribute('role', 'region');
+      container.setAttribute('aria-label', 'Notifications');
       document.body.appendChild(container);
     }
 
     const toast = document.createElement('div');
     toast.className = `sap-toast sap-toast--${type}`;
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
     toast.innerHTML = `
       <div class="sap-toast__icon">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${ICONS[type] || ICONS.info}</svg>
@@ -466,7 +468,7 @@ const SapToast = (() => {
         <div class="sap-toast__title">${_esc(title)}</div>
         <div class="sap-toast__msg">${_esc(message)}</div>
       </div>
-      <button class="sap-toast__close" onclick="this.parentElement.remove()">
+      <button class="sap-toast__close" aria-label="Dismiss notification" onclick="this.parentElement.remove()">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
@@ -490,18 +492,90 @@ const SapToast = (() => {
 })();
 
 /* ================================================================
+   6.1 UNDO MANAGER (deferred actions)
+================================================================ */
+const SapUndo = (() => {
+  const DEFAULT_MS = 10000;
+
+  function schedule(opts = {}) {
+    const windowMs = Number(opts.windowMs) > 0 ? Number(opts.windowMs) : DEFAULT_MS;
+    const title = opts.title || 'Delete scheduled';
+    const message = opts.message || `Item will be deleted in ${Math.round(windowMs / 1000)} seconds.`;
+    const undoLabel = opts.undoLabel || 'Undo';
+    const onCommit = typeof opts.onCommit === 'function' ? opts.onCommit : async () => {};
+    const onUndo = typeof opts.onUndo === 'function' ? opts.onUndo : () => {};
+    const onError = typeof opts.onError === 'function' ? opts.onError : (err) => {
+      SapToast.error('Delete Failed', err?.message || 'Could not complete delete.');
+    };
+
+    const toast = SapToast.show('warning', title, message, 0);
+    const body = toast.querySelector('.sap-toast__body');
+    if (body) {
+      const actions = document.createElement('div');
+      actions.className = 'sap-toast__actions';
+      const btn = document.createElement('button');
+      btn.className = 'sap-toast__action';
+      btn.type = 'button';
+      btn.textContent = undoLabel;
+      btn.setAttribute('aria-label', `${undoLabel} delete action`);
+      actions.appendChild(btn);
+      body.appendChild(actions);
+
+      let finalized = false;
+      const timer = setTimeout(async () => {
+        if (finalized) return;
+        finalized = true;
+        if (toast.parentElement) toast.remove();
+        try {
+          await onCommit();
+        } catch (err) {
+          onError(err);
+        }
+      }, windowMs);
+
+      btn.addEventListener('click', () => {
+        if (finalized) return;
+        finalized = true;
+        clearTimeout(timer);
+        if (toast.parentElement) toast.remove();
+        try { onUndo(); } catch (e) {}
+      });
+    }
+
+    return toast;
+  }
+
+  return { schedule, DEFAULT_MS };
+})();
+
+/* ================================================================
    7. MODAL MANAGER
 ================================================================ */
 const SapModal = (() => {
+  const _focusMemory = new Map();
+
+  function _focusFirstInModal(el) {
+    if (!el) return;
+    const target = el.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    if (target && typeof target.focus === 'function') target.focus();
+  }
+
   function open(id) {
     const el = document.getElementById(id);
-    if (el) el.classList.add('open');
+    if (el) {
+      _focusMemory.set(id, document.activeElement || null);
+      el.classList.add('open');
+      _focusFirstInModal(el);
+    }
     document.body.style.overflow = 'hidden';
   }
 
   function close(id) {
     const el = document.getElementById(id);
     if (el) el.classList.remove('open');
+    const prev = _focusMemory.get(id);
+    if (prev && typeof prev.focus === 'function') prev.focus();
+    _focusMemory.delete(id);
     document.body.style.overflow = '';
   }
 
@@ -854,7 +928,7 @@ const SapEventBus = (() => {
    14. AUTO-INIT
 ================================================================ */
 function ensureJobsNavForRole(role) {
-  if (!['admin', 'manager'].includes(role)) return;
+  if (!['admin', 'manager', 'technician'].includes(role)) return;
   document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
     if (inner.querySelector('a[href="jobs.html"]')) return;
     const a = document.createElement('a');
@@ -862,8 +936,23 @@ function ensureJobsNavForRole(role) {
     a.className = 'sap-nav-item';
     if (location.pathname.endsWith('/jobs.html')) a.classList.add('active');
     a.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Jobs</span>';
-    const reports = inner.querySelector('a[href="reports.html"]');
-    if (reports) inner.insertBefore(a, reports);
+    const notifications = inner.querySelector('a[href="notifications.html"]');
+    if (notifications) inner.insertBefore(a, notifications);
+    else inner.appendChild(a);
+  });
+}
+
+function ensureFilesNavForRole(role) {
+  if (role !== 'admin') return;
+  document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
+    if (inner.querySelector('a[href="files.html"]')) return;
+    const a = document.createElement('a');
+    a.href = 'files.html';
+    a.className = 'sap-nav-item sap-nav-item--admin';
+    if (location.pathname.endsWith('/files.html')) a.classList.add('active');
+    a.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Files</span>';
+    const clients = inner.querySelector('a[href="clients.html"]');
+    if (clients) inner.insertBefore(a, clients);
     else inner.appendChild(a);
   });
 }
@@ -914,7 +1003,7 @@ function applyPlanBMobileLayout() {
     if (isLoginPage) {
       /* On login page: wire language toggle only */
       const langBtn = document.getElementById('langBtn');
-      if (langBtn) langBtn.onclick = () => SapLang.toggle();
+      if (langBtn) langBtn.style.display = 'none';
 
       /* Auto-redirect if already logged in */
       if (SapSession.get()) {
@@ -937,6 +1026,7 @@ function applyPlanBMobileLayout() {
     /* ── Sidebar ── */
     SapSidebar.init();
     ensureJobsNavForRole(session.role);
+    ensureFilesNavForRole(session.role);
 
     /* ── Role visibility ── */
     SapRoles.applyVisibility(session.role);
@@ -947,7 +1037,7 @@ function applyPlanBMobileLayout() {
 
     /* ── Wire global buttons ── */
     const langBtn = document.getElementById('langBtn');
-    if (langBtn) langBtn.onclick = () => SapLang.toggle();
+    if (langBtn) langBtn.style.display = 'none';
 
     const shellAvatar = document.getElementById('shellAvatar');
     if (shellAvatar) shellAvatar.onclick = () => SapShell.toggleUserMenu();
