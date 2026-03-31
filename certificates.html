@@ -1251,9 +1251,9 @@ function renderTable() {
       </td>
       <td data-col="client">${showClient ? `<span style="font-size:12px;font-weight:600;">${CLIENTS_MAP[c.client]||c.client}</span><br/><span class="asset-id-chip">${c.client}</span>` : `<span class="asset-id-chip">${c.client}</span>`}</td>
       <td data-col="fileLink">
-        ${c.fileName ? `<button type="button" class="cert-file-link" onclick="openCertLink('${c.certId}')" title="Open certificate in new tab">
+        ${c.fileName ? `<button type="button" class="cert-file-link" onclick="openCertLink('${c.certId}')" title="Open certificate link">
           <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          ${c.fileName}
+          Certificate Link
           <svg width="9" height="9" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:.6;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         </button>` : `<span style="color:var(--sap-text-disabled);font-size:11px;">—</span>`}
       </td>
@@ -1516,7 +1516,7 @@ function openEditModal(id) {
   document.getElementById('f_issuedBy').value       = c.issuedBy;
   document.getElementById('f_issueDate').value      = c.issueDate;
   document.getElementById('f_expiryDate').value     = c.expiryDate;
-  document.getElementById('f_assetId').value        = c.assetId || '';
+  document.getElementById('f_assetId').value        = c.assetUuid || '';
   document.getElementById('f_client').value         = c.client;
 
   clearFile();
@@ -1534,7 +1534,7 @@ function openEditModal(id) {
   if (session.customerId) document.getElementById('f_client_wrap').style.display = 'none';
   bindCertDraft(); restoreCertDraft(); document.getElementById('certModal').classList.add('open');
   // Load all dropdowns from API then restore selected values
-  const _assetVal = c.assetId || '';
+  const _assetVal = c.assetUuid || '';
   const _inspVal  = c.issuedBy || '';
   const _clientVal = c.client || '';
   loadAssetDropdown().then(() => {
@@ -1912,7 +1912,7 @@ function buildAssetCertHistory(assetId, currentCertId) {
         </div>
         <div class="hist-col-name">
           <div style="font-size:12px;font-weight:600;color:var(--sap-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${cert.name}">${cert.name}</div>
-          ${cert.fileName ? `<a href="#" onclick="event.preventDefault();openCertLink('${cert.certId}')" style="font-size:10px;color:var(--sap-brand);display:inline-flex;align-items:center;gap:2px;margin-top:2px;text-decoration:none;"><svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>${cert.fileName}</a>` : ''}
+          ${cert.fileName ? `<a href="#" onclick="event.preventDefault();openCertLink('${cert.certId}')" style="font-size:10px;color:var(--sap-brand);display:inline-flex;align-items:center;gap:2px;margin-top:2px;text-decoration:none;"><svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Certificate Link</a>` : ''}
           ${adminActions}
         </div>
         <div class="hist-col-type">${typeChip(cert)}</div>
@@ -2008,7 +2008,7 @@ function openDrawer(id) {
         <div class="sap-detail-field"><span class="sap-detail-field__label">Linked Asset ID</span><span class="sap-detail-field__value"><span class="asset-id-chip">${c.assetId||'—'}</span></span></div>
         <div class="sap-detail-field"><span class="sap-detail-field__label">Customer ID</span><span class="sap-detail-field__value"><span class="asset-id-chip">${c.client}</span> <span style="font-size:12px;color:var(--sap-text-secondary);">${CLIENTS_MAP[c.client]||''}</span></span></div>
         <div class="sap-detail-field"><span class="sap-detail-field__label">Uploaded By</span><span class="sap-detail-field__value">${c.uploadedBy}</span></div>
-        ${c.fileName ? `<div class="sap-detail-field span-full"><span class="sap-detail-field__label">File</span><span class="sap-detail-field__value"><span class="file-chip" onclick="previewFile('${c.certId}')">📄 ${c.fileName}</span></span></div>` : ''}
+        ${c.fileName ? `<div class="sap-detail-field span-full"><span class="sap-detail-field__label">File</span><span class="sap-detail-field__value"><span class="file-chip" onclick="previewFile('${c.certId}')">📄 Certificate Link</span></span></div>` : ''}
         ${c.rejectionReason ? `<div class="sap-detail-field span-full"><span class="sap-detail-field__label" style="color:var(--sap-error);">Rejection Reason</span><span class="sap-detail-field__value" style="color:var(--sap-error);">${c.rejectionReason}</span></div>` : ''}
       </div>
     </div>
@@ -2153,7 +2153,7 @@ function openCertDeleteModal(id) {
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span class="cert-id-chip">${fmtCertId(c)}</span>
       ${getApprovalBadge(c.approvalStatus)}
-      ${c.fileName ? `<span style="font-size:11px;color:var(--sap-brand);">📎 ${h(c.fileName)}</span>` : '<span style="font-size:11px;color:var(--sap-text-disabled);">No file attached</span>'}
+      ${c.fileName ? `<span style="font-size:11px;color:var(--sap-brand);">📎 File attached</span>` : '<span style="font-size:11px;color:var(--sap-text-disabled);">No file attached</span>'}
     </div>`;
 
   if (role === 'technician') {
@@ -2265,7 +2265,7 @@ async function deleteAssetCertificates(certId) {
   }
   const cert = CERTS.find(x => x.certId === certId);
   if (!cert) return;
-  const assetDisplay = cert.assetId || cert.asset_id || 'Unknown Asset';
+  const assetDisplay = cert.assetId || 'Unknown Asset';
   if (!confirm(`Delete ALL certificates for asset ${assetDisplay}? This will remove all related certificate rows and files.`)) return;
   const commit = async () => {
     try {
@@ -2444,16 +2444,16 @@ function exportPDF() {
         if (url) {
           return `<a href="${url}" target="_blank" class="cert-link"
             style="display:inline-flex;align-items:center;gap:5px;color:#0070f2;font-weight:600;font-size:11px;text-decoration:none;background:#e8f3ff;border:1px solid #90caf9;border-radius:4px;padding:3px 8px;white-space:nowrap;"
-            title="Open ${c.fileName}">
+            title="Open certificate link">
             <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            ${c.fileName}
+            Certificate Link
             <svg width="9" height="9" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:.5;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           </a>`;
         }
         /* no data-URI yet (cert viewer not built) — still show a styled label */
         return `<span style="display:inline-flex;align-items:center;gap:4px;color:#6a6d70;font-size:11px;background:#f5f6f7;border:1px solid #e8eaed;border-radius:4px;padding:3px 8px;white-space:nowrap;">
           <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          ${c.fileName}
+          Certificate Link
         </span>`;
       }
     },
@@ -2557,7 +2557,7 @@ function exportCSV() {
   const headers = ['Job Number','Cert ID','Name','Type','Lifting Sub-type','Issued By','Issue Date','Expiry Date','Approval','Asset ID','Customer ID','Client','Uploaded By','File'];
   const rows = data.map(c => [
     c.jobNumber||'', fmtCertId(c), c.name, c.certType, c.liftingSubtype||'', c.issuedBy, c.issueDate, c.expiryDate,
-    c.approvalStatus, c.assetId||'', c.client, CLIENTS_MAP[c.client]||'', c.uploadedBy, c.fileName
+    c.approvalStatus, c.assetId||'', c.client, CLIENTS_MAP[c.client]||'', c.uploadedBy, (c.fileName ? 'Attached' : '—')
   ].map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(','));
   const csv  = [headers.join(','), ...rows].join('\n');
   const blob = new Blob([csv], { type:'text/csv' });
@@ -2725,7 +2725,8 @@ async function loadCerts() {
       expiryDate:      cert.expiry_date,
       issueDate:       cert.issue_date,
       issuedBy:        cert.issued_by,
-      assetId:         cert.asset_number || cert.asset_id || '—',
+      assetId:         cert.asset_number || '—',
+      assetUuid:       cert.asset_id || '',
       client:          cert.client_id,
       fileName:        cert.file_name || '',
       fileUrl:         cert.file_url  || '',

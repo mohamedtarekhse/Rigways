@@ -1036,6 +1036,7 @@ async function handleCertUpload(request, env, path) {
           'Content-Disposition': `${disposition}; filename="${cert.file_name || 'certificate'}"`,
           'Cache-Control': 'private, max-age=3600',
           ...cors(env),
+          ...securityHeaders(request, env),
         },
       });
     } catch (e) {
@@ -1589,6 +1590,8 @@ async function handleFiles(request, env, path) {
     headers.set('Content-Type', obj.httpMetadata?.contentType || 'application/octet-stream');
     headers.set('Content-Disposition', `inline; filename=\"${(key.split('/').pop() || 'file').replace(/\"/g, '')}\"`);
     headers.set('Cache-Control', 'private, max-age=30');
+    Object.entries(cors(env)).forEach(([k, v]) => headers.set(k, v));
+    Object.entries(securityHeaders(request, env)).forEach(([k, v]) => headers.set(k, v));
     return new Response(obj.body, { status: 200, headers });
   }
 
@@ -1638,6 +1641,8 @@ async function handleFiles(request, env, path) {
     headers.set('Content-Type', row.mime_type || 'application/octet-stream');
     headers.set('Content-Disposition', `inline; filename=\"${(row.file_name || 'file').replace(/\"/g, '')}\"`);
     headers.set('Cache-Control', 'private, max-age=30');
+    Object.entries(cors(env)).forEach(([k, v]) => headers.set(k, v));
+    Object.entries(securityHeaders(request, env)).forEach(([k, v]) => headers.set(k, v));
     return new Response(obj.body, { status: 200, headers });
   }
 
@@ -2016,6 +2021,8 @@ async function handleInspectors(request, env, path) {
       headers: {
         'Content-Type': obj.httpMetadata?.contentType || 'application/octet-stream',
         'Content-Disposition': `inline; filename="${fileName}"`,
+        ...cors(env),
+        ...securityHeaders(request, env),
       },
     });
   }
@@ -2033,6 +2040,8 @@ async function handleInspectors(request, env, path) {
       headers: {
         'Content-Type': obj.httpMetadata?.contentType || 'application/octet-stream',
         'Content-Disposition': `inline; filename="${insp.cv_file || 'inspector-cv'}"`,
+        ...cors(env),
+        ...securityHeaders(request, env),
       },
     });
   }
@@ -2888,6 +2897,7 @@ export default {
       const headers = new Headers(assetRes.headers);
       const sec = securityHeaders(request, env);
       Object.entries(sec).forEach(([k, v]) => headers.set(k, v));
+      Object.entries(cors(env)).forEach(([k, v]) => headers.set(k, v));
       return new Response(assetRes.body, { status: assetRes.status, statusText: assetRes.statusText, headers });
     }
 
