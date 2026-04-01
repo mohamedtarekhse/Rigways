@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS certificate_history (
   cert_number      TEXT,
   name             TEXT,
   cert_type        TEXT,
+  related_standard TEXT,
   asset_id         UUID,
   client_id        TEXT,
   issued_by        TEXT,
