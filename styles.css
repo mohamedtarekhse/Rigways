@@ -899,6 +899,19 @@ body.density-compact .sap-toolbar {
   padding: 4px var(--sp-md);
 }
 
+body.density-compact .sap-toolbar .sap-input,
+body.density-compact .sap-toolbar .sap-select,
+body.density-compact .sap-toolbar .btn {
+  height: 30px;
+  min-height: 30px;
+  font-size: 12px;
+}
+
+body.density-compact .sap-toolbar .sap-label {
+  font-size: 10px;
+  margin-bottom: 2px;
+}
+
 /* Tighter pagination in compact */
 body.density-compact .sap-pagination {
   padding: 4px var(--sp-md);
@@ -944,6 +957,19 @@ body.density-ultra .btn-icon svg { width: 12px; height: 12px; }
 
 body.density-ultra .sap-toolbar { padding: 3px var(--sp-md); }
 body.density-ultra .sap-pagination { padding: 3px var(--sp-md); font-size: 11px; }
+
+/* Keep action icons compact and on one line for table action columns */
+body.density-compact .cell-actions,
+body.density-compact td.cell-actions,
+body.density-compact .row-actions {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+body.density-compact .sap-table tbody tr { height: 36px; }
 
 /* Striped rows are slightly stronger in compact/ultra for readability */
 body.density-compact .sap-table tbody tr:nth-child(even),

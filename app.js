@@ -686,6 +686,66 @@ const SapTable = (() => {
 })();
 
 /* ================================================================
+   8.1 DENSITY MANAGER
+================================================================ */
+const SapDensity = (() => {
+  const KEY = 'sap_density';
+  const DEFAULT = 'compact';
+
+  function apply(mode) {
+    const next = mode === 'comfortable' ? 'comfortable' : 'compact';
+    document.body.classList.remove('density-compact', 'density-ultra');
+    if (next === 'compact') document.body.classList.add('density-compact');
+    localStorage.setItem(KEY, next);
+    _syncButtons(next);
+  }
+
+  function current() {
+    return localStorage.getItem(KEY) || DEFAULT;
+  }
+
+  function init() {
+    apply(current());
+    _mountToggle();
+  }
+
+  function _syncButtons(mode) {
+    document.querySelectorAll('.density-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+  }
+
+  function _mountToggle() {
+    if (window.matchMedia && window.matchMedia('(max-width: 640px)').matches) return;
+    if (document.getElementById('densityToggle')) return;
+    const host = document.createElement('div');
+    host.id = 'densityToggle';
+    host.className = 'density-toggle';
+    host.setAttribute('data-label', 'Density');
+    host.innerHTML = `
+      <button type="button" class="density-btn" data-mode="comfortable" title="Comfortable">C</button>
+      <button type="button" class="density-btn" data-mode="compact" title="Compact">K</button>`;
+    host.addEventListener('click', (e) => {
+      const btn = e.target.closest('.density-btn');
+      if (!btn) return;
+      apply(btn.dataset.mode);
+    });
+    const toolbar = document.querySelector('.sap-toolbar');
+    if (toolbar) toolbar.appendChild(host);
+    else {
+      host.style.position = 'fixed';
+      host.style.right = '16px';
+      host.style.bottom = '16px';
+      host.style.zIndex = '1000';
+      document.body.appendChild(host);
+    }
+    _syncButtons(current());
+  }
+
+  return { init, apply, current };
+})();
+
+/* ================================================================
    9. FORM UTILITIES
 ================================================================ */
 const SapForm = (() => {
@@ -1033,6 +1093,7 @@ function applyPlanBMobileLayout() {
 
     applyPageBodyClass();
     applyPlanBMobileLayout();
+    SapDensity.init();
 
     /* ── Wire global buttons ── */
     const langBtn = document.getElementById('langBtn');
