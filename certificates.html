@@ -750,8 +750,15 @@
           <!-- Client -->
           <div class="sap-field" id="f_client_wrap">
             <label class="sap-label">Linked Client <span class="required">*</span></label>
-            <select id="f_client" class="sap-select">
+            <select id="f_client" class="sap-select" onchange="onClientChangeForAssetNarrowing()">
               <option value="">Select client…</option>
+            </select>
+          </div>
+
+          <div class="sap-field" id="f_functionalLocation_wrap">
+            <label class="sap-label">Functional Location <span class="required">*</span></label>
+            <select id="f_functionalLocation" class="sap-select" onchange="onFunctionalLocationChangeForAssetNarrowing()">
+              <option value="">Select functional location…</option>
             </select>
           </div>
 
@@ -979,6 +986,8 @@ const INSPECTOR_NAMES = [
 ];
 
 let CERTS = [];
+let ALL_ASSETS_FOR_MODAL = [];
+let ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL = [];
 
 
 /* ═══════════════════════════════════════════════════════
@@ -1469,7 +1478,7 @@ async function massDelete() {
    UPLOAD / EDIT MODAL
 ═══════════════════════════════════════════════════════ */
 function certDraftKey(){ const id=document.getElementById('editCertId')?.value||''; return id?`certs:edit:${id}`:'certs:add'; }
-function collectCertDraft(){ return { editCertId:document.getElementById('editCertId')?.value||'', f_jobNumber:document.getElementById('f_jobNumber')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_certType:document.getElementById('f_certType')?.value||'', f_liftingSubtype:document.getElementById('f_liftingSubtype')?.value||'', f_relatedStandard:document.getElementById('f_relatedStandard')?.value||'', f_issuedBy:document.getElementById('f_issuedBy')?.value||'', f_issueDate:document.getElementById('f_issueDate')?.value||'', f_validityPeriod:document.getElementById('f_validityPeriod')?.value||'', f_expiryDate:document.getElementById('f_expiryDate')?.value||'', f_client:document.getElementById('f_client')?.value||'', f_assetId:document.getElementById('f_assetId')?.value||'' }; }
+function collectCertDraft(){ return { editCertId:document.getElementById('editCertId')?.value||'', f_jobNumber:document.getElementById('f_jobNumber')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_certType:document.getElementById('f_certType')?.value||'', f_liftingSubtype:document.getElementById('f_liftingSubtype')?.value||'', f_relatedStandard:document.getElementById('f_relatedStandard')?.value||'', f_issuedBy:document.getElementById('f_issuedBy')?.value||'', f_issueDate:document.getElementById('f_issueDate')?.value||'', f_validityPeriod:document.getElementById('f_validityPeriod')?.value||'', f_expiryDate:document.getElementById('f_expiryDate')?.value||'', f_client:document.getElementById('f_client')?.value||'', f_functionalLocation:document.getElementById('f_functionalLocation')?.value||'', f_assetId:document.getElementById('f_assetId')?.value||'' }; }
 function saveCertDraft(){ if(window.SapDraft) SapDraft.save(certDraftKey(), collectCertDraft()); }
 function restoreCertDraft(){ if(!window.SapDraft) return; const d=SapDraft.load(certDraftKey(),24*60*60*1000); if(d&&confirm('A saved draft was found. Restore it?')) Object.entries(d).forEach(([k,v])=>{const el=document.getElementById(k); if(el) el.value=v;}); onCertTypeChange(); onValidityPeriodChange(); }
 function clearCertDraft(){ if(!window.SapDraft) return; const id=document.getElementById('editCertId')?.value||''; SapDraft.clear('certs:add'); if(id) SapDraft.clear(`certs:edit:${id}`); }
@@ -1498,6 +1507,7 @@ function openUploadModal() {
   document.getElementById('f_issueDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('f_validityPeriod').value = '';
   document.getElementById('f_expiryDate').value = '';
+  document.getElementById('f_functionalLocation').value = '';
   bindCertDraft(); restoreCertDraft(); document.getElementById('certModal').classList.add('open');
   // Load all dropdowns from API
   loadAssetDropdown();
@@ -1541,6 +1551,7 @@ function openEditModal(id) {
   document.getElementById('f_expiryDate').value     = c.expiryDate;
   document.getElementById('f_assetId').value        = c.assetUuid || '';
   document.getElementById('f_client').value         = c.client;
+  document.getElementById('f_functionalLocation').value = c.functionalLocation || '';
 
   clearFile();
   if (c.fileName) {
@@ -1559,10 +1570,12 @@ function openEditModal(id) {
   const _inspVal  = c.issuedBy || '';
   const _clientVal = c.client || '';
   loadAssetDropdown().then(() => {
+    applyAssetNarrowing();
     if (_assetVal) document.getElementById('f_assetId').value = _assetVal;
   });
   loadInspectorDropdown(_inspVal);
   loadClientDropdown(_clientVal);
+  loadFunctionalLocationDropdown(_clientVal, c.functionalLocation || '');
   loadJobDropdown(c.jobNumber || '');
   onValidityPeriodChange();
   if (session.role === 'technician') lockTechnicianModalFields();
@@ -1726,13 +1739,14 @@ async function saveCert() {
   const validityPeriod = document.getElementById('f_validityPeriod')?.value || '';
   const expiryDate     = document.getElementById('f_expiryDate')?.value || '';
   const client         = document.getElementById('f_client')?.value || session?.customerId || '';
+  const functionalLocation = document.getElementById('f_functionalLocation')?.value || '';
   const assetId        = document.getElementById('f_assetId')?.value || '';
   const editId         = document.getElementById('editCertId')?.value || '';
   const isTechnician   = session?.role === 'technician';
   const effectiveIssuedBy = isTechnician ? (session?.name || '').trim() : issuedBy;
   const effectiveClient   = isTechnician ? (session?.customerId || '').trim() : client;
 
-  if (!name || !certType || !effectiveIssuedBy || !issueDate || !validityPeriod || !expiryDate) {
+  if (!name || !certType || !effectiveIssuedBy || !issueDate || !validityPeriod || !expiryDate || !functionalLocation) {
     showToast('error','Required Fields','Please fill all required fields.'); return;
   }
   if (isTechnician && !effectiveClient) {
@@ -2719,10 +2733,42 @@ async function loadAssetDropdown() {
   try {
     const res    = await apiFetch('/api/assets?limit=500');
     const data   = await res.json();
-    const assets = (data.data?.assets || data.data || []);
-    sel.innerHTML = '<option value="">Select asset…</option>' +
-      assets.map(a => `<option value="${a.asset_number || a.id}">${a.asset_number || a.id} — ${a.name}</option>`).join('');
+    ALL_ASSETS_FOR_MODAL = (data.data?.assets || data.data || []);
+    applyAssetNarrowing();
   } catch(e) { sel.innerHTML = '<option value="">Could not load assets</option>'; }
+}
+
+function applyAssetNarrowing() {
+  const sel = document.getElementById('f_assetId');
+  if (!sel) return;
+  const selectedClient = (document.getElementById('f_client')?.value || '').trim();
+  const selectedFl = (document.getElementById('f_functionalLocation')?.value || '').trim();
+  const currentValue = sel.value;
+  const narrowed = (ALL_ASSETS_FOR_MODAL || []).filter(a => {
+    if (selectedClient && String(a.client_id || '') !== selectedClient) return false;
+    if (selectedFl && String(a.functional_location || '') !== selectedFl) return false;
+    return true;
+  });
+  sel.innerHTML = '<option value="">Select asset…</option>' +
+    narrowed.map(a => `<option value="${a.asset_number || a.id}">${a.asset_number || a.id} — ${a.name}</option>`).join('');
+  if (currentValue && Array.from(sel.options).some(o => o.value === currentValue)) sel.value = currentValue;
+}
+
+function onClientChangeForAssetNarrowing() {
+  const flSel = document.getElementById('f_functionalLocation');
+  const assetSel = document.getElementById('f_assetId');
+  if (flSel) flSel.value = '';
+  if (assetSel) assetSel.value = '';
+  loadFunctionalLocationDropdown(document.getElementById('f_client')?.value || '', '');
+  applyAssetNarrowing();
+  onAssetChangeForJob(assetSel?.value || '');
+}
+
+function onFunctionalLocationChangeForAssetNarrowing() {
+  const assetSel = document.getElementById('f_assetId');
+  if (assetSel) assetSel.value = '';
+  applyAssetNarrowing();
+  onAssetChangeForJob(assetSel?.value || '');
 }
 
 async function loadInspectorDropdown(selectedValue) {
@@ -2768,6 +2814,8 @@ async function loadClientDropdown(selectedValue) {
       }
       modalSel.disabled = true;
     }
+    await loadFunctionalLocationDropdown(cid, '');
+    applyAssetNarrowing();
     return;
   }
   if (!['admin', 'manager'].includes(session?.role)) return;
@@ -2798,7 +2846,30 @@ async function loadClientDropdown(selectedValue) {
       modalSel.innerHTML = '<option value="">Select client…</option>' + options;
       if (selectedValue) modalSel.value = selectedValue;
     }
+    await loadFunctionalLocationDropdown(modalSel?.value || '', '');
+    applyAssetNarrowing();
   } catch(e) { console.warn('Could not load clients:', e); }
+}
+
+async function loadFunctionalLocationDropdown(clientId, selectedValue) {
+  const sel = document.getElementById('f_functionalLocation');
+  if (!sel) return;
+  try {
+    if (!ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL.length) {
+      const res = await apiFetch('/api/functional-locations?limit=500');
+      const raw = await res.json();
+      ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL = raw.data?.functional_locations || raw.data || [];
+    }
+    const rows = (ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL || []).filter(fl => {
+      if (!clientId) return false;
+      return String(fl.client_id || '') === String(clientId);
+    });
+    sel.innerHTML = '<option value="">Select functional location…</option>' +
+      rows.map(fl => `<option value="${fl.fl_id}">${fl.fl_id} — ${fl.name}</option>`).join('');
+    if (selectedValue && Array.from(sel.options).some(o => o.value === selectedValue)) sel.value = selectedValue;
+  } catch (e) {
+    sel.innerHTML = '<option value="">Could not load functional locations</option>';
+  }
 }
 
 async function loadJobDropdown(selectedJobNumber) {
@@ -2851,7 +2922,13 @@ async function loadCerts() {
     const cd = certRes.data  || certRes;
     const ad = assetRes.data || assetRes;
     const assetMap = {};
-    (ad.assets || ad || []).forEach(a => { if (a.id) assetMap[a.id] = a.asset_number || a.id; });
+    (ad.assets || ad || []).forEach(a => {
+      if (!a.id) return;
+      assetMap[a.id] = {
+        assetNumber: a.asset_number || a.id,
+        functionalLocation: a.functional_location || '',
+      };
+    });
     CERTS = (cd.certificates || cd || []).map(cert => {
       const rawType = String(cert.cert_type || '');
       const parts = rawType.split(' — ');
@@ -2868,8 +2945,9 @@ async function loadCerts() {
       issueDate:       cert.issue_date,
       issuedBy:        cert.issued_by,
       relatedStandard: cert.related_standard || '',
-      assetId:         assetMap[cert.asset_id] || cert.asset_number || '—',
+      assetId:         assetMap[cert.asset_id]?.assetNumber || cert.asset_number || '—',
       assetUuid:       cert.asset_id || '',
+      functionalLocation: assetMap[cert.asset_id]?.functionalLocation || '',
       client:          cert.client_id,
       fileName:        cert.file_name || '',
       fileUrl:         cert.file_url  || '',

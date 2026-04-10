@@ -152,8 +152,14 @@
       </div>
       <div class="sap-field">
         <label class="sap-label">Client (active)</label>
-        <select id="jobClientSelect" class="sap-select">
+        <select id="jobClientSelect" class="sap-select" onchange="onJobClientChange()">
           <option value="">Select client…</option>
+        </select>
+      </div>
+      <div class="sap-field">
+        <label class="sap-label">Functional Location</label>
+        <select id="jobFunctionalLocationSelect" class="sap-select">
+          <option value="">Select functional location…</option>
         </select>
       </div>
       <div class="sap-field" style="grid-column:1/-1;">
@@ -165,7 +171,7 @@
         </div>
       </div>
       <div class="sap-field" style="grid-column:1/-1;">
-        <label class="sap-label">Title</label>
+        <label class="sap-label">Scope</label>
         <input id="jobTitle" class="sap-input" />
       </div>
     </div>
@@ -175,7 +181,7 @@
   <div class="sap-card jobs-table-card" style="margin-top:12px;">
     <div class="sap-table-wrapper">
     <table class="sap-table">
-      <thead><tr><th>Job Number</th><th>Client</th><th>Status</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Job Number</th><th>Client</th><th>Functional Location</th><th>Scope</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody id="jobsBody"></tbody>
     </table>
     </div>
@@ -187,6 +193,7 @@ let session = null;
 let jobsReadOnly = false;
 let INSPECTORS = [];
 let SELECTED_INSPECTOR_IDS = [];
+let FUNCTIONAL_LOCATIONS = [];
 function getSession(){ return (typeof SapSession!=='undefined') ? SapSession.get() : JSON.parse(sessionStorage.getItem('sap_session')||'null'); }
 function logout(){ if (typeof SapSession !== 'undefined') return SapSession.logout(); sessionStorage.removeItem('sap_session'); location.href='/'; }
 function toggleUserMenu(){ document.getElementById('userMenu')?.classList.toggle('open'); }
@@ -205,6 +212,29 @@ async function loadClientsDropdown() {
     const val = c.client_id || c.id;
     return `<option value="${val}">${c.name} (${val})</option>`;
   }).join('');
+  onJobClientChange();
+}
+
+async function loadFunctionalLocations() {
+  const sel = document.getElementById('jobFunctionalLocationSelect');
+  if (!sel) return;
+  try {
+    const res = await apiFetch('/api/functional-locations?limit=500');
+    const raw = await res.json();
+    FUNCTIONAL_LOCATIONS = (raw.data?.functional_locations || raw.data || []).filter(fl => fl.status !== 'inactive');
+  } catch (e) {
+    FUNCTIONAL_LOCATIONS = [];
+  }
+  onJobClientChange();
+}
+
+function onJobClientChange() {
+  const clientId = document.getElementById('jobClientSelect')?.value || '';
+  const sel = document.getElementById('jobFunctionalLocationSelect');
+  if (!sel) return;
+  const rows = FUNCTIONAL_LOCATIONS.filter(fl => String(fl.client_id || '') === String(clientId));
+  sel.innerHTML = '<option value="">Select functional location…</option>' +
+    rows.map(fl => `<option value="${fl.fl_id}">${fl.fl_id} — ${fl.name}</option>`).join('');
 }
 
 async function loadInspectorsDropdown() {
@@ -301,19 +331,12 @@ function formatJobStatus(status) {
   return '<span class="sap-badge sap-badge--success">Open</span>';
 }
 
-function formatJobStatus(status) {
-  const s = String(status || '').toLowerCase();
-  if (s === 'closed' || s === 'done' || s === 'technician_done') return '<span class="sap-badge sap-badge--neutral">Closed</span>';
-  if (s === 'reopened') return '<span class="sap-badge sap-badge--warning">Reopened</span>';
-  return '<span class="sap-badge sap-badge--success">Open</span>';
-}
-
 async function loadJobs(){
   const res = await apiFetch('/api/jobs?limit=200');
   const raw = await res.json();
   const jobs = (raw.data||raw).jobs || [];
   document.getElementById('jobsBody').innerHTML = jobs.map(j => `<tr>
-    <td>${j.job_number||''}</td><td>${j.client_id||''}</td><td>${formatJobStatus(j.status)}</td>
+    <td>${j.job_number||''}</td><td>${j.client_id||''}</td><td>${j.functional_location||'—'}</td><td>${j.title||'—'}</td><td>${formatJobStatus(j.status)}</td>
     <td>${jobsReadOnly
       ? '<span class="sap-badge sap-badge--neutral">View only</span>'
       : `<div class="jobs-actions">
@@ -327,16 +350,19 @@ async function createJob(){
   const body = {
     job_number: document.getElementById('jobNumber').value.trim() || undefined,
     client_id: document.getElementById('jobClientSelect').value.trim(),
+    functional_location: document.getElementById('jobFunctionalLocationSelect').value.trim(),
     title: document.getElementById('jobTitle').value.trim() || null,
     inspector_ids: selectedInspectorIds(),
   };
   if (!body.client_id) return alert('Client is required');
+  if (!body.functional_location) return alert('Functional location is required');
   if (!body.inspector_ids.length) return alert('Select at least one inspector');
   const res = await apiFetch('/api/jobs',{method:'POST',body:JSON.stringify(body)});
   const raw = await res.json();
   if(!raw.success) return alert(raw.error||'Create failed');
   document.getElementById('jobNumber').value = '';
   document.getElementById('jobTitle').value = '';
+  document.getElementById('jobFunctionalLocationSelect').value = '';
   setSelectedInspectors([]);
   const search = document.getElementById('jobInspectorSearch');
   if (search) search.value = '';
@@ -381,7 +407,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     await loadJobs();
   } else {
     setupInspectorPicker();
-    await Promise.all([loadClientsDropdown(), loadInspectorsDropdown(), loadJobs()]);
+    await Promise.all([loadFunctionalLocations(), loadClientsDropdown(), loadInspectorsDropdown(), loadJobs()]);
   }
 });
 </script>
