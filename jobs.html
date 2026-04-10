@@ -6,6 +6,66 @@
   <title>Jobs - Rigways ACM</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="app.js"></script>
+  <style>
+    .jobs-create-card { padding: 16px; }
+    .jobs-create-card .sap-form-grid { gap: 14px 16px; }
+    .jobs-create-card .sap-field { margin-bottom: 2px; }
+    .inspector-picker { position: relative; }
+    .inspector-picker__input {
+      width: 100%;
+      border: 1px solid var(--sap-input-border);
+      border-radius: 6px;
+      height: 38px;
+      padding: 0 12px;
+      font-size: 14px;
+      background: #fff;
+    }
+    .inspector-picker__dropdown {
+      position: absolute;
+      left: 0; right: 0; top: calc(100% + 6px);
+      background: #fff;
+      border: 1px solid var(--sap-input-border);
+      border-radius: 8px;
+      max-height: 220px;
+      overflow: auto;
+      box-shadow: 0 10px 24px rgba(0,0,0,.08);
+      z-index: 30;
+      display: none;
+    }
+    .inspector-picker__dropdown.open { display: block; }
+    .inspector-option {
+      width: 100%;
+      text-align: left;
+      border: none;
+      background: transparent;
+      padding: 9px 10px;
+      cursor: pointer;
+      border-bottom: 1px solid #f1f3f5;
+      font-size: 13px;
+      color: var(--sap-text-primary);
+    }
+    .inspector-option:last-child { border-bottom: none; }
+    .inspector-option:hover { background: #f8faff; }
+    .inspector-option__meta { display:block; font-size:11px; color:var(--sap-text-secondary); margin-top:2px; }
+    .inspector-option--selected { background: #eef6ff; color: var(--sap-brand); font-weight: 600; }
+    .inspector-chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; min-height: 26px; }
+    .inspector-chip {
+      display:inline-flex; align-items:center; gap:6px;
+      border: 1px solid #c9defa;
+      background: #e8f3ff;
+      color: #0a4f9c;
+      border-radius: 16px;
+      padding: 4px 9px;
+      font-size: 12px;
+      line-height: 1;
+    }
+    .inspector-chip button {
+      border: none; background: transparent; color: inherit; cursor: pointer;
+      width: 16px; height:16px; padding:0; border-radius: 50%;
+      display:flex; align-items:center; justify-content:center; font-size: 13px;
+    }
+    .inspector-chip button:hover { background: rgba(10,79,156,.12); }
+  </style>
 </head>
 <body class="jobs-page">
 <header class="sap-shell">
@@ -84,7 +144,7 @@
     </div>
   </div>
 
-  <div class="sap-card" id="jobsCreateCard">
+  <div class="sap-card jobs-create-card" id="jobsCreateCard">
     <div class="sap-form-grid sap-form-grid--2col">
       <div class="sap-field">
         <label class="sap-label">Job Number (optional)</label>
@@ -98,7 +158,11 @@
       </div>
       <div class="sap-field" style="grid-column:1/-1;">
         <label class="sap-label">Inspectors (active, multi-select)</label>
-        <select id="jobInspectorsSelect" class="sap-select" multiple size="6"></select>
+        <div class="inspector-picker" id="jobInspectorPicker">
+          <input id="jobInspectorSearch" class="inspector-picker__input" type="text" placeholder="Search and select inspector…" autocomplete="off" />
+          <div id="jobInspectorDropdown" class="inspector-picker__dropdown"></div>
+          <div id="jobInspectorChips" class="inspector-chips"></div>
+        </div>
       </div>
       <div class="sap-field" style="grid-column:1/-1;">
         <label class="sap-label">Title</label>
@@ -121,6 +185,8 @@
 <script>
 let session = null;
 let jobsReadOnly = false;
+let INSPECTORS = [];
+let SELECTED_INSPECTOR_IDS = [];
 function getSession(){ return (typeof SapSession!=='undefined') ? SapSession.get() : JSON.parse(sessionStorage.getItem('sap_session')||'null'); }
 function logout(){ if (typeof SapSession !== 'undefined') return SapSession.logout(); sessionStorage.removeItem('sap_session'); location.href='/'; }
 function toggleUserMenu(){ document.getElementById('userMenu')?.classList.toggle('open'); }
@@ -142,18 +208,97 @@ async function loadClientsDropdown() {
 }
 
 async function loadInspectorsDropdown() {
-  const sel = document.getElementById('jobInspectorsSelect');
-  if (!sel) return;
   const res = await apiFetch('/api/inspectors?status=active&limit=500');
   const raw = await res.json();
-  const list = (raw.data?.inspectors || raw.data || []).filter(i => i.status === 'active');
-  sel.innerHTML = list.map(i => `<option value="${i.id}">${i.name}${i.title ? ' — ' + i.title : ''}</option>`).join('');
+  INSPECTORS = (raw.data?.inspectors || raw.data || []).filter(i => i.status === 'active');
+  renderInspectorDropdown('');
+  renderInspectorChips();
 }
 
 function selectedInspectorIds() {
-  const sel = document.getElementById('jobInspectorsSelect');
-  if (!sel) return [];
-  return Array.from(sel.selectedOptions || []).map(o => o.value).filter(Boolean);
+  return [...SELECTED_INSPECTOR_IDS];
+}
+
+function inspectorLabel(i) {
+  return `${i.name || 'Unknown'}${i.title ? ' — ' + i.title : ''}`;
+}
+
+function renderInspectorDropdown(query = '') {
+  const dd = document.getElementById('jobInspectorDropdown');
+  if (!dd) return;
+  const q = String(query || '').trim().toLowerCase();
+  const list = INSPECTORS.filter(i => {
+    if (!q) return true;
+    return `${i.name || ''} ${i.title || ''}`.toLowerCase().includes(q);
+  });
+  if (!list.length) {
+    dd.innerHTML = `<div class="inspector-option" style="cursor:default;color:var(--sap-text-secondary);">No inspectors found.</div>`;
+    return;
+  }
+  dd.innerHTML = list.map(i => {
+    const selected = SELECTED_INSPECTOR_IDS.includes(i.id);
+    return `<button type="button" class="inspector-option ${selected ? 'inspector-option--selected' : ''}" onclick="toggleInspectorSelection('${i.id}')">
+      ${i.name || 'Unknown'}
+      <span class="inspector-option__meta">${i.title || 'Inspector'}</span>
+    </button>`;
+  }).join('');
+}
+
+function renderInspectorChips() {
+  const box = document.getElementById('jobInspectorChips');
+  if (!box) return;
+  const selected = INSPECTORS.filter(i => SELECTED_INSPECTOR_IDS.includes(i.id));
+  box.innerHTML = selected.map(i => `
+    <span class="inspector-chip">
+      <span>${inspectorLabel(i)}</span>
+      <button type="button" aria-label="Remove ${i.name || 'inspector'}" onclick="removeInspectorSelection('${i.id}')">×</button>
+    </span>
+  `).join('');
+}
+
+function toggleInspectorSelection(id) {
+  const idx = SELECTED_INSPECTOR_IDS.indexOf(id);
+  if (idx >= 0) SELECTED_INSPECTOR_IDS.splice(idx, 1);
+  else SELECTED_INSPECTOR_IDS.push(id);
+  renderInspectorDropdown(document.getElementById('jobInspectorSearch')?.value || '');
+  renderInspectorChips();
+}
+
+function removeInspectorSelection(id) {
+  SELECTED_INSPECTOR_IDS = SELECTED_INSPECTOR_IDS.filter(x => x !== id);
+  renderInspectorDropdown(document.getElementById('jobInspectorSearch')?.value || '');
+  renderInspectorChips();
+}
+
+function setupInspectorPicker() {
+  const input = document.getElementById('jobInspectorSearch');
+  const dd = document.getElementById('jobInspectorDropdown');
+  const wrap = document.getElementById('jobInspectorPicker');
+  if (!input || !dd || !wrap) return;
+  input.addEventListener('focus', () => {
+    renderInspectorDropdown(input.value || '');
+    dd.classList.add('open');
+  });
+  input.addEventListener('input', () => {
+    renderInspectorDropdown(input.value || '');
+    dd.classList.add('open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#jobInspectorPicker')) dd.classList.remove('open');
+  });
+}
+
+function setSelectedInspectors(ids) {
+  SELECTED_INSPECTOR_IDS = Array.from(new Set((ids || []).filter(Boolean)));
+  renderInspectorDropdown(document.getElementById('jobInspectorSearch')?.value || '');
+  renderInspectorChips();
+}
+
+function formatJobStatus(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'closed' || s === 'done' || s === 'technician_done') return '<span class="sap-badge sap-badge--neutral">Closed</span>';
+  if (s === 'reopened') return '<span class="sap-badge sap-badge--warning">Reopened</span>';
+  return '<span class="sap-badge sap-badge--success">Open</span>';
 }
 
 function formatJobStatus(status) {
@@ -190,6 +335,11 @@ async function createJob(){
   const res = await apiFetch('/api/jobs',{method:'POST',body:JSON.stringify(body)});
   const raw = await res.json();
   if(!raw.success) return alert(raw.error||'Create failed');
+  document.getElementById('jobNumber').value = '';
+  document.getElementById('jobTitle').value = '';
+  setSelectedInspectors([]);
+  const search = document.getElementById('jobInspectorSearch');
+  if (search) search.value = '';
   await loadJobs();
 }
 
@@ -230,6 +380,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   if (jobsReadOnly) {
     await loadJobs();
   } else {
+    setupInspectorPicker();
     await Promise.all([loadClientsDropdown(), loadInspectorsDropdown(), loadJobs()]);
   }
 });
