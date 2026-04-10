@@ -677,7 +677,7 @@ async function handleLogin(e) {
     showToast('success', 'Signed In',
       `Welcome, ${h(data.user.name)} — ${roleLabel[data.user.role] || data.user.role}`);
 
-    setTimeout(() => { window.location.href = 'dashboard.html'; }, 900);
+    setTimeout(() => { window.location.href = 'assets.html'; }, 900);
 
   } catch {
     errorBox.classList.add('show');
@@ -713,7 +713,7 @@ function showToast(type, title, msg) {
 /* ── Init ── */
 (function() {
   if (sessionStorage.getItem('sap_session')) {
-    window.location.href = 'dashboard.html';
+    window.location.href = 'assets.html';
     return;
   }
   // EN-only mode
