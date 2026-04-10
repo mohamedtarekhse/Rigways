@@ -160,6 +160,7 @@ CREATE TABLE IF NOT EXISTS certificates (
   client_id        TEXT        REFERENCES clients(client_id) ON DELETE SET NULL,
   inspector_id     UUID        REFERENCES inspectors(id) ON DELETE SET NULL,
   issued_by        TEXT        NOT NULL,
+  related_standard TEXT,
   issue_date       DATE        NOT NULL,
   expiry_date      DATE        NOT NULL,
   file_name        TEXT,
