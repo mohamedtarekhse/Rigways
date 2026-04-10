@@ -707,13 +707,28 @@
           <!-- Issue Date -->
           <div class="sap-field">
             <label class="sap-label">Issue Date <span class="required">*</span></label>
-            <input type="date" id="f_issueDate" class="sap-input"/>
+            <input type="date" id="f_issueDate" class="sap-input" onchange="onIssueDateChange()"/>
+          </div>
+
+          <!-- Validity Period -->
+          <div class="sap-field">
+            <label class="sap-label">Validity Period</label>
+            <select id="f_validityPeriod" class="sap-select" onchange="onValidityPeriodChange()">
+              <option value="">Select period…</option>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="semi_annually">Semi Annually</option>
+              <option value="annually">Annually</option>
+            </select>
           </div>
 
           <!-- Expiry Date -->
           <div class="sap-field">
             <label class="sap-label">Expiry Date <span class="required">*</span></label>
-            <input type="date" id="f_expiryDate" class="sap-input"/>
+            <input type="date" id="f_expiryDate" class="sap-input" readonly/>
+            <div style="font-size:11px;color:var(--sap-text-secondary);margin-top:4px;">
+              Auto-calculated from Issue Date + Validity Period.
+            </div>
           </div>
 
           <!-- Linked Asset -->
@@ -1454,9 +1469,9 @@ async function massDelete() {
    UPLOAD / EDIT MODAL
 ═══════════════════════════════════════════════════════ */
 function certDraftKey(){ const id=document.getElementById('editCertId')?.value||''; return id?`certs:edit:${id}`:'certs:add'; }
-function collectCertDraft(){ return { editCertId:document.getElementById('editCertId')?.value||'', f_jobNumber:document.getElementById('f_jobNumber')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_certType:document.getElementById('f_certType')?.value||'', f_liftingSubtype:document.getElementById('f_liftingSubtype')?.value||'', f_relatedStandard:document.getElementById('f_relatedStandard')?.value||'', f_issuedBy:document.getElementById('f_issuedBy')?.value||'', f_issueDate:document.getElementById('f_issueDate')?.value||'', f_expiryDate:document.getElementById('f_expiryDate')?.value||'', f_client:document.getElementById('f_client')?.value||'', f_assetId:document.getElementById('f_assetId')?.value||'' }; }
+function collectCertDraft(){ return { editCertId:document.getElementById('editCertId')?.value||'', f_jobNumber:document.getElementById('f_jobNumber')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_certType:document.getElementById('f_certType')?.value||'', f_liftingSubtype:document.getElementById('f_liftingSubtype')?.value||'', f_relatedStandard:document.getElementById('f_relatedStandard')?.value||'', f_issuedBy:document.getElementById('f_issuedBy')?.value||'', f_issueDate:document.getElementById('f_issueDate')?.value||'', f_validityPeriod:document.getElementById('f_validityPeriod')?.value||'', f_expiryDate:document.getElementById('f_expiryDate')?.value||'', f_client:document.getElementById('f_client')?.value||'', f_assetId:document.getElementById('f_assetId')?.value||'' }; }
 function saveCertDraft(){ if(window.SapDraft) SapDraft.save(certDraftKey(), collectCertDraft()); }
-function restoreCertDraft(){ if(!window.SapDraft) return; const d=SapDraft.load(certDraftKey(),24*60*60*1000); if(d&&confirm('A saved draft was found. Restore it?')) Object.entries(d).forEach(([k,v])=>{const el=document.getElementById(k); if(el) el.value=v;}); onCertTypeChange(); }
+function restoreCertDraft(){ if(!window.SapDraft) return; const d=SapDraft.load(certDraftKey(),24*60*60*1000); if(d&&confirm('A saved draft was found. Restore it?')) Object.entries(d).forEach(([k,v])=>{const el=document.getElementById(k); if(el) el.value=v;}); onCertTypeChange(); onValidityPeriodChange(); }
 function clearCertDraft(){ if(!window.SapDraft) return; const id=document.getElementById('editCertId')?.value||''; SapDraft.clear('certs:add'); if(id) SapDraft.clear(`certs:edit:${id}`); }
 function bindCertDraft(){ const f=document.getElementById('certForm'); if(!f||f.dataset.draftBound==='1') return; f.addEventListener('input',saveCertDraft); f.addEventListener('change',saveCertDraft); f.dataset.draftBound='1'; }
 function openUploadModal() {
@@ -1481,6 +1496,8 @@ function openUploadModal() {
 
   /* Set today as default issue date */
   document.getElementById('f_issueDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('f_validityPeriod').value = '';
+  document.getElementById('f_expiryDate').value = '';
   bindCertDraft(); restoreCertDraft(); document.getElementById('certModal').classList.add('open');
   // Load all dropdowns from API
   loadAssetDropdown();
@@ -1520,6 +1537,7 @@ function openEditModal(id) {
   document.getElementById('f_relatedStandard').value = c.relatedStandard || '';
   document.getElementById('f_issuedBy').value       = c.issuedBy;
   document.getElementById('f_issueDate').value      = c.issueDate;
+  document.getElementById('f_validityPeriod').value = inferValidityFromDates(c.issueDate, c.expiryDate);
   document.getElementById('f_expiryDate').value     = c.expiryDate;
   document.getElementById('f_assetId').value        = c.assetUuid || '';
   document.getElementById('f_client').value         = c.client;
@@ -1546,7 +1564,55 @@ function openEditModal(id) {
   loadInspectorDropdown(_inspVal);
   loadClientDropdown(_clientVal);
   loadJobDropdown(c.jobNumber || '');
+  onValidityPeriodChange();
   if (session.role === 'technician') lockTechnicianModalFields();
+}
+
+function addCalendarMonths(isoDate, monthsToAdd) {
+  if (!isoDate || !monthsToAdd) return '';
+  const [y, m, d] = String(isoDate).split('-').map(Number);
+  if (!y || !m || !d) return '';
+  const src = new Date(y, m - 1, d);
+  if (Number.isNaN(src.getTime())) return '';
+  const targetMonthIndex = (m - 1) + monthsToAdd;
+  const targetYear = y + Math.floor(targetMonthIndex / 12);
+  const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
+  const endOfTargetMonthDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const clampedDay = Math.min(d, endOfTargetMonthDay);
+  const out = new Date(targetYear, targetMonth, clampedDay);
+  const yyyy = out.getFullYear();
+  const mm = String(out.getMonth() + 1).padStart(2, '0');
+  const dd = String(out.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function inferValidityFromDates(issueDate, expiryDate) {
+  if (!issueDate || !expiryDate) return '';
+  const map = { monthly:1, quarterly:3, semi_annually:6, annually:12 };
+  for (const [key, months] of Object.entries(map)) {
+    if (addCalendarMonths(issueDate, months) === expiryDate) return key;
+  }
+  return '';
+}
+
+function onValidityPeriodChange() {
+  const period = document.getElementById('f_validityPeriod')?.value || '';
+  const issueDate = document.getElementById('f_issueDate')?.value || '';
+  const expiryInput = document.getElementById('f_expiryDate');
+  if (!expiryInput) return;
+  if (!period) {
+    expiryInput.value = '';
+    return;
+  }
+  if (!issueDate) return;
+  const monthsMap = { monthly:1, quarterly:3, semi_annually:6, annually:12 };
+  expiryInput.value = addCalendarMonths(issueDate, monthsMap[period] || 0);
+}
+
+function onIssueDateChange() {
+  const period = document.getElementById('f_validityPeriod')?.value || '';
+  if (!period) return;
+  onValidityPeriodChange();
 }
 
 function onJobSelectChange(jobNumber) {
@@ -1657,6 +1723,7 @@ async function saveCert() {
   const relatedStandard = certType === 'TUBULAR' ? (document.getElementById('f_relatedStandard')?.value?.trim() || '') : '';
   const issuedBy       = document.getElementById('f_issuedBy')?.value?.trim() || '';
   const issueDate      = document.getElementById('f_issueDate')?.value || '';
+  const validityPeriod = document.getElementById('f_validityPeriod')?.value || '';
   const expiryDate     = document.getElementById('f_expiryDate')?.value || '';
   const client         = document.getElementById('f_client')?.value || session?.customerId || '';
   const assetId        = document.getElementById('f_assetId')?.value || '';
@@ -1665,7 +1732,7 @@ async function saveCert() {
   const effectiveIssuedBy = isTechnician ? (session?.name || '').trim() : issuedBy;
   const effectiveClient   = isTechnician ? (session?.customerId || '').trim() : client;
 
-  if (!name || !certType || !effectiveIssuedBy || !issueDate || !expiryDate) {
+  if (!name || !certType || !effectiveIssuedBy || !issueDate || !validityPeriod || !expiryDate) {
     showToast('error','Required Fields','Please fill all required fields.'); return;
   }
   if (isTechnician && !effectiveClient) {
