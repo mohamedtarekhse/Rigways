@@ -1,0 +1,2625 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data: blob:;
+    connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787;
+    object-src 'none';
+    base-uri 'self';
+  "/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Certificates – Rigways Group</title>
+  <script src="app.js"></script>
+  <link rel="stylesheet" href="styles.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    /* ── Certificate page extras ── */
+
+    /* Cert type badge */
+    .cert-type-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .4px;
+    }
+
+    /* Expiry progress bar */
+    .expiry-bar-wrap {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .expiry-bar {
+      flex: 1; height: 5px; background: #e8eaed;
+      border-radius: 3px; overflow: hidden; min-width: 60px;
+    }
+    .expiry-bar__fill { height: 100%; border-radius: 3px; transition: width .4s; }
+    .expiry-bar__fill--green  { background: var(--sap-success); }
+    .expiry-bar__fill--orange { background: var(--sap-warning); }
+    .expiry-bar__fill--red    { background: var(--sap-error); }
+    .expiry-bar__label { font-size: 11px; font-weight: 700; white-space: nowrap; min-width: 52px; }
+
+    /* File preview chip */
+    .file-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: #fff; border: 1px solid var(--sap-table-border);
+      border-radius: 4px; padding: 3px 8px;
+      font-size: 11px; font-weight: 600;
+      color: var(--sap-brand); cursor: pointer;
+      transition: background .15s;
+    }
+    .file-chip:hover { background: var(--sap-brand-light); }
+    .file-chip svg { width: 12px; height: 12px; color: var(--sap-error); }
+
+    /* Edit-window countdown */
+    .edit-window-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: #e8f3ff; border: 1px solid #90caf9;
+      border-radius: 10px; padding: 2px 8px;
+      font-size: 10px; font-weight: 700; color: #0070f2;
+    }
+    .edit-window-badge--expired {
+      background: #f5f6f7; border-color: #c5c8ca; color: #6a6d70;
+    }
+    .edit-window-badge svg { width: 10px; height: 10px; }
+
+    /* Approval action row */
+    .cert-approval-row {
+      display: flex; gap: 4px; align-items: center;
+    }
+
+    /* Detail drawer */
+    .sap-drawer-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.35); z-index: 900;
+      opacity: 0; pointer-events: none; transition: opacity .25s;
+    }
+    .sap-drawer-overlay.open { opacity: 1; pointer-events: all; }
+    .sap-drawer {
+      position: fixed; top: 48px; right: 0; bottom: 0; width: 520px;
+      background: #fff; box-shadow: -8px 0 32px rgba(0,0,0,.15);
+      z-index: 901; display: flex; flex-direction: column;
+      transform: translateX(100%); transition: transform .3s ease;
+    }
+    .sap-drawer-overlay.open .sap-drawer { transform: translateX(0); }
+    .sap-drawer__header {
+      padding: var(--sp-md) var(--sp-lg); background: #188918;
+      color: #fff; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+    }
+    .sap-drawer__title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: var(--sp-sm); }
+    .sap-drawer__title svg { width: 18px; height: 18px; }
+    .sap-drawer__close { background: rgba(255,255,255,.2); border: none; color: #fff; border-radius: 4px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background .2s; }
+    .sap-drawer__close:hover { background: rgba(255,255,255,.35); }
+    .sap-drawer__close svg { width: 16px; height: 16px; }
+    .sap-drawer__body { flex: 1; overflow-y: auto; padding: var(--sp-lg); }
+    .sap-drawer__footer { padding: var(--sp-md) var(--sp-lg); border-top: var(--sap-card-border); display: flex; gap: var(--sp-sm); justify-content: flex-end; background: #fafbfc; flex-shrink: 0; }
+
+    /* Section inside drawer */
+    .drawer-section { margin-bottom: var(--sp-lg); }
+    .drawer-section__title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .8px; color: var(--sap-text-secondary);
+      margin-bottom: var(--sp-sm); padding-bottom: 6px;
+      border-bottom: 1px solid var(--sap-table-border);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .drawer-section__title svg { width: 13px; height: 13px; }
+
+    /* File upload zone */
+    .upload-zone {
+      border: 2px dashed var(--sap-input-border); border-radius: 8px;
+      padding: 28px; text-align: center; cursor: pointer;
+      transition: all .2s; background: var(--sap-page-bg);
+      position: relative;
+    }
+    .upload-zone:hover, .upload-zone.drag { border-color: var(--sap-brand); background: var(--sap-brand-light); }
+    .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .upload-zone__icon { font-size: 36px; margin-bottom: 8px; }
+    .upload-zone__title { font-size: 14px; font-weight: 600; color: var(--sap-text-primary); }
+    .upload-zone__title span { color: var(--sap-brand); }
+    .upload-zone__hint { font-size: 11px; color: var(--sap-text-secondary); margin-top: 4px; }
+    .upload-preview {
+      display: flex; align-items: center; gap: 10px;
+      background: #fff; border: 1px solid var(--sap-success-border);
+      border-radius: 6px; padding: 10px 14px; margin-top: 10px;
+      text-align: left;
+    }
+    .upload-preview__icon { font-size: 24px; flex-shrink: 0; }
+    .upload-preview__info { flex: 1; min-width: 0; }
+    .upload-preview__name { font-size: 12px; font-weight: 700; color: var(--sap-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .upload-preview__size { font-size: 11px; color: var(--sap-text-secondary); }
+    .upload-preview__remove { background: none; border: none; color: var(--sap-error); cursor: pointer; padding: 2px; border-radius: 3px; }
+    .upload-preview__remove:hover { background: var(--sap-error-bg); }
+    .upload-preview__remove svg { width: 14px; height: 14px; }
+
+    /* Filter chips */
+    .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .filter-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px; border-radius: 16px; font-size: 11px; font-weight: 600;
+      border: 1px solid var(--sap-input-border); background: #fff;
+      cursor: pointer; transition: all .15s; color: var(--sap-text-secondary);
+    }
+    .filter-chip.active { background: var(--sap-brand); color: #fff; border-color: var(--sap-brand); }
+    .filter-chip:hover:not(.active) { border-color: var(--sap-brand); color: var(--sap-brand); }
+    .filter-chip__dot { width: 7px; height: 7px; border-radius: 50%; }
+
+    /* Asset ID chip */
+    .asset-id-chip {
+      font-family: monospace; font-size: 11px; font-weight: 700;
+      background: var(--sap-page-bg); border: 1px solid var(--sap-table-border);
+      border-radius: 4px; padding: 2px 6px; color: var(--sap-brand);
+    }
+    .cert-id-chip {
+      font-family: monospace; font-size: 11px; font-weight: 700;
+      background: #f0faf0; border: 1px solid var(--sap-success-border);
+      border-radius: 4px; padding: 2px 6px; color: var(--sap-success);
+    }
+
+    /* Approval info box */
+    .approval-info-box {
+      background: #fff3e0; border: 1px solid #ffe082;
+      border-left: 4px solid #f57f17; border-radius: 6px;
+      padding: var(--sp-md); margin-bottom: var(--sp-md);
+      font-size: 13px; color: #5d4037;
+    }
+    /* Timeline */
+    .cert-timeline { display: flex; flex-direction: column; gap: 0; }
+    .cert-tl-item {
+      display: flex; gap: 12px; align-items: flex-start;
+      padding-bottom: 14px; position: relative;
+    }
+    .cert-tl-item::before {
+      content: ''; position: absolute; left: 15px; top: 30px; bottom: 0;
+      width: 2px; background: var(--sap-table-border);
+    }
+    .cert-tl-item:last-child::before { display: none; }
+    .cert-tl-dot {
+      width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      border: 2px solid; background: #fff; z-index: 1;
+    }
+    .cert-tl-dot svg { width: 14px; height: 14px; }
+    .cert-tl-dot--info    { border-color: var(--sap-brand);   color: var(--sap-brand); }
+    .cert-tl-dot--success { border-color: var(--sap-success); color: var(--sap-success); }
+    .cert-tl-dot--warning { border-color: var(--sap-warning); color: var(--sap-warning); }
+    .cert-tl-dot--error   { border-color: var(--sap-error);   color: var(--sap-error); }
+    .cert-tl-content { flex: 1; }
+    .cert-tl-content__title { font-size: 13px; font-weight: 600; color: var(--sap-text-primary); }
+    .cert-tl-content__meta  { font-size: 11px; color: var(--sap-text-secondary); margin-top: 2px; }
+
+    /* Cert viewer modal */
+    .cert-viewer { text-align: center; }
+    .cert-viewer__placeholder {
+      background: var(--sap-page-bg); border: 2px dashed var(--sap-table-border);
+      border-radius: 8px; padding: 48px; color: var(--sap-text-secondary);
+    }
+    .cert-viewer__placeholder svg { width: 48px; height: 48px; margin: 0 auto 12px; opacity: .3; }
+
+    /* Action bar */
+    .action-bar { display: flex; align-items: center; gap: var(--sp-sm); padding: var(--sp-sm) var(--sp-md); background: var(--sap-page-bg); border: var(--sap-card-border); border-radius: var(--sap-card-radius); margin-bottom: var(--sp-md); flex-wrap: wrap; justify-content: space-between; }
+    .action-bar__left { display: flex; align-items: center; gap: var(--sp-sm); flex-wrap: wrap; }
+    .action-bar__right { display: flex; align-items: center; gap: var(--sp-sm); }
+
+    .cell-check { width: 36px; text-align: center; }
+    .sap-checkbox { width: 16px; height: 16px; accent-color: var(--sap-brand); cursor: pointer; }
+
+    /* ── Mass action bar (Gmail-style second row) ── */
+    .mass-action-bar {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      background: #e8f3ff;
+      border-bottom: 1px solid #90caf9;
+      border-top: 1px solid #90caf9;
+      flex-wrap: wrap;
+      animation: slideDownBar .18s ease;
+    }
+    .mass-action-bar.visible { display: flex; }
+    @keyframes slideDownBar {
+      from { opacity:0; transform:translateY(-4px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    .mass-action-bar__count {
+      font-size: 12px; font-weight: 700; color: var(--sap-brand);
+      white-space: nowrap; padding-right: 6px;
+      border-right: 1px solid #90caf9;
+      margin-right: 2px;
+    }
+    .mass-action-bar__spacer { flex: 1; }
+    .mass-action-bar .btn { height: 26px; font-size: 11px; padding: 0 9px; }
+
+    /* ── Certificate file link chip ── */
+    .cert-file-link {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 600; color: var(--sap-brand);
+      background: var(--sap-brand-light);
+      border: 1px solid #90caf9;
+      border-radius: 4px; padding: 2px 7px;
+      cursor: pointer; text-decoration: none;
+      transition: all .15s; white-space: nowrap;
+    }
+    .cert-file-link:hover { background: #d0e8ff; border-color: var(--sap-brand); text-decoration: none; }
+    .cert-file-link svg { width: 11px; height: 11px; flex-shrink: 0; }
+
+    /* ── Column selector dropdown ── */
+    .col-selector-wrap { position: relative; flex-shrink: 0; }
+    .col-selector-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      height: 28px; padding: 0 10px;
+      border: 1px solid var(--sap-input-border);
+      border-radius: 4px; background: #fff;
+      font-size: 12px; font-weight: 600; color: var(--sap-text-secondary);
+      cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .col-selector-btn:hover { border-color: var(--sap-brand); color: var(--sap-brand); }
+    .col-selector-btn svg { width: 13px; height: 13px; }
+    .col-selector-btn .badge {
+      background: var(--sap-brand); color: #fff;
+      font-size: 9px; font-weight: 700;
+      padding: 1px 5px; border-radius: 8px; min-width: 16px; text-align: center;
+    }
+    .col-dropdown {
+      position: absolute; top: calc(100% + 4px); right: 0;
+      background: #fff; border: 1px solid var(--sap-table-border);
+      border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.13);
+      z-index: 500; min-width: 210px; padding: 6px 0;
+      display: none;
+    }
+    .col-dropdown.open { display: block; }
+    .col-dropdown__header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 14px 8px;
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--sap-text-secondary);
+      border-bottom: 1px solid var(--sap-table-border);
+    }
+    .col-dropdown__reset {
+      font-size: 10px; font-weight: 600; color: var(--sap-brand);
+      cursor: pointer; background: none; border: none; padding: 0;
+    }
+    .col-dropdown__reset:hover { text-decoration: underline; }
+    .col-dropdown__item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 14px; cursor: pointer;
+      font-size: 12px; font-weight: 500; color: var(--sap-text-primary);
+      transition: background .12s;
+    }
+    .col-dropdown__item:hover { background: var(--sap-page-bg); }
+    .col-dropdown__item input[type="checkbox"] {
+      width: 14px; height: 14px; accent-color: var(--sap-brand); cursor: pointer; flex-shrink: 0;
+    }
+    .col-dropdown__item--locked { opacity: .45; cursor: not-allowed; }
+
+    @media(max-width:900px) { .sap-drawer { width: 100%; } .hide-mobile { display: none !important; } }
+
+    /* ── Asset Inspection History (cert drawer) ── */
+    .hist-job-hdr {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 6px 10px;
+      background: var(--sap-page-bg);
+      border-top: 2px solid var(--sap-table-border);
+      border-bottom: 1px solid var(--sap-table-border);
+    }
+    .hist-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 8px 10px 8px 20px;
+      border-bottom: 1px solid var(--sap-table-border);
+      transition: background .12s;
+      cursor: default;
+    }
+    .hist-row:last-child { border-bottom: none; }
+    .hist-row:hover { background: var(--sap-brand-light); }
+    .hist-row--current {
+      background: #f0faf0;
+      border-left: 3px solid var(--sap-success);
+    }
+    .hist-row--current:hover { background: #e4f7e4; }
+    .hist-col-id    { flex: 0 0 90px; }
+    .hist-col-name  { flex: 1; min-width: 0; }
+    .hist-col-type  { flex: 0 0 100px; }
+    .hist-col-exp   { flex: 0 0 88px; text-align: right; }
+    .hist-col-stat  { flex: 0 0 76px; text-align: right; }
+    .hist-empty {
+      text-align: center; padding: 28px 16px;
+      color: var(--sap-text-disabled); font-size: 12px;
+    }
+    .hist-summary-bar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 6px 0 10px;
+    }
+  
+  /* ── Rigways Logo ── */
+  .rigways-shell-logo {
+    height: 22px;
+    width: auto;
+    flex-shrink: 0;
+    /* Make logo white on dark shell header */
+    filter: brightness(0) invert(1);
+  }
+  .rigways-login-logo-dark {
+    height: 36px;
+    width: auto;
+    /* White version for dark backgrounds */
+    filter: brightness(0) invert(1);
+  }
+  .rigways-login-logo {
+    height: 32px;
+    width: auto;
+    /* Original colors for light backgrounds */
+  }
+
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════ SHELL ═══════════════════════ -->
+<header class="sap-shell">
+  <a href="dashboard.html" class="sap-shell__logo">
+    <svg class="rigways-shell-logo" height="22" aria-label="Rigways Group" xmlns="http://www.w3.org/2000/svg"   viewBox="0 0 190.81 25.51"><defs><style>      .cls-1 {        fill: #231f20;      }      .cls-2 {        fill: #00aded;      }      .cls-3 {        fill: #2e3d54;      }    </style></defs><g  ><g><path class="cls-2" d="M74.28,0c0,.13-.08.18-.14.25-1.61,2.01-3.23,4.01-4.83,6.03-.14.17-.29.2-.48.2-18.2,0-36.39,0-54.59,0-1.71,0-3.08,1.43-2.97,3.11.09,1.42,1.26,2.6,2.67,2.71.28.02.56.03.84.03,7.99,0,15.99,0,23.98,0q.37,0,.37.38c0,4.16,0,8.31,0,12.47,0,.28-.08.33-.34.33-2.53-.01-5.06,0-7.59,0-.24,0-.32-.04-.31-.3.01-1.95,0-3.89.01-5.84,0-.24-.07-.29-.3-.29-3.64,0-7.28,0-10.92,0-.2,0-.35.06-.5.19-2.4,2.03-4.81,4.07-7.22,6.1-.11.09-.21.14-.35.14-3.83,0-7.65,0-11.48,0-.03,0-.05,0-.15-.02,3.1-2.56,6.17-5.09,9.23-7.62-2.24-.69-3.72-2.27-4.96-4.12-.69-1.03-1.15-2.15-1.37-3.37-.31-1.74-.1-3.43.65-5.03C4.85,2.55,7.07.88,10.06.2,10.72.05,11.4,0,12.08,0c20.65,0,41.3,0,61.95,0h.25Z"></path><path class="cls-3" d="M74.36,25.21c0,.25-.05.31-.3.31-5.81,0-11.62,0-17.43,0-3.24,0-6.25-.82-8.96-2.6-3.69-2.42-6-5.8-6.83-10.16-.15-.78-.2-1.56-.23-2.35,0-.17.02-.24.22-.24,2.77,0,5.55,0,8.32,0,.17,0,.22.05.23.22.04,1.02.2,2.02.6,2.97.87,2.07,2.29,3.63,4.3,4.66,1.38.71,2.84,1.01,4.38,1.01,2.43.01,4.87,0,7.31.01.26,0,.31-.08.3-.32-.02-.64-.02-1.28,0-1.92,0-.23-.06-.28-.28-.28-3.31,0-6.62,0-9.93,0-.17,0-.29-.04-.41-.18-1.71-2.02-3.42-4.03-5.13-6.04-.03-.03-.06-.07-.13-.16h.34c7.77,0,15.53,0,23.3,0,.26,0,.34.05.34.33-.01,4.92,0,9.84,0,14.75"></path><g><path class="cls-1" d="M91.12,10.1l-1.35-1.95h-1.49v1.95h-1.62V3.1h3.03c1.87,0,3.04.97,3.04,2.54,0,1.05-.53,1.82-1.44,2.21l1.57,2.25h-1.74ZM89.6,4.42h-1.32v2.44h1.32c.99,0,1.49-.46,1.49-1.22s-.5-1.22-1.49-1.22Z"></path><path class="cls-1" d="M94.21,3.1c0-.49.39-.87.97-.87s.97.36.97.84c0,.52-.39.9-.97.9s-.97-.38-.97-.87ZM94.4,4.72h1.56v5.38h-1.56v-5.38Z"></path><path class="cls-1" d="M103.46,4.72v4.48c0,2-1.08,2.92-3.02,2.92-1.02,0-2.01-.25-2.64-.74l.62-1.12c.46.37,1.21.61,1.9.61,1.1,0,1.58-.5,1.58-1.47v-.23c-.41.45-1,.67-1.7.67-1.49,0-2.69-1.03-2.69-2.6s1.2-2.6,2.69-2.6c.75,0,1.37.25,1.78.77v-.69h1.48ZM101.92,7.24c0-.79-.59-1.32-1.41-1.32s-1.42.53-1.42,1.32.6,1.32,1.42,1.32,1.41-.53,1.41-1.32Z"></path><path class="cls-1" d="M114.04,4.72l-1.95,5.38h-1.5l-1.21-3.34-1.25,3.34h-1.5l-1.94-5.38h1.47l1.27,3.64,1.32-3.64h1.32l1.28,3.64,1.31-3.64h1.38Z"></path><path class="cls-1" d="M120.04,7.03v3.07h-1.46v-.67c-.29.49-.85.75-1.64.75-1.26,0-2.01-.7-2.01-1.63s.67-1.61,2.31-1.61h1.24c0-.67-.4-1.06-1.24-1.06-.57,0-1.16.19-1.55.5l-.56-1.09c.59-.42,1.46-.65,2.32-.65,1.64,0,2.59.76,2.59,2.39ZM118.48,8.4v-.55h-1.07c-.73,0-.96.27-.96.63,0,.39.33.65.88.65.52,0,.97-.24,1.15-.73Z"></path><path class="cls-1" d="M127.29,4.72l-2.43,5.71c-.52,1.3-1.26,1.69-2.23,1.69-.55,0-1.15-.18-1.5-.49l.57-1.11c.24.21.57.34.88.34.43,0,.67-.19.88-.67l.02-.05-2.33-5.42h1.61l1.51,3.65,1.52-3.65h1.5Z"></path><path class="cls-1" d="M127.91,9.6l.52-1.12c.48.31,1.21.52,1.87.52.72,0,.99-.19.99-.49,0-.88-3.25.02-3.25-2.13,0-1.02.92-1.74,2.49-1.74.74,0,1.56.17,2.07.47l-.52,1.11c-.53-.3-1.06-.4-1.55-.4-.7,0-1,.22-1,.5,0,.92,3.25.03,3.25,2.15,0,1-.93,1.71-2.54,1.71-.91,0-1.83-.25-2.33-.58Z"></path><path class="cls-1" d="M142.41,6.49h1.48v2.84c-.77.58-1.83.89-2.83.89-2.2,0-3.82-1.51-3.82-3.62s1.62-3.62,3.85-3.62c1.23,0,2.25.42,2.93,1.21l-1.04.96c-.51-.54-1.1-.79-1.81-.79-1.36,0-2.29.91-2.29,2.24s.93,2.24,2.27,2.24c.44,0,.85-.08,1.26-.3v-2.05Z"></path><path class="cls-1" d="M149.12,4.64v1.44c-.13,0-.23-.02-.35-.02-.86,0-1.43.47-1.43,1.5v2.54h-1.56v-5.38h1.49v.71c.38-.52,1.02-.79,1.85-.79Z"></path><path class="cls-1" d="M150.19,7.41c0-1.62,1.25-2.77,2.96-2.77s2.95,1.15,2.95,2.77-1.24,2.77-2.95,2.77-2.96-1.15-2.96-2.77ZM154.52,7.41c0-.93-.59-1.49-1.37-1.49s-1.38.56-1.38,1.49.6,1.49,1.38,1.49,1.37-.56,1.37-1.49Z"></path><path class="cls-1" d="M163.06,4.72v5.38h-1.48v-.64c-.41.47-1.01.72-1.67.72-1.35,0-2.3-.76-2.3-2.42v-3.04h1.56v2.81c0,.9.4,1.3,1.09,1.3s1.24-.46,1.24-1.45v-2.66h1.56Z"></path><path class="cls-1" d="M170.86,7.41c0,1.69-1.17,2.77-2.68,2.77-.67,0-1.22-.21-1.62-.65v2.51h-1.56v-7.32h1.49v.62c.39-.47.97-.7,1.69-.7,1.51,0,2.68,1.08,2.68,2.77ZM169.29,7.41c0-.93-.59-1.49-1.37-1.49s-1.37.56-1.37,1.49.59,1.49,1.37,1.49,1.37-.56,1.37-1.49Z"></path></g><g><path class="cls-1" d="M86.31,18.6c0-2.05,1.58-3.58,3.73-3.58s3.71,1.52,3.71,3.58-1.58,3.58-3.71,3.58-3.73-1.53-3.73-3.58ZM92.75,18.6c0-1.55-1.16-2.69-2.71-2.69s-2.73,1.14-2.73,2.69,1.16,2.69,2.73,2.69,2.71-1.14,2.71-2.69Z"></path><path class="cls-1" d="M95.47,15.16c0-.35.28-.63.65-.63s.65.27.65.61c0,.36-.27.64-.65.64s-.65-.27-.65-.62ZM95.64,16.8h.96v5.3h-.96v-5.3Z"></path><path class="cls-1" d="M98.93,14.68h.96v7.42h-.96v-7.42Z"></path><path class="cls-1" d="M110.67,22.21l-.93-.93c-.61.59-1.41.9-2.34.9-1.42,0-2.45-.75-2.45-1.82,0-.86.49-1.46,1.7-2.15-.63-.63-.84-1.08-.84-1.6,0-.94.74-1.57,1.89-1.57,1.06,0,1.74.55,1.74,1.46,0,.71-.42,1.22-1.49,1.83l1.73,1.72c.19-.36.34-.78.43-1.27l.77.25c-.12.62-.33,1.16-.61,1.6l.94.94-.54.64ZM109.17,20.72l-1.99-1.98c-.98.55-1.29.96-1.29,1.52,0,.67.63,1.12,1.57,1.12.67,0,1.26-.22,1.71-.66ZM106.7,16.59c0,.36.14.62.71,1.2.92-.52,1.22-.84,1.22-1.28s-.33-.77-.93-.77c-.63,0-1,.35-1,.85Z"></path><path class="cls-1" d="M120.95,18.56h.96v2.73c-.7.59-1.67.89-2.65.89-2.15,0-3.73-1.51-3.73-3.58s1.58-3.58,3.75-3.58c1.11,0,2.05.37,2.69,1.08l-.62.62c-.58-.56-1.24-.81-2.03-.81-1.62,0-2.79,1.13-2.79,2.69s1.17,2.69,2.78,2.69c.59,0,1.14-.13,1.64-.45v-2.28Z"></path><path class="cls-1" d="M128.38,18.9v3.2h-.91v-.7c-.32.48-.91.76-1.74.76-1.2,0-1.96-.64-1.96-1.56,0-.85.55-1.55,2.13-1.55h1.52v-.19c0-.81-.47-1.28-1.42-1.28-.63,0-1.27.22-1.68.57l-.4-.72c.55-.44,1.34-.68,2.19-.68,1.45,0,2.27.7,2.27,2.15ZM127.42,20.48v-.74h-1.48c-.95,0-1.22.37-1.22.82,0,.53.44.86,1.17.86s1.29-.33,1.53-.94Z"></path><path class="cls-1" d="M129.99,21.54l.4-.76c.45.32,1.17.55,1.86.55.89,0,1.26-.27,1.26-.72,0-1.19-3.35-.16-3.35-2.27,0-.95.85-1.59,2.21-1.59.69,0,1.47.18,1.93.48l-.41.76c-.48-.31-1.01-.42-1.53-.42-.84,0-1.25.31-1.25.73,0,1.25,3.36.23,3.36,2.29,0,.96-.88,1.57-2.29,1.57-.88,0-1.75-.27-2.19-.62Z"></path><path class="cls-1" d="M138.93,18.6c0-2.07,1.58-3.58,3.71-3.58,1.08,0,2.02.37,2.66,1.09l-.65.63c-.54-.57-1.2-.83-1.97-.83-1.58,0-2.75,1.14-2.75,2.69s1.17,2.69,2.75,2.69c.77,0,1.43-.27,1.97-.84l.65.63c-.64.72-1.58,1.1-2.67,1.1-2.12,0-3.7-1.51-3.7-3.58Z"></path><path class="cls-1" d="M146.6,19.45c0-1.58,1.17-2.7,2.76-2.7s2.75,1.12,2.75,2.7-1.16,2.71-2.75,2.71-2.76-1.13-2.76-2.71ZM151.14,19.45c0-1.13-.76-1.86-1.78-1.86s-1.79.73-1.79,1.86.77,1.87,1.79,1.87,1.78-.74,1.78-1.87Z"></path><path class="cls-1" d="M162.73,19.05v3.05h-.96v-2.94c0-1.04-.5-1.55-1.37-1.55-.96,0-1.59.61-1.59,1.76v2.73h-.96v-2.94c0-1.04-.5-1.55-1.37-1.55-.96,0-1.59.61-1.59,1.76v2.73h-.96v-5.3h.92v.79c.38-.54,1.03-.84,1.83-.84s1.49.32,1.84.98c.4-.6,1.14-.98,2.04-.98,1.29,0,2.17.74,2.17,2.3Z"></path><path class="cls-1" d="M170.49,19.45c0,1.63-1.13,2.71-2.68,2.71-.75,0-1.41-.29-1.85-.86v2.74h-.96v-7.24h.92v.84c.43-.59,1.11-.89,1.89-.89,1.55,0,2.68,1.08,2.68,2.7ZM169.53,19.45c0-1.12-.77-1.86-1.79-1.86s-1.78.74-1.78,1.86.77,1.87,1.78,1.87,1.79-.74,1.79-1.87Z"></path><path class="cls-1" d="M176.53,18.9v3.2h-.91v-.7c-.32.48-.91.76-1.74.76-1.2,0-1.96-.64-1.96-1.56,0-.85.55-1.55,2.13-1.55h1.52v-.19c0-.81-.47-1.28-1.42-1.28-.63,0-1.27.22-1.68.57l-.4-.72c.55-.44,1.34-.68,2.19-.68,1.45,0,2.27.7,2.27,2.15ZM175.57,20.48v-.74h-1.48c-.95,0-1.22.37-1.22.82,0,.53.44.86,1.17.86s1.29-.33,1.53-.94Z"></path><path class="cls-1" d="M183.83,19.05v3.05h-.96v-2.94c0-1.04-.52-1.55-1.43-1.55-1.02,0-1.68.61-1.68,1.76v2.73h-.96v-5.3h.92v.8c.39-.54,1.07-.85,1.91-.85,1.29,0,2.2.74,2.2,2.3Z"></path><path class="cls-1" d="M190.81,16.8l-2.57,5.83c-.47,1.12-1.08,1.47-1.89,1.47-.51,0-1.03-.17-1.36-.49l.41-.72c.26.25.59.39.95.39.46,0,.75-.21,1.01-.82l.17-.37-2.34-5.29h1l1.85,4.24,1.83-4.24h.94Z"></path></g></g></g></svg>
+    <span class="sap-shell__logo-badge">ACM</span>
+  </a>
+  <div class="sap-shell__divider"></div>
+  <span class="sap-shell__app-title">Certificate Management</span>
+  <div class="sap-shell__spacer"></div>
+  <div class="sap-shell__actions">
+    <button class="sap-shell__btn" onclick="window.location.href='notifications.html'">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span class="sap-shell__badge" id="notifBadge" style="display:none;"></span>
+    </button>
+    <div class="sap-shell__avatar" id="shellAvatar" onclick="toggleUserMenu()">AD</div>
+  </div>
+  <div class="sap-user-menu" id="userMenu">
+    <div class="sap-user-menu__header">
+      <div class="sap-user-menu__name" id="menuUserName">Admin</div>
+      <div class="sap-user-menu__role" id="menuUserRole">Administrator</div>
+    </div>
+    <div class="sap-user-menu__item" onclick="window.location.href='dashboard.html'">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span>Dashboard</span>
+    </div>
+    <div class="sap-user-menu__sep"></div>
+    <div class="sap-user-menu__item sap-user-menu__item--danger" onclick="logout()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      <span>Sign Out</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════ NAVBAR ═══════════════════════ -->
+<nav class="sap-navbar" id="navbar">
+  <div class="sap-navbar__inner">
+    <a href="dashboard.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span>Dashboard</span>
+    </a>
+    <a href="assets.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      <span>Assets</span>
+    </a>
+    <a href="certificates.html" class="sap-nav-item active">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+      <span>Certificates</span>
+      <span class="sap-nav-item__badge" id="sidebarBadge">5</span>
+    </a>
+    <a href="notifications.html" class="sap-nav-item">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span>Notifications</span>
+    </a>
+    <div class="sap-navbar__divider" id="adminSection"></div>
+    <a href="clients.html" class="sap-nav-item sap-nav-item--admin" id="adminClientsLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+      <span>Clients</span>
+    </a>
+    <a href="inspectors.html" class="sap-nav-item sap-nav-item--admin" id="inspectorsLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M9 12l2 2 4-4"/></svg>
+      <span>Inspectors</span>
+    </a>
+    <a href="functional-locations.html" class="sap-nav-item sap-nav-item--admin" id="funcLocsLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      <span>Func. Locations</span>
+    </a>
+  </div>
+</nav>
+
+<!-- ═══════════════════════ MAIN ═══════════════════════ -->
+<main class="sap-main" id="mainContent">
+
+  <!-- Slim page header -->
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:var(--sp-sm); flex-wrap:wrap; gap:var(--sp-sm);">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span style="font-size:15px; font-weight:700; color:var(--sap-text-primary);">Certificates</span>
+      <span style="font-size:12px; color:var(--sap-text-secondary);" id="pageSubtitle">All certificates across clients</span>
+    </div>
+    <div id="headerActions"></div>
+  </div>
+
+  <!-- Table card -->
+  <div class="sap-card">
+    <!-- Single compact toolbar -->
+    <div class="sap-toolbar" style="gap:6px; flex-wrap:wrap; padding:6px 12px; border-bottom:1px solid var(--sap-table-border);">
+
+      <!-- Select-all checkbox -->
+      <input type="checkbox" class="sap-checkbox" onchange="toggleSelectAll(this)" style="margin-right:4px;"/>
+
+      <!-- Status filter pills -->
+      <div class="filter-chips" id="statusChips" style="flex-shrink:0;">
+        <div class="filter-chip active" onclick="filterStatus('all',this)">All</div>
+        <div class="filter-chip" onclick="filterStatus('valid',this)">    <span class="filter-chip__dot" style="background:#188918"></span><span>Valid</span></div>
+        <div class="filter-chip" onclick="filterStatus('expiring',this)"> <span class="filter-chip__dot" style="background:#e76500"></span><span>Expiring</span></div>
+        <div class="filter-chip" onclick="filterStatus('expired',this)">  <span class="filter-chip__dot" style="background:#bb0000"></span><span>Expired</span></div>
+        <div class="filter-chip" onclick="filterStatus('pending',this)">  <span class="filter-chip__dot" style="background:#f57f17"></span><span>Pending</span></div>
+        <div class="filter-chip" onclick="filterStatus('rejected',this)"> <span class="filter-chip__dot" style="background:#bb0000"></span><span>Rejected</span></div>
+      </div>
+
+      <!-- Divider -->
+      <div style="width:1px;height:20px;background:var(--sap-table-border);flex-shrink:0;"></div>
+
+      <!-- Client filter -->
+      <select class="sap-select" id="clientFilter" style="height:28px;font-size:12px;max-width:150px;display:none;" onchange="applyFilters()">
+        <option value="all">All Clients</option>
+      </select>
+
+      <!-- Type filter -->
+      <select class="sap-select" id="typeFilter" style="height:28px;font-size:12px;max-width:140px;" onchange="applyFilters()">
+        <option value="all">All Types</option>
+        <option>CAT III</option><option>CAT IV</option><option>ORIGINAL COC</option>
+        <option>LOAD TEST</option><option>LIFTING</option><option>NDT</option><option>TUBULAR</option>
+      </select>
+
+      <!-- Search -->
+      <div class="sap-search-box" style="flex:1; min-width:140px; height:28px;">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="searchInput" placeholder="Search certificates…" oninput="applyFilters()"/>
+      </div>
+
+      <!-- Count badge -->
+      <span class="sap-toolbar__count" id="tableCount" style="flex-shrink:0;">114</span>
+
+      <!-- Divider -->
+      <div style="width:1px;height:20px;background:var(--sap-table-border);flex-shrink:0;"></div>
+
+      <!-- Columns selector -->
+      <div class="col-selector-wrap" id="colSelectorWrap">
+        <button class="col-selector-btn" onclick="toggleColDropdown()" id="colSelectorBtn">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          <span>Columns</span>
+          <span class="badge" id="colBadge">9</span>
+        </button>
+        <div class="col-dropdown" id="colDropdown">
+          <div class="col-dropdown__header">
+            <span>VISIBLE COLUMNS</span>
+            <button class="col-dropdown__reset" onclick="resetColumns()">Reset</button>
+          </div>
+          <label class="col-dropdown__item col-dropdown__item--locked">
+            <input type="checkbox" checked disabled/><span>Certificate Name</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" id="col_fileLink" checked onchange="applyColVisibility()"/>
+            <span>Certificate Link</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" id="col_jobNumber" checked onchange="applyColVisibility()"/>
+            <span>Job Number</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" id="col_certId" checked onchange="applyColVisibility()"/>
+            <span>Cert ID</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" id="col_certType" checked onchange="applyColVisibility()"/>
+            <span>Type</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" id="col_issuedBy" checked onchange="applyColVisibility()"/>
+            <span>Issued By</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" id="col_expiry" checked onchange="applyColVisibility()"/>
+            <span>Expiry</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" id="col_approval" checked onchange="applyColVisibility()"/>
+            <span>Approval</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" id="col_assetId" checked onchange="applyColVisibility()"/>
+            <span>Asset ID</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" id="col_client" checked onchange="applyColVisibility()"/>
+            <span>Client</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div style="width:1px;height:20px;background:var(--sap-table-border);flex-shrink:0;"></div>
+
+      <!-- Export CSV -->
+      <button class="btn btn-ghost btn-sm" onclick="exportCSV()" style="height:28px;">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        <span>CSV</span>
+      </button>
+
+      <!-- Export PDF -->
+      <button class="btn btn-ghost btn-sm" onclick="exportPDF()" style="height:28px; color:#bb0000; border-color:#f5a0a0;">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>PDF</span>
+      </button>
+    </div>
+
+    <!-- Mass action bar — shown only when rows are selected -->
+    <div class="mass-action-bar" id="massActionBar">
+      <span class="mass-action-bar__count" id="massCount">0 selected</span>
+
+      <!-- Approve selected pending (admin/manager) -->
+      <button class="btn btn-success" id="massApproveBtn" style="display:none;" onclick="massApprove()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="12" height="12"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>Approve Selected</span>
+      </button>
+
+      <div class="mass-action-bar__spacer"></div>
+
+      <!-- Delete selected (admin only) -->
+      <button class="btn btn-danger" id="massDeleteBtn" style="display:none;" onclick="massDelete()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+        <span>Delete Selected</span>
+      </button>
+
+      <!-- Deselect all -->
+      <button class="btn btn-ghost" onclick="clearSelection()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="12" height="12"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        <span>Deselect All</span>
+      </button>
+    </div>
+
+    <div class="sap-table-wrapper">
+      <table class="sap-table">
+        <thead>
+          <tr>
+            <th class="cell-check"><input type="checkbox" class="sap-checkbox" onchange="toggleSelectAll(this)"/></th>
+            <th data-col="jobNumber" onclick="sortTable('jobNumber')">Job No. <span class="sort-icon">↕</span></th>
+            <th data-col="certId"    onclick="sortTable('certId')">Cert ID <span class="sort-icon">↕</span></th>
+            <th data-col="assetId"   onclick="sortTable('assetId')">Asset ID <span class="sort-icon">↕</span></th>
+            <th data-col="name"      onclick="sortTable('name')">Certificate Name <span class="sort-icon">↕</span></th>
+            <th data-col="certType"  onclick="sortTable('certType')">Type <span class="sort-icon">↕</span></th>
+            <th data-col="issuedBy"  onclick="sortTable('issuedBy')">Issued By <span class="sort-icon">↕</span></th>
+            <th data-col="expiry"    onclick="sortTable('expiryDate')">Expiry <span class="sort-icon">↕</span></th>
+            <th data-col="approval"  onclick="sortTable('approvalStatus')">Approval <span class="sort-icon">↕</span></th>
+            <th data-col="client"    onclick="sortTable('client')" id="clientCol">Client <span class="sort-icon">↕</span></th>
+            <th data-col="fileLink">Certificate Link</th>
+          </tr>
+        </thead>
+        <tbody id="certTableBody"></tbody>
+      </table>
+      <div class="sap-table__empty" id="emptyState" style="display:none;">
+        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+        <p>No certificates found.</p>
+      </div>
+    </div>
+    <div class="sap-pagination" id="pagination">
+      <div class="sap-pagination__info" id="paginationInfo">Showing 1–15 of 114</div>
+      <div class="sap-pagination__controls" id="paginationControls"></div>
+    </div>
+  </div>
+</main>
+
+<!-- ═══════════════════════ UPLOAD / EDIT MODAL ═══════════════════════ -->
+<div class="sap-modal-overlay" id="certModal">
+  <div class="sap-modal sap-modal--lg">
+    <div class="sap-modal__header">
+      <div class="sap-modal__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+        <span id="modalTitle">Upload Certificate</span>
+      </div>
+      <button class="sap-modal__close" onclick="closeModal()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="sap-modal__body">
+      <!-- Technician upload note -->
+      <div class="approval-info-box" id="techUploadNote" style="display:none;">
+        <strong>📋 <span>Upload & Approval Policy</span></strong><br/>
+        <span>Uploaded certificates require Admin approval. You can edit within 24 hours of upload only.</span>
+      </div>
+
+      <form id="certForm" novalidate>
+        <input type="hidden" id="editCertId"/>
+        <input type="hidden" id="editUploadTime"/>
+
+        <div class="sap-form-grid sap-form-grid--2col">
+          <!-- Job Number -->
+          <div class="sap-field">
+            <label class="sap-label">Job Number <span class="required">*</span></label>
+            <input type="text" id="f_jobNumber" class="sap-input" placeholder="e.g. JOB-2024-010 — groups all certs done in one job"/>
+          </div>
+
+          <!-- Cert Name -->
+          <div class="sap-field">
+            <label class="sap-label">Certificate Name / Title <span class="required">*</span></label>
+            <input type="text" id="f_name" class="sap-input"/>
+          </div>
+
+          <!-- Cert Type -->
+          <div class="sap-field">
+            <label class="sap-label">Certificate Type <span class="required">*</span></label>
+            <select id="f_certType" class="sap-select" onchange="onCertTypeChange()">
+              <option value="">Select type…</option>
+              <option>CAT III</option>
+              <option>CAT IV</option>
+              <option>ORIGINAL COC</option>
+              <option>LOAD TEST</option>
+              <option>LIFTING</option>
+              <option>NDT</option>
+              <option>TUBULAR</option>
+            </select>
+          </div>
+
+          <!-- Lifting Sub-type — shown only when LIFTING is selected -->
+          <div class="sap-field" id="liftingSubtypeWrap" style="display:none;">
+            <label class="sap-label">Lifting Sub-type <span class="required">*</span></label>
+            <select id="f_liftingSubtype" class="sap-select">
+              <option value="">Select sub-type…</option>
+              <option>LIFTING EQUIPMENT</option>
+              <option>LIFTING GEAR</option>
+              <option>LIFTING PERSONNEL</option>
+            </select>
+          </div>
+
+          <!-- Issued By — inspector dropdown -->
+          <div class="sap-field">
+            <label class="sap-label">Issued By (Inspector) <span class="required">*</span></label>
+            <select id="f_issuedBy" class="sap-select">
+              <option value="">Select inspector…</option>
+              <option>Ahmed Al-Rashidi</option>
+              <option>Sara Al-Khalil</option>
+              <option>Mohamed Hassan</option>
+              <option>Layla Bin Rashid</option>
+              <option>Khalid Al-Mansouri</option>
+            </select>
+          </div>
+
+          <!-- Issue Date -->
+          <div class="sap-field">
+            <label class="sap-label">Issue Date <span class="required">*</span></label>
+            <input type="date" id="f_issueDate" class="sap-input"/>
+          </div>
+
+          <!-- Expiry Date -->
+          <div class="sap-field">
+            <label class="sap-label">Expiry Date <span class="required">*</span></label>
+            <input type="date" id="f_expiryDate" class="sap-input"/>
+          </div>
+
+          <!-- Linked Asset -->
+          <div class="sap-field">
+            <label class="sap-label">Linked Asset ID</label>
+            <select id="f_assetId" class="sap-select">
+              <option value="">Select asset…</option>
+              <option value="AST-0001">AST-0001 – Server Rack #01</option>
+              <option value="AST-0002">AST-0002 – HVAC Unit #01</option>
+              <option value="AST-0003">AST-0003 – Generator #01</option>
+              <option value="AST-0004">AST-0004 – Forklift #03</option>
+              <option value="AST-0005">AST-0005 – Fire Panel #01</option>
+              <option value="AST-0006">AST-0006 – Pump Station #2</option>
+              <option value="AST-0007">AST-0007 – UPS System #01</option>
+              <option value="AST-0008">AST-0008 – Crane #01</option>
+            </select>
+          </div>
+
+          <!-- Client -->
+          <div class="sap-field" id="f_client_wrap">
+            <label class="sap-label">Linked Client <span class="required">*</span></label>
+            <select id="f_client" class="sap-select">
+              <option value="">Select client…</option>
+            </select>
+          </div>
+
+        </div><!-- /grid -->
+
+        <!-- File Upload -->
+        <div class="sap-field mt-md">
+          <label class="sap-label">Certificate File (PDF / Image) <span class="required">*</span></label>
+          <div class="upload-zone" id="uploadZone">
+            <input type="file" id="certFileInput" accept=".pdf,.jpg,.jpeg,.png,.webp" onchange="handleFileSelect(this)"/>
+            <div class="upload-zone__icon">📄</div>
+            <div class="upload-zone__title"><span>Click to upload</span> <span>or drag & drop</span></div>
+            <div class="upload-zone__hint">PDF, JPG, PNG up to 10MB</div>
+          </div>
+          <div id="uploadPreview" style="display:none;" class="upload-preview">
+            <div class="upload-preview__icon" id="previewIcon">📄</div>
+            <div class="upload-preview__info">
+              <div class="upload-preview__name" id="previewName">—</div>
+              <div class="upload-preview__size" id="previewSize">—</div>
+            </div>
+            <button type="button" class="upload-preview__remove" onclick="clearFile()">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div id="existingFileNote" style="display:none;font-size:11px;color:var(--sap-text-secondary);margin-top:4px;"></div>
+        </div>
+
+      </form>
+    </div>
+    <div class="sap-modal__footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-ghost" id="exportHistoryBtn" onclick="exportHistoryPDF()" style="display:none;">
+        <span>Export History PDF</span>
+      </button>
+      <button class="btn btn-primary" onclick="saveCert()" id="saveBtn">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
+        <span id="saveBtnLabel">Upload Certificate</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ APPROVAL REJECT MODAL ═══════════════════════ -->
+<div class="sap-modal-overlay" id="rejectModal">
+  <div class="sap-modal sap-modal--sm">
+    <div class="sap-modal__header" style="background:var(--sap-error);">
+      <div class="sap-modal__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        <span>Reject Certificate</span>
+      </div>
+      <button class="sap-modal__close" onclick="closeRejectModal()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="sap-modal__body">
+      <div id="rejectCertInfo" style="background:var(--sap-page-bg);border-radius:6px;padding:12px;margin-bottom:14px;font-size:13px;"></div>
+      <div class="sap-field">
+        <label class="sap-label">Rejection Reason <span class="required">*</span></label>
+        <textarea id="rejectReason" class="sap-textarea" rows="3"></textarea>
+      </div>
+    </div>
+    <div class="sap-modal__footer">
+      <button class="btn btn-ghost" onclick="closeRejectModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmReject()">
+        <span>Confirm Rejection</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ DETAIL DRAWER ═══════════════════════ -->
+<div class="sap-drawer-overlay" id="drawerOverlay">
+  <div class="sap-drawer">
+    <div class="sap-drawer__header">
+      <div class="sap-drawer__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+        <span>Certificate Details</span>
+      </div>
+      <button class="sap-drawer__close" onclick="closeDrawer()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="sap-drawer__body" id="drawerBody"></div>
+    <div class="sap-drawer__footer" id="drawerFooter">
+      <button class="btn btn-ghost" onclick="closeDrawer()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete confirm -->
+<div class="sap-modal-overlay" id="deleteModal">
+  <div class="sap-modal sap-modal--sm">
+    <div class="sap-modal__header" style="background:var(--sap-error);">
+      <div class="sap-modal__title"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg><span>Delete File Attachment</span></div>
+      <button class="sap-modal__close" onclick="document.getElementById('deleteModal').classList.remove('open')"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="sap-modal__body">
+      <div style="background:var(--sap-error-bg);border:1px solid var(--sap-error-border);border-left:4px solid var(--sap-error);border-radius:6px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#7f0000;">
+        <strong>⚠ This action cannot be undone.</strong><br/>
+        The certificate record and its attached file will be permanently deleted from the system and storage.
+      </div>
+      <p style="font-size:14px;color:var(--sap-text-primary);" id="deleteMsg">Are you sure?</p>
+      <p style="font-size:12px;color:var(--sap-text-secondary);margin-top:6px;" id="deleteMsgSub"></p>
+    </div>
+    <div class="sap-modal__footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('deleteModal').classList.remove('open')">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+        Delete Permanently
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ CONFIRM DELETE MODAL ═══════════════════════ -->
+<div class="sap-modal-overlay" id="certDeleteConfirmModal">
+  <div class="sap-modal sap-modal--sm">
+    <div class="sap-modal__header" style="background:var(--sap-error);">
+      <div class="sap-modal__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        <span>Delete File Attachment</span>
+      </div>
+      <button class="sap-modal__close" onclick="closeCertDeleteModal()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="sap-modal__body">
+      <div style="background:var(--sap-error-bg);border:1px solid var(--sap-error-border);border-left:4px solid var(--sap-error);border-radius:6px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#7f0000;">
+        <strong>⚠ This action is permanent and cannot be undone.</strong><br/>
+        Only the attached certificate file will be deleted. The certificate row will remain and show as No file.
+      </div>
+      <div id="certDeleteModalInfo" style="background:var(--sap-page-bg);border-radius:6px;padding:12px;font-size:13px;margin-bottom:4px;"></div>
+      <p id="certDeleteWindowNote" style="font-size:11px;color:var(--sap-text-secondary);margin-top:8px;"></p>
+    </div>
+    <div class="sap-modal__footer">
+      <button class="btn btn-ghost" onclick="closeCertDeleteModal()">Cancel</button>
+      <button class="btn btn-danger" id="certDeleteConfirmBtn" onclick="confirmCertDelete()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+        Delete File
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="sap-toast-container" id="toastContainer"></div>
+
+<!-- ═══════════════════════ SCRIPTS ═══════════════════════ -->
+<script>
+/* ═══════════════════════════════════════════════════════
+   SECURITY UTILITIES
+═══════════════════════════════════════════════════════ */
+function h(s){if(s===null||s===undefined)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;').replace(/\//g,'&#x2F;');}
+function safeUrl(url){if(!url||typeof url!=='string')return null;try{const u=new URL(url);if(u.protocol!=='http:'&&u.protocol!=='https:')return null;return url;}catch{return null;}}
+function safeOpen(url){const safe=safeUrl(url);if(!safe){showToast('error','Invalid URL','Only http and https links can be opened.');return;}window.open(safe,'_blank','noopener,noreferrer');}
+
+/* ── Language (EN only) ── */
+function applyLang(lang) {
+  // Arabic support removed — English only
+  document.documentElement.lang = 'en';
+}
+function toggleLang() {}
+/* ── State ── */
+let session = null;
+let sortCol = 'expiryDate'; let sortDir = 1;
+let currentPage = 1; const PAGE_SIZE = 15;
+let activeStatusFilter = 'all';
+let filteredData = [];
+let selectedFile = null;
+let deleteTargetId = null;
+let rejectTargetId = null;
+
+/* ── Helpers ── */
+/* Session helpers */
+function getSession() {
+  if (typeof SapSession !== 'undefined') return SapSession.get();
+  try {
+    const s = sessionStorage.getItem('sap_session');
+    if (!s) { window.location.href = 'index.html'; return null; }
+    return JSON.parse(s);
+  } catch(e) { window.location.href = 'index.html'; return null; }
+}
+function logout() {
+  if (typeof SapSession !== 'undefined') { SapSession.logout(); return; }
+  const s = JSON.parse(sessionStorage.getItem('sap_session') || '{}');
+  fetch('/api/auth/logout', {
+    method: 'POST',
+    headers: s.token ? { 'Authorization': 'Bearer ' + s.token } : {},
+  }).catch(() => {});
+  sessionStorage.removeItem('sap_session');
+  window.location.href = 'index.html';
+}
+
+/* ── Language ── */
+function toggleUserMenu() { document.getElementById('userMenu').classList.toggle('open'); }
+document.addEventListener('click', e => {
+  if (!e.target.closest('#shellAvatar') && !e.target.closest('#userMenu'))
+    document.getElementById('userMenu').classList.remove('open');
+});
+
+/* ═══════════════════════════════════════════════════════
+   DEMO DATA
+═══════════════════════════════════════════════════════ */
+const CLIENTS_MAP = { C001:'Acme Corp', C002:'Gulf Holdings', C003:'Delta Industries', C004:'Nile Ventures' };
+const TYPE_COLORS = {
+  'CAT III':      { bg:'#e8f3ff', color:'#0070f2' },
+  'CAT IV':       { bg:'#dce8ff', color:'#0057c2' },
+  'ORIGINAL COC': { bg:'#f0faf0', color:'#188918' },
+  'LOAD TEST':    { bg:'#fff3e0', color:'#e76500' },
+  'LIFTING':      { bg:'#fff8e1', color:'#f9a825' },
+  'NDT':          { bg:'#fce4e4', color:'#bb0000' },
+  'TUBULAR':      { bg:'#f3e5f5', color:'#7b1fa2' },
+  'Other':        { bg:'#f5f6f7', color:'#6a6d70' },
+};
+
+/* Build iso dates relative to today */
+function daysFromNow(d) {
+  const dt = new Date();
+  dt.setDate(dt.getDate() + d);
+  return dt.toISOString().split('T')[0];
+}
+function daysAgo(d) { return daysFromNow(-d); }
+
+/* ── Inspector names (mirrors inspectors.html INSPECTORS data) ── */
+const INSPECTOR_NAMES = [
+  'Ahmed Al-Rashidi',
+  'Sara Al-Khalil',
+  'Mohamed Hassan',
+  'Layla Bin Rashid',
+  'Khalid Al-Mansouri',
+];
+
+let CERTS = [];
+let _pendingCertOpenId = null;
+
+
+/* ═══════════════════════════════════════════════════════
+   STATUS HELPERS
+═══════════════════════════════════════════════════════ */
+function getCertStatus(cert) {
+  if (cert.approvalStatus === 'pending')  return 'pending';
+  if (cert.approvalStatus === 'rejected') return 'rejected';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const exp   = new Date(cert.expiryDate); exp.setHours(0,0,0,0);
+  const diff  = Math.ceil((exp - today) / 86400000);
+  if (diff < 0)   return 'expired';
+  if (diff <= 30) return 'expiring';
+  return 'valid';
+}
+
+function getDaysToExpiry(cert) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const exp   = new Date(cert.expiryDate); exp.setHours(0,0,0,0);
+  return Math.ceil((exp - today) / 86400000);
+}
+
+function getApprovalBadge(status) {
+  const map = {
+    approved: { cls:'sap-badge--success', en:'Approved',  ar:'موافق عليها' },
+    pending:  { cls:'sap-badge--pending', en:'Pending',   ar:'معلق' },
+    rejected: { cls:'sap-badge--error',   en:'Rejected',  ar:'مرفوض' },
+  };
+  const m = map[status] || map.pending;
+  return `<span class="sap-badge ${m.cls}">${m.en}</span>`;
+}
+
+function getExpiryBar(cert) {
+  const st = getCertStatus(cert);
+  if (st === 'pending' || st === 'rejected') {
+    return `<span class="sap-badge sap-badge--neutral">—</span>`;
+  }
+  const days = getDaysToExpiry(cert);
+  if (days < 0) {
+    return `<span class="sap-badge sap-badge--error">${`${Math.abs(days)}d ago`}</span>`;
+  }
+  const cls   = days <= 7 ? 'var(--sap-error)' : days <= 30 ? 'var(--sap-warning)' : 'var(--sap-success)';
+  const lbl   = `${days}d`;
+  return `<span style="font-size:12px;font-weight:700;color:${cls};">${lbl}</span>`;
+}
+
+/* ── 24-hour edit window check ── */
+function canTechnicianEdit(cert) {
+  if (!cert.uploadTime) return false;
+  const uploaded = new Date(cert.uploadTime);
+  const now      = new Date();
+  const hours    = (now - uploaded) / 3600000;
+  return hours <= 24;
+}
+
+/* Can the current user delete this cert's file?
+   Admin: always. Technician: only within 24hrs and own upload. Manager/User: never. */
+function canDeleteFile(cert) {
+  const role = session?.role;
+  if (role === 'admin') return !!cert.fileName;
+  if (role === 'technician') {
+    if (!cert.fileName) return false;
+    if (cert.uploaded_by && cert.uploaded_by !== session?.userId) return false;
+    return canTechnicianEdit(cert); // reuse 24hr check
+  }
+  return false;
+}
+
+function isAdmin() {
+  return session?.role === 'admin';
+}
+
+function getEditWindowBadge(cert) {
+  if (!cert.uploadTime) return '';
+  const uploaded = new Date(cert.uploadTime);
+  const now = new Date();
+  const hoursLeft = 24 - (now - uploaded) / 3600000;
+  if (hoursLeft > 0) {
+    const hh = Math.floor(hoursLeft);
+    const mm = Math.floor((hoursLeft % 1) * 60);
+    return `<div class="edit-window-badge"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${hh}h ${mm}m left</div>`;
+  }
+  return `<div class="edit-window-badge edit-window-badge--expired">Edit window closed</div>`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   RENDER TABLE
+═══════════════════════════════════════════════════════ */
+/* ── Sync CERTS to localStorage so assets.html can read them ── */
+
+function syncCerts() {
+}
+
+function renderTable() {
+  const role     = session.role;
+  const search   = (document.getElementById('searchInput').value || '').toLowerCase();
+  const clientF  = document.getElementById('clientFilter').value || 'all';
+  const typeF    = document.getElementById('typeFilter').value   || 'all';
+
+  let data = [...CERTS];
+
+  /* Scope by customer */
+  if (session.customerId && role !== 'admin' && role !== 'manager') {
+    data = data.filter(c => c.client === session.customerId);
+  } else if (clientF !== 'all') {
+    data = data.filter(c => c.client === clientF);
+  }
+
+  /* Technician sees only their own uploads */
+  if (role === 'technician') data = data.filter(c => c.uploadedBy === 'Ali T.' || true); /* allow all for demo */
+
+  /* Status filter */
+  if (activeStatusFilter !== 'all') data = data.filter(c => getCertStatus(c) === activeStatusFilter);
+
+  /* Type */
+  if (typeF !== 'all') data = data.filter(c => c.certType === typeF);
+
+  /* Search */
+  if (search) data = data.filter(c =>
+    c.name.toLowerCase().includes(search)   ||
+    c.certId.toLowerCase().includes(search) || fmtCertId(c).toLowerCase().includes(search) ||
+    c.issuedBy.toLowerCase().includes(search) ||
+    c.certType.toLowerCase().includes(search) ||
+    (c.jobNumber||'').toLowerCase().includes(search) ||
+    (c.liftingSubtype||'').toLowerCase().includes(search)
+  );
+
+  /* Sort */
+  data.sort((a, b) => {
+    let av = (a[sortCol]||'').toString().toLowerCase();
+    let bv = (b[sortCol]||'').toString().toLowerCase();
+    return av < bv ? -sortDir : av > bv ? sortDir : 0;
+  });
+
+  filteredData = data;
+
+  /* Sidebar badge — update expiry count */
+  const all = session.customerId && role !== 'admin' && role !== 'manager'
+    ? CERTS.filter(c => c.client === session.customerId) : CERTS;
+  const expCount = all.filter(c=>getCertStatus(c)==='expiring'||getCertStatus(c)==='expired').length;
+  const sidebarBadgeEl = document.getElementById('sidebarBadge');
+  if (sidebarBadgeEl) sidebarBadgeEl.textContent = expCount;
+
+  const total = data.length;
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const end   = Math.min(start + PAGE_SIZE, total);
+  const page  = data.slice(start, end);
+
+  const tbody  = document.getElementById('certTableBody');
+  const empty  = document.getElementById('emptyState');
+
+  if (!page.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    document.getElementById('tableCount').textContent = '0';
+    document.getElementById('paginationInfo').textContent = 'No results';
+    document.getElementById('paginationControls').innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+  document.getElementById('tableCount').textContent = total;
+  document.getElementById('paginationInfo').textContent =
+    `Showing ${start+1}–${end} of ${total}`;
+
+  const canApprove  = role === 'admin' || role === 'manager';
+  const canDelete   = role === 'admin';   // admin row delete => delete all certs for same asset
+  const isTech      = role === 'technician';
+  const showClient  = role === 'admin' || role === 'manager';
+  const tc = TYPE_COLORS;
+
+  /* Build cert URL map OUTSIDE innerHTML — avoids HTML injection bugs */
+  const _certUrls = {};
+  page.forEach(c => {
+    if (!c.fileName) return;
+    const html = [
+      '<!DOCTYPE html><html><head><meta charset="UTF-8">',
+      '<title>Certificates – Rigways Group</title>',
+      '<style>body{font-family:Arial,sans-serif;margin:0;padding:0;background:#f5f6f7;}',
+      '.header{background:#1d2d3e;color:#fff;padding:24px 40px;display:flex;align-items:center;gap:14px;}',
+      '.header h1{font-size:18px;margin:0;}',
+      '.badge{background:#188918;color:#fff;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700;}',
+      '.body{padding:40px;max-width:700px;margin:0 auto;}',
+      '.field{margin-bottom:16px;}.field label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6a6d70;display:block;margin-bottom:4px;}',
+      '.field value{font-size:14px;color:#32363a;font-weight:500;}',
+      '.placeholder{background:#fff;border:2px dashed #e8eaed;border-radius:8px;padding:60px;text-align:center;margin-top:24px;color:#9ea3a8;}',
+      '.placeholder .icon{font-size:48px;margin-bottom:12px;}',
+      '</style></head><body>',
+      '<div class="header"><div class="placeholder" style="background:rgba(255,255,255,.15);border:none;padding:10px 14px;border-radius:8px;margin:0;"><span style="font-size:20px;">📄</span></div>',
+      '<div><div class="badge">CERTIFICATE</div><h1>' + h(c.name) + '</h1></div></div>',
+      '<div class="body">',
+      '<div class="field"><label>Certificate ID</label><value>' + fmtCertId(c) + '</value></div>',
+      '<div class="field"><label>Issued By</label><value>' + c.issuedBy + '</value></div>',
+      '<div class="field"><label>Issue Date</label><value>' + c.issueDate + '</value></div>',
+      '<div class="field"><label>Expiry Date</label><value>' + c.expiryDate + '</value></div>',
+      '<div class="field"><label>Approval Status</label><value>' + c.approvalStatus + '</value></div>',
+      '<div class="field"><label>Linked Asset</label><value>' + (c.assetId || '—') + '</value></div>',
+      '<div class="field"><label>File</label><value>' + c.fileName + '</value></div>',
+      '<div class="placeholder"><div class="icon">📄</div>',
+      '<strong>' + h(c.fileName) + '</strong><br><br>',
+      '<span style="font-size:13px;">Simulated certificate viewer.<br>In production this would render the actual uploaded PDF or image.</span>',
+      '</div></div></body></html>'
+    ].join('');
+    _certUrls[c.certId] = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+  });
+
+  /* Store on window so onclick can reach it */
+  window._certUrls = _certUrls;
+
+  tbody.innerHTML = page.map(c => {
+    const st = getCertStatus(c);
+    const tc2 = tc[c.certType] || tc['Other'];
+    const editAllowed = isTech && canTechnicianEdit(c) && c.approvalStatus !== 'approved';
+    const isEditableByAdmin = canApprove;
+    const techCanDelete = isTech && canDeleteFile(c);  // technician within 24hr window
+
+    return `<tr class="cert-row" onmouseenter="showRowActions(this)" onmouseleave="hideRowActions(this)">
+      <td class="cell-check"><input type="checkbox" class="sap-checkbox" data-id="${c.certId}" onchange="updateMassBar()"/></td>
+      <td data-col="jobNumber">
+        <span style="font-family:monospace;font-size:11px;font-weight:700;color:var(--sap-brand);background:var(--sap-brand-light);border:1px solid var(--sap-info-border);border-radius:4px;padding:2px 6px;white-space:nowrap;">${c.jobNumber||'—'}</span>
+      </td>
+      <td data-col="certId"><span class="cert-id-chip">${fmtCertId(c)}</span></td>
+      <td data-col="assetId"><span class="asset-id-chip">${c.assetId||'—'}</span></td>
+      <td data-col="name">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;">
+          <div style="min-width:0;">
+            <div style="font-weight:600;font-size:13px;cursor:pointer;color:var(--sap-brand);" onclick="openDrawer('${c.certId}')">${h(c.name)}</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap;">
+              ${isTech ? getEditWindowBadge(c) : ''}
+            </div>
+          </div>
+          <div class="row-actions" style="display:none;gap:3px;flex-shrink:0;align-items:center;">
+            <button class="btn btn-ghost btn-icon" onclick="openDrawer('${c.certId}')" title="View" style="width:26px;height:26px;">
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+            ${isEditableByAdmin || editAllowed ? `<button class="btn btn-secondary btn-icon" onclick="openEditModal('${c.certId}')" title="Edit" style="width:26px;height:26px;">
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>` : ''}
+            ${canApprove && c.approvalStatus === 'pending' ? `
+              <button class="btn btn-success btn-icon" onclick="approveCert('${c.certId}')" title="Approve" style="width:26px;height:26px;">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <button class="btn btn-danger btn-icon" onclick="openRejectModal('${c.certId}')" title="Reject" style="width:26px;height:26px;">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>` : ''}
+            ${(canDelete || techCanDelete) ? `<button class="btn btn-danger btn-icon" onclick="${canDelete ? `deleteAssetCertificates('${c.certId}')` : `openDeleteModal('${c.certId}')`}" title="${canDelete ? 'Delete all certificates for this asset' : 'Delete file attachment'}" style="width:26px;height:26px;">
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+            </button>` : ''}
+          </div>
+        </div>
+      </td>
+      <td data-col="certType">
+        <span class="cert-type-chip" style="background:${tc2.bg};color:${tc2.color};">${c.certType}</span>
+        ${c.liftingSubtype ? `<div style="font-size:10px;font-weight:600;color:var(--sap-warning);margin-top:3px;white-space:nowrap;">↳ ${c.liftingSubtype}</div>` : ''}
+      </td>
+      <td data-col="issuedBy" style="font-size:12px;">${c.issuedBy}</td>
+      <td data-col="expiry">
+        ${getExpiryBar(c)}
+        <div style="font-size:11px;color:var(--sap-text-secondary);margin-top:2px;">${c.expiryDate}</div>
+      </td>
+      <td data-col="approval">
+        ${getApprovalBadge(c.approvalStatus)}
+        ${c.rejectionReason ? `<div style="font-size:10px;color:var(--sap-error);margin-top:2px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${h(c.rejectionReason)}">${h(c.rejectionReason)}</div>` : ''}
+      </td>
+      <td data-col="client">${showClient ? `<span style="font-size:12px;font-weight:600;">${CLIENTS_MAP[c.client]||c.client}</span><br/><span class="asset-id-chip">${c.client}</span>` : `<span class="asset-id-chip">${c.client}</span>`}</td>
+      <td data-col="fileLink">
+        ${c.fileName ? `<button type="button" class="cert-file-link" onclick="openCertLink('${c.certId}')" title="Open certificate in new tab">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          ${c.fileName}
+          <svg width="9" height="9" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:.6;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        </button>` : `<span style="color:var(--sap-text-disabled);font-size:11px;">—</span>`}
+      </td>
+    </tr>`;
+  }).join('');
+
+  renderPagination(total);
+  applyColVisibility();
+  applyClientColVisibility();
+  syncCerts();
+}
+
+/* ── Hide client column for 'user' role ── */
+function applyClientColVisibility() {
+  const hide = (session?.role === 'user');
+  const th = document.querySelector('th[data-col="client"]');
+  if (th) th.style.display = hide ? 'none' : '';
+  document.querySelectorAll('td[data-col="client"]').forEach(td => { td.style.display = hide ? 'none' : ''; });
+  const cbWrap = document.getElementById('col_client')?.closest('label');
+  if (cbWrap) cbWrap.style.display = hide ? 'none' : '';
+}
+
+/* ── Pagination ── */
+function renderPagination(total) {
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const ctrl = document.getElementById('paginationControls');
+  let html = `<button class="sap-page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
+  for (let i=1; i<=totalPages; i++) {
+    if (totalPages > 7 && Math.abs(i-currentPage) > 2 && i!==1 && i!==totalPages) {
+      if (i===2 || i===totalPages-1) html += `<span style="padding:0 4px;color:var(--sap-text-secondary);">…</span>`;
+      continue;
+    }
+    html += `<button class="sap-page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
+  }
+  html += `<button class="sap-page-btn" onclick="goPage(${currentPage+1})" ${currentPage===totalPages||!totalPages?'disabled':''}>›</button>`;
+  ctrl.innerHTML = html;
+}
+function goPage(p) {
+  const max = Math.ceil(filteredData.length / PAGE_SIZE);
+  if (p < 1 || p > max) return;
+  currentPage = p; renderTable();
+}
+
+/* ── Filters ── */
+function filterStatus(val, el) {
+  activeStatusFilter = val;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  currentPage = 1; renderTable();
+}
+function applyFilters() { currentPage = 1; renderTable(); }
+function sortTable(col) {
+  sortCol = col === sortCol ? sortCol : col;
+  if (col === sortCol) sortDir *= -1; else sortDir = 1;
+  sortCol = col; renderTable();
+}
+function toggleSelectAll(cb) {
+  document.querySelectorAll('#certTableBody input[type="checkbox"]').forEach(c => c.checked = cb.checked);
+  updateMassBar();
+}
+
+/* ── Row hover actions ── */
+function showRowActions(row) {
+  const btns = row.querySelector('.row-actions');
+  if (btns) btns.style.display = 'flex';
+}
+function hideRowActions(row) {
+  const btns = row.querySelector('.row-actions');
+  if (btns) btns.style.display = 'none';
+}
+
+/* ── Mass action bar ── */
+function getSelectedIds() {
+  return [...document.querySelectorAll('#certTableBody input[type="checkbox"]:checked')]
+    .map(cb => cb.getAttribute('data-id'));
+}
+
+function updateMassBar() {
+  const ids   = getSelectedIds();
+  const bar   = document.getElementById('massActionBar');
+  const countEl = document.getElementById('massCount');
+  const role  = session?.role;
+
+  if (!bar) return;
+
+  if (ids.length === 0) {
+    bar.classList.remove('visible');
+    const sa = document.querySelector('#certTableBody')?.closest('.sap-card')?.querySelector('input[type="checkbox"]');
+    return;
+  }
+
+  bar.classList.add('visible');
+  countEl.textContent = `${ids.length} selected`;
+
+  /* Show role-specific buttons */
+  const delBtn     = document.getElementById('massDeleteBtn');
+  const approveBtn = document.getElementById('massApproveBtn');
+
+  if (delBtn) delBtn.style.display = (role === 'admin') ? 'inline-flex' : 'none';
+
+  if (approveBtn) {
+    const canApprove = role === 'admin' || role === 'manager';
+    /* Only show if at least one selected cert is pending */
+    const hasPending = ids.some(id => {
+      const c = CERTS.find(x => x.certId === id);
+      return c && c.approvalStatus === 'pending';
+    });
+    approveBtn.style.display = (canApprove && hasPending) ? 'inline-flex' : 'none';
+  }
+}
+
+function clearSelection() {
+  document.querySelectorAll('#certTableBody input[type="checkbox"]').forEach(c => c.checked = false);
+  document.querySelectorAll('.sap-table thead input[type="checkbox"]').forEach(c => c.checked = false);
+  updateMassBar();
+}
+
+async function massApprove() {
+  const ids = getSelectedIds();
+  if (!ids.length) { showToast('warning','Nothing Selected','Select at least one certificate.'); return; }
+  const pending = ids.filter(id => {
+    const cert = CERTS.find(x => x.certId === id);
+    return cert && cert.approvalStatus === 'pending';
+  });
+  if (!pending.length) { showToast('info','None Pending','No pending certificates selected.'); return; }
+  try {
+    const results = await Promise.all(
+      pending.map(id => {
+        const cert = CERTS.find(x => x.certId === id);
+        return apiFetch('/api/certificates/' + (cert?.id || id), {
+          method: 'PATCH', body: JSON.stringify({ approval_status: 'approved' })
+        }).then(r => r.json());
+      })
+    );
+    const failed = results.filter(r => !r.success);
+    results.forEach((r, i) => {
+      if (r.success) {
+        const idx = CERTS.findIndex(x => x.certId === pending[i]);
+        if (idx > -1) { CERTS[idx].approvalStatus = 'approved'; CERTS[idx].approval_status = 'approved'; }
+      }
+    });
+    if (failed.length) {
+      showToast('warning','Partial Approve',`${pending.length - failed.length} approved, ${failed.length} failed.`);
+    } else {
+      showToast('success','Approved',`${pending.length} certificate${pending.length > 1 ? 's' : ''} approved.`);
+    }
+    clearSelection(); renderTable();
+  } catch(e) { showToast('error','Network Error','Could not approve. Please try again.'); }
+}
+
+async function massDelete() {
+  const ids = getSelectedIds();
+  if (!ids.length) { showToast('warning','Nothing Selected','Select at least one certificate.'); return; }
+  if (!confirm(`Delete file attachment for ${ids.length} certificate${ids.length > 1 ? 's' : ''}? Rows will be kept.`)) return;
+  try {
+    const results = await Promise.all(
+      ids.map(id => {
+        const cert = CERTS.find(x => x.certId === id);
+        return apiFetch('/api/certificates/' + (cert?.id || id) + '/file', { method: 'DELETE' }).then(r => r.json());
+      })
+    );
+    const failed = results.filter(r => !r.success);
+    if (failed.length) {
+      showToast('warning','Partial Delete',`${ids.length - failed.length} files deleted, ${failed.length} failed.`);
+    } else {
+      showToast('success','Deleted',`${ids.length} file attachment${ids.length > 1 ? 's' : ''} deleted.`);
+    }
+    CERTS = CERTS.map(x => ids.includes(x.certId) ? ({ ...x, fileName:'', fileUrl:'' }) : x);
+    clearSelection(); renderTable();
+  } catch(e) { showToast('error','Network Error','Could not delete. Please try again.'); }
+}
+
+/* ═══════════════════════════════════════════════════════
+   UPLOAD / EDIT MODAL
+═══════════════════════════════════════════════════════ */
+function certDraftKey(){ const id=document.getElementById('editCertId')?.value||''; return id?`certs:edit:${id}`:'certs:add'; }
+function collectCertDraft(){ return { editCertId:document.getElementById('editCertId')?.value||'', f_jobNumber:document.getElementById('f_jobNumber')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_certType:document.getElementById('f_certType')?.value||'', f_liftingSubtype:document.getElementById('f_liftingSubtype')?.value||'', f_issuedBy:document.getElementById('f_issuedBy')?.value||'', f_issueDate:document.getElementById('f_issueDate')?.value||'', f_expiryDate:document.getElementById('f_expiryDate')?.value||'', f_client:document.getElementById('f_client')?.value||'', f_assetId:document.getElementById('f_assetId')?.value||'' }; }
+function saveCertDraft(){ if(window.SapDraft) SapDraft.save(certDraftKey(), collectCertDraft()); }
+function restoreCertDraft(){ if(!window.SapDraft) return; const d=SapDraft.load(certDraftKey(),24*60*60*1000); if(d&&confirm('A saved draft was found. Restore it?')) Object.entries(d).forEach(([k,v])=>{const el=document.getElementById(k); if(el) el.value=v;}); onCertTypeChange(); }
+function clearCertDraft(){ if(!window.SapDraft) return; const id=document.getElementById('editCertId')?.value||''; SapDraft.clear('certs:add'); if(id) SapDraft.clear(`certs:edit:${id}`); }
+function bindCertDraft(){ const f=document.getElementById('certForm'); if(!f||f.dataset.draftBound==='1') return; f.addEventListener('input',saveCertDraft); f.addEventListener('change',saveCertDraft); f.dataset.draftBound='1'; }
+function openUploadModal() {
+  document.getElementById('editCertId').value = '';
+  document.getElementById('certForm').reset();
+  clearFile();
+  document.getElementById('uploadPreview').style.display = 'none';
+  document.getElementById('existingFileNote').style.display = 'none';
+  document.getElementById('liftingSubtypeWrap').style.display = 'none';
+  document.getElementById('modalTitle').textContent = 'Upload Certificate';
+  document.getElementById('saveBtnLabel').textContent = 'Upload Certificate';
+  const historyBtn = document.getElementById('exportHistoryBtn');
+  if (historyBtn) historyBtn.style.display = 'none';
+  document.getElementById('techUploadNote').style.display = session.role === 'technician' ? 'block' : 'none';
+
+  if (session.customerId) {
+    document.getElementById('f_client').value = session.customerId;
+    document.getElementById('f_client_wrap').style.display = 'none';
+  } else {
+    document.getElementById('f_client_wrap').style.display = '';
+    document.getElementById('f_client_wrap').style.flexDirection = 'column';
+  }
+
+  /* Set today as default issue date */
+  document.getElementById('f_issueDate').value = new Date().toISOString().split('T')[0];
+  bindCertDraft(); restoreCertDraft(); document.getElementById('certModal').classList.add('open');
+  // Load all dropdowns from API
+  loadAssetDropdown();
+  loadInspectorDropdown();
+  loadClientDropdown();
+}
+
+function openEditModal(id) {
+  const c = CERTS.find(x => x.certId === id);
+  if (!c) return;
+
+  /* Technician: check edit window */
+  if (session.role === 'technician') {
+    if (!canTechnicianEdit(c)) {
+      showToast('error',
+        'Edit Window Closed',
+        'You can only edit certificates within 24 hours of upload.');
+      return;
+    }
+    if (c.approvalStatus === 'approved') {
+      showToast('error',
+        'Already Approved',
+        'Approved certificates cannot be edited.');
+      return;
+    }
+  }
+
+  document.getElementById('editCertId').value       = id;
+  document.getElementById('editUploadTime').value   = c.uploadTime;
+  document.getElementById('f_jobNumber').value      = c.jobNumber || '';
+  document.getElementById('f_name').value           = c.name;
+  document.getElementById('f_certType').value       = c.certType;
+  onCertTypeChange();
+  document.getElementById('f_liftingSubtype').value = c.liftingSubtype || '';
+  document.getElementById('f_issuedBy').value       = c.issuedBy;
+  document.getElementById('f_issueDate').value      = c.issueDate;
+  document.getElementById('f_expiryDate').value     = c.expiryDate;
+  document.getElementById('f_assetId').value        = c.assetId || '';
+  document.getElementById('f_client').value         = c.client;
+
+  clearFile();
+  if (c.fileName) {
+    document.getElementById('existingFileNote').style.display = 'block';
+    document.getElementById('existingFileNote').textContent =
+      '📎 Current file: ' + c.fileName;
+  }
+
+  document.getElementById('modalTitle').textContent = 'Edit Certificate';
+  const historyBtn = document.getElementById('exportHistoryBtn');
+  if (historyBtn) historyBtn.style.display = '';
+  document.getElementById('saveBtnLabel').textContent = 'Save Changes';
+  document.getElementById('techUploadNote').style.display = session.role === 'technician' ? 'block' : 'none';
+  if (session.customerId) document.getElementById('f_client_wrap').style.display = 'none';
+  bindCertDraft(); restoreCertDraft(); document.getElementById('certModal').classList.add('open');
+  // Load all dropdowns from API then restore selected values
+  const _assetVal = c.assetId || '';
+  const _inspVal  = c.issuedBy || '';
+  const _clientVal = c.client || '';
+  loadAssetDropdown().then(() => {
+    if (_assetVal) document.getElementById('f_assetId').value = _assetVal;
+  });
+  loadInspectorDropdown(_inspVal);
+  loadClientDropdown(_clientVal);
+}
+
+function closeModal(force) {
+  if (!force && (document.getElementById('f_name')?.value || '').trim() &&
+      !confirm('Close this modal? Draft will be kept for 24 hours and can be restored.')) return;
+  saveCertDraft();
+  document.getElementById('certModal').classList.remove('open');
+  clearFile();
+}
+
+/* ── Cert type change — show/hide lifting sub-type ── */
+function onCertTypeChange() {
+  const type = document.getElementById('f_certType').value;
+  const wrap = document.getElementById('liftingSubtypeWrap');
+  if (wrap) {
+    wrap.style.display = type === 'LIFTING' ? 'flex' : 'none';
+    wrap.style.flexDirection = 'column';
+  }
+  if (type !== 'LIFTING') {
+    const sub = document.getElementById('f_liftingSubtype');
+    if (sub) sub.value = '';
+  }
+}
+
+/* ── File handling ── */
+function handleFileSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const icons = { pdf:'📄', jpg:'🖼️', jpeg:'🖼️', png:'🖼️', webp:'🖼️' };
+  const ext = file.name.split('.').pop().toLowerCase();
+  selectedFile = file;
+  document.getElementById('uploadZone').style.display  = 'none';
+  document.getElementById('uploadPreview').style.display= 'flex';
+  document.getElementById('previewIcon').textContent   = icons[ext] || '📄';
+  document.getElementById('previewName').textContent   = file.name;
+  document.getElementById('previewSize').textContent   = `${(file.size/1024).toFixed(1)} KB`;
+}
+function clearFile() {
+  selectedFile = null;
+  document.getElementById('certFileInput').value = '';
+  document.getElementById('uploadZone').style.display   = 'block';
+  document.getElementById('uploadPreview').style.display = 'none';
+}
+
+/* ── Drag & drop ── */
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag'); });
+zone.addEventListener('dragleave', ()  => zone.classList.remove('drag'));
+zone.addEventListener('drop', e => {
+  e.preventDefault(); zone.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) { const dt = new DataTransfer(); dt.items.add(file); document.getElementById('certFileInput').files = dt.files; handleFileSelect(document.getElementById('certFileInput')); }
+});
+
+/* ── Save ── */
+async function saveCert() {
+  const jobNumber      = document.getElementById('f_jobNumber')?.value?.trim() || '';
+  const name           = document.getElementById('f_name')?.value?.trim() || '';
+  const certType       = document.getElementById('f_certType')?.value || '';
+  const liftingSubtype = certType === 'LIFTING' ? (document.getElementById('f_liftingSubtype')?.value || '') : '';
+  const issuedBy       = document.getElementById('f_issuedBy')?.value?.trim() || '';
+  const issueDate      = document.getElementById('f_issueDate')?.value || '';
+  const expiryDate     = document.getElementById('f_expiryDate')?.value || '';
+  const client         = document.getElementById('f_client')?.value || session?.customerId || '';
+  const assetId        = document.getElementById('f_assetId')?.value || '';
+  const editId         = document.getElementById('editCertId')?.value || '';
+
+  if (!name || !certType || !issuedBy || !issueDate || !expiryDate) {
+    showToast('error','Required Fields','Please fill all required fields.'); return;
+  }
+  if (certType === 'LIFTING' && !liftingSubtype) {
+    showToast('error','Lifting Sub-type Required','Please select a lifting sub-type.'); return;
+  }
+  if (!editId && !selectedFile) {
+    showToast('error','File Required','Please upload the certificate file.'); return;
+  }
+  if (issueDate && expiryDate && new Date(expiryDate) <= new Date(issueDate)) {
+    showToast('error','Invalid Date','Expiry date must be after issue date.'); return;
+  }
+
+  const saveBtn = document.querySelector('[onclick*="saveCert"]');
+  if (saveBtn) { saveBtn.disabled = true; const _lbl = document.getElementById('saveBtnLabel'); if (_lbl) _lbl.textContent = 'Saving…'; }
+
+  /* ── Step 1: Save/update the cert record (without file fields) ── */
+  const payload = {
+    name,
+    cert_type:   certType + (liftingSubtype ? ' — ' + liftingSubtype : ''),
+    asset_id:    assetId   || undefined,
+    client_id:   client    || undefined,
+    issued_by:   issuedBy,
+    issue_date:  issueDate,
+    expiry_date: expiryDate,
+    notes:       jobNumber || null,
+  };
+
+  let savedCert = null;
+  let certUUID  = null;   // the real DB UUID we'll use for Step 3
+  try {
+    const editCert = editId ? CERTS.find(x => x.certId === editId) : null;
+    certUUID       = editCert?.id || editId || null;
+    const url      = editId ? '/api/certificates/' + certUUID : '/api/certificates';
+    const method   = editId ? 'PATCH' : 'POST';
+    const res      = await apiFetch(url, { method, body: JSON.stringify(payload) });
+    const data     = await res.json();
+    if (!data.success) {
+      showToast('error','Save Failed',(data.data||data).error || 'Could not save.');
+      if (saveBtn) { saveBtn.disabled = false; const _lbl2 = document.getElementById('saveBtnLabel'); if (_lbl2) _lbl2.textContent = 'Save Certificate'; }
+      return;
+    }
+    savedCert = data.data || data;
+    // For new records the UUID comes back from the server
+    if (!certUUID) certUUID = savedCert.id || savedCert.cert_number;
+  } catch(e) {
+    showToast('error','Network Error','Could not save certificate.');
+    if (saveBtn) { saveBtn.disabled = false; const _lbl3 = document.getElementById('saveBtnLabel'); if (_lbl3) _lbl3.textContent = 'Save Certificate'; }
+    return;
+  }
+
+  /* ── Step 2: Upload file with structured R2 key (only if a new file was selected) ── */
+  if (selectedFile) {
+    if (saveBtn) { const _lbl4 = document.getElementById('saveBtnLabel'); if (_lbl4) _lbl4.textContent = 'Uploading file…'; }
+    try {
+      // Build structured metadata for the R2 key
+      // Key pattern: clients/{CLIENT_ID}/jobs/{JOB_NUMBER}/{JOB_NUMBER}_{CERT_NUMBER}_{originalname}.{ext}
+      const certNumber  = savedCert.cert_number || savedCert.id || certUUID;
+      const jobNum      = jobNumber || savedCert.notes || 'NO-JOB';
+      const clientId    = client || savedCert.client_id || session?.customerId || 'GENERAL';
+
+      const fd = new FormData();
+      fd.append('file',        selectedFile);
+      fd.append('cert_number', certNumber);
+      fd.append('job_number',  jobNum);
+      fd.append('client_id',   clientId);
+
+      const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
+      const uploadRes = await fetch('/api/certificates/upload', {
+        method: 'POST',
+        headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+        body: fd,
+      });
+      const ud  = await uploadRes.json();
+      const udd = ud.data || ud;
+
+      if (!ud.success) {
+        // Cert record is already saved — warn but don't block
+        showToast('warning','File Upload Failed',
+          'Certificate saved but file could not be uploaded: ' + (udd.error || 'Unknown error') +
+          '. Edit the certificate to try again.');
+      } else {
+        // Step 3: PATCH the cert record with the structured file_url + file_name
+        await apiFetch('/api/certificates/' + certUUID, {
+          method: 'PATCH',
+          body: JSON.stringify({ file_name: udd.file_name, file_url: udd.file_url }),
+        });
+      }
+    } catch(e) {
+      showToast('warning','File Upload Error',
+        'Certificate saved but file upload failed. Edit the certificate to re-attach the file.');
+    }
+  }
+
+  /* ── Done ── */
+  selectedFile = null;
+  showToast('success', editId ? 'Updated' : 'Saved',
+    '"' + name + '" ' + (editId ? 'updated.' : 'saved & sent for approval.'));
+  clearCertDraft();
+  closeModal(true);
+  if (saveBtn) { saveBtn.disabled = false; const _lbl5 = document.getElementById('saveBtnLabel'); if (_lbl5) _lbl5.textContent = 'Save Certificate'; }
+  await loadCerts();
+}
+
+
+/* ═══════════════════════════════════════════════════════
+   APPROVAL
+═══════════════════════════════════════════════════════ */
+async function approveCert(id) {
+  const cert = CERTS.find(x => x.certId === id);
+  try {
+    const res  = await apiFetch('/api/certificates/' + (cert?.id || id), {
+      method: 'PATCH', body: JSON.stringify({ approval_status: 'approved' })
+    });
+    const data = await res.json();
+    if (!data.success) { showToast('error','Failed',(data.data||data).error||'Could not approve.'); return; }
+    const idx = CERTS.findIndex(x => x.certId === id);
+    if (idx > -1) { CERTS[idx].approvalStatus = 'approved'; CERTS[idx].approval_status = 'approved'; }
+    showToast('success','Approved','Certificate approved.');
+    renderTable();
+  } catch(e) { showToast('error','Network Error','Could not approve.'); }
+}
+
+function openRejectModal(id) {
+  rejectTargetId = id;
+  const c = CERTS.find(x => x.certId === id);
+  document.getElementById('rejectCertInfo').innerHTML =
+    `<strong>${c?.name||id}</strong> <span class="cert-id-chip">${fmtCertId(c)||id}</span>`;
+  document.getElementById('rejectReason').value = '';
+  document.getElementById('rejectModal').classList.add('open');
+}
+function closeRejectModal() { document.getElementById('rejectModal').classList.remove('open'); }
+async function confirmReject() {
+  const reason = document.getElementById('rejectReason').value.trim();
+  if (!reason) { showToast('error','Required','Please enter a rejection reason.'); return; }
+  const cert = CERTS.find(x => x.certId === rejectTargetId);
+  try {
+    const res  = await apiFetch('/api/certificates/' + (cert?.id || rejectTargetId), {
+      method: 'PATCH', body: JSON.stringify({ approval_status: 'rejected', rejection_reason: reason })
+    });
+    const data = await res.json();
+    if (!data.success) { closeRejectModal(); showToast('error','Failed',(data.data||data).error||'Could not reject.'); return; }
+    const idx = CERTS.findIndex(x => x.certId === rejectTargetId);
+    if (idx > -1) { CERTS[idx].approvalStatus = 'rejected'; CERTS[idx].rejectionReason = reason; }
+    showToast('warning','Rejected','Certificate rejected.');
+  } catch(e) { showToast('error','Network Error','Could not reject.'); }
+  closeRejectModal();
+  renderTable();
+}
+
+/* ═══════════════════════════════════════════════════════
+   ASSET INSPECTION HISTORY — shown in cert detail drawer
+═══════════════════════════════════════════════════════ */
+function buildAssetCertHistory(assetId, currentCertId) {
+  if (!assetId) return '';
+
+  /* All certs for this asset, newest issue date first */
+  const all = CERTS
+    .filter(x => x.assetId === assetId)
+    .sort((a, b) => (b.issueDate || '').localeCompare(a.issueDate || ''));
+
+  if (!all.length) return '';
+
+  /* Approval badge (compact) */
+  function apBadge(status) {
+    const map = {
+      approved: { cls:'sap-badge--success', label:'Approved' },
+      pending:  { cls:'sap-badge--pending', label:'Pending'  },
+      rejected: { cls:'sap-badge--error',   label:'Rejected' },
+    };
+    const m = map[status] || map.pending;
+    return `<span class="sap-badge ${m.cls}" style="font-size:10px;padding:2px 5px;">${m.label}</span>`;
+  }
+
+  /* Expiry label (compact) */
+  function expLabel(cert) {
+    if (cert.approvalStatus !== 'approved') {
+      return `<span style="font-size:11px;color:var(--sap-text-disabled);">—</span>`;
+    }
+    const today = new Date(); today.setHours(0,0,0,0);
+    const exp   = new Date(cert.expiryDate); exp.setHours(0,0,0,0);
+    const days  = Math.ceil((exp - today) / 86400000);
+    if (days < 0)
+      return `<span style="font-size:11px;font-weight:700;color:var(--sap-error);">${cert.expiryDate}<br/><small>${Math.abs(days)}d overdue</small></span>`;
+    if (days <= 30)
+      return `<span style="font-size:11px;font-weight:700;color:var(--sap-warning);">${cert.expiryDate}<br/><small>${days}d left</small></span>`;
+    return `<span style="font-size:11px;color:var(--sap-text-secondary);">${cert.expiryDate}</span>`;
+  }
+
+  /* Type chip */
+  function typeChip(cert) {
+    const t = TYPE_COLORS[cert.certType] || TYPE_COLORS['Other'];
+    const sub = cert.liftingSubtype
+      ? `<div style="font-size:9px;font-weight:600;color:var(--sap-warning);margin-top:1px;">↳ ${cert.liftingSubtype}</div>` : '';
+    return `<span style="background:${t.bg};color:${t.color};font-size:10px;font-weight:700;padding:2px 5px;border-radius:3px;text-transform:uppercase;white-space:nowrap;">${cert.certType}</span>${sub}`;
+  }
+
+  /* Summary counts */
+  const total    = all.length;
+  const expired  = all.filter(x => {
+    if (x.approvalStatus !== 'approved') return false;
+    const today = new Date(); today.setHours(0,0,0,0);
+    return new Date(x.expiryDate) < today;
+  }).length;
+  const expiring = all.filter(x => {
+    if (x.approvalStatus !== 'approved') return false;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const days  = Math.ceil((new Date(x.expiryDate) - today) / 86400000);
+    return days >= 0 && days <= 30;
+  }).length;
+  const jobs     = [...new Set(all.map(x => x.jobNumber).filter(Boolean))].length;
+
+  const summaryBar = `
+    <div class="hist-summary-bar">
+      <span style="font-size:12px;font-weight:700;color:var(--sap-text-primary);">${total} inspection record${total !== 1 ? 's' : ''}</span>
+      <span style="font-size:11px;color:var(--sap-text-secondary);">across ${jobs} job${jobs !== 1 ? 's' : ''}</span>
+      ${expiring ? `<span style="background:var(--sap-warning-bg);color:var(--sap-warning);border:1px solid var(--sap-warning-border);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;">⚠ ${expiring} expiring</span>` : ''}
+      ${expired  ? `<span style="background:var(--sap-error-bg);color:var(--sap-error);border:1px solid var(--sap-error-border);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;">✕ ${expired} expired</span>` : ''}
+    </div>`;
+
+  /* Group by jobNumber */
+  const byJob = {};
+  all.forEach(x => {
+    const jn = x.jobNumber || '—';
+    if (!byJob[jn]) byJob[jn] = [];
+    byJob[jn].push(x);
+  });
+
+  /* Build rows */
+  let rows = '';
+  Object.entries(byJob).forEach(([jn, certs]) => {
+    const firstCert  = certs[0];
+    const isCurJob   = certs.some(x => x.certId === currentCertId);
+    rows += `
+      <div class="hist-job-hdr">
+        <span style="font-family:monospace;font-size:11px;font-weight:800;color:var(--sap-brand);background:var(--sap-brand-light);border:1px solid var(--sap-info-border);border-radius:4px;padding:2px 7px;">${jn}</span>
+        <span style="font-size:10px;color:var(--sap-text-secondary);">Inspection: <strong>${firstCert.issueDate || '—'}</strong></span>
+        <span style="font-size:10px;color:var(--sap-text-secondary);">Inspector: <strong>${firstCert.issuedBy || '—'}</strong></span>
+        <span style="font-size:10px;color:var(--sap-text-secondary);margin-left:auto;">${certs.length} cert${certs.length !== 1 ? 's' : ''}${isCurJob ? ' <span style="color:var(--sap-success);font-weight:700;">← current job</span>' : ''}</span>
+      </div>`;
+    certs.forEach(cert => {
+      const isCurrent = cert.certId === currentCertId;
+      const adminActions = isAdmin() ? `
+          <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:4px;">
+            <button class="btn btn-ghost btn-sm" type="button" style="height:22px;padding:0 6px;font-size:10px;" onclick="openDeleteModal('${cert.certId}')" title="Delete file attachment">Delete File</button>
+          </div>` : '';
+      rows += `
+      <div class="hist-row${isCurrent ? ' hist-row--current' : ''}">
+        <div class="hist-col-id">
+          <span class="cert-id-chip" style="${isCurrent ? 'background:#f0faf0;border-color:var(--sap-success);color:var(--sap-success);' : ''}">${fmtCertId(cert)}</span>
+          ${isCurrent ? '<div style="font-size:9px;font-weight:700;color:var(--sap-success);margin-top:3px;">● THIS CERT</div>' : ''}
+        </div>
+        <div class="hist-col-name">
+          <div style="font-size:12px;font-weight:600;color:var(--sap-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${cert.name}">${cert.name}</div>
+          ${cert.fileName ? `<a href="#" onclick="event.preventDefault();openCertLink('${cert.certId}')" style="font-size:10px;color:var(--sap-brand);display:inline-flex;align-items:center;gap:2px;margin-top:2px;text-decoration:none;"><svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>${cert.fileName}</a>` : ''}
+          ${adminActions}
+        </div>
+        <div class="hist-col-type">${typeChip(cert)}</div>
+        <div class="hist-col-exp">${expLabel(cert)}</div>
+        <div class="hist-col-stat">${apBadge(cert.approvalStatus)}</div>
+      </div>`;
+    });
+  });
+
+  return `
+    <div class="drawer-section">
+      <div class="drawer-section__title" style="justify-content:space-between;">
+        <span style="display:flex;align-items:center;gap:6px;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:13px;height:13px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Asset Inspection History
+        </span>
+        <span style="font-size:10px;color:var(--sap-text-disabled);">AST: ${assetId}</span>
+      </div>
+      ${summaryBar}
+      <div style="border:1px solid var(--sap-table-border);border-radius:6px;overflow:hidden;">
+        <!-- Column headers -->
+        <div style="display:flex;gap:10px;padding:5px 10px 5px 20px;background:var(--sap-table-header-bg);border-bottom:1px solid var(--sap-table-border);">
+          <span style="flex:0 0 90px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--sap-text-secondary);">Cert ID</span>
+          <span style="flex:1;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--sap-text-secondary);">Name / File</span>
+          <span style="flex:0 0 100px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--sap-text-secondary);">Type</span>
+          <span style="flex:0 0 88px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--sap-text-secondary);text-align:right;">Expiry</span>
+          <span style="flex:0 0 76px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--sap-text-secondary);text-align:right;">Status</span>
+        </div>
+        ${rows}
+      </div>
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   DETAIL DRAWER
+═══════════════════════════════════════════════════════ */
+function openDrawer(id) {
+  const c   = CERTS.find(x => x.certId === id);
+  if (!c) return;
+  const st  = getCertStatus(c);
+  const tc2 = TYPE_COLORS[c.certType] || TYPE_COLORS['Other'];
+  const role = session.role;
+  const days = getDaysToExpiry(c);
+
+  const stMap = {
+    valid:    { cls:'sap-badge--success', en:'Valid',    ar:'سارية' },
+    expiring: { cls:'sap-badge--warning', en:'Expiring', ar:'تنتهي قريباً' },
+    expired:  { cls:'sap-badge--error',   en:'Expired',  ar:'منتهية' },
+    pending:  { cls:'sap-badge--pending', en:'Pending',  ar:'معلق' },
+    rejected: { cls:'sap-badge--error',   en:'Rejected', ar:'مرفوض' },
+  };
+  const stBadge = `<span class="sap-badge ${stMap[st].cls}">${stMap[st].en}</span>`;
+
+  const timeline = [
+    { dot:'info',    title: 'Uploaded',   meta:`${c.uploadedBy} · ${c.uploadTime}` },
+    { dot: c.approvalStatus === 'approved' ? 'success' : c.approvalStatus === 'rejected' ? 'error' : 'warning',
+      title: c.approvalStatus === 'approved'
+        ? ('Approved')
+        : c.approvalStatus === 'rejected'
+          ? ('Rejected')
+          : ('Pending Approval'),
+      meta: c.approvalStatus === 'rejected' ? c.rejectionReason : '' },
+    { dot: days < 0 ? 'error' : days <= 30 ? 'warning' : 'success',
+      title: 'Expiry',
+      meta: `${c.expiryDate} · ${days < 0 ? (`Expired ${Math.abs(days)}d ago`) : (`${days} days remaining`)}` },
+  ];
+
+  document.getElementById('drawerBody').innerHTML = `
+    <div class="drawer-section">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        <div style="width:48px;height:48px;background:${tc2.bg};color:${tc2.color};border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🏅</div>
+        <div>
+          <div style="font-size:16px;font-weight:800;color:var(--sap-text-primary);">${h(c.name)}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">
+            <span class="cert-id-chip">${fmtCertId(c)}</span>
+            ${stBadge}
+            ${getApprovalBadge(c.approvalStatus)}
+            <span class="cert-type-chip" style="background:${tc2.bg};color:${tc2.color};">${c.certType}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section__title"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Basic Information</div>
+      <div class="sap-detail-grid">
+        <div class="sap-detail-field"><span class="sap-detail-field__label">Certificate ID</span><span class="sap-detail-field__value" style="font-family:monospace;color:var(--sap-success);font-weight:700;">${fmtCertId(c)}</span></div>
+        <div class="sap-detail-field"><span class="sap-detail-field__label">Job Number</span><span class="sap-detail-field__value" style="font-family:monospace;font-weight:700;color:var(--sap-brand);">${c.jobNumber||'—'}</span></div>
+        <div class="sap-detail-field"><span class="sap-detail-field__label">Certificate Type</span><span class="sap-detail-field__value" style="color:${tc2.color};">${c.certType}${c.liftingSubtype ? ` <span style="font-size:11px;font-weight:600;color:var(--sap-warning);">— ${c.liftingSubtype}</span>` : ''}</span></div>
+        <div class="sap-detail-field"><span class="sap-detail-field__label">Issued By</span><span class="sap-detail-field__value">${c.issuedBy}</span></div>
+        <div class="sap-detail-field"><span class="sap-detail-field__label">Issue Date</span><span class="sap-detail-field__value">${c.issueDate}</span></div>
+        <div class="sap-detail-field"><span class="sap-detail-field__label">Expiry Date</span><span class="sap-detail-field__value" style="color:${days<0?'var(--sap-error)':days<=30?'var(--sap-warning)':'var(--sap-success)'};">${c.expiryDate}</span></div>
+        <div class="sap-detail-field"><span class="sap-detail-field__label">Linked Asset ID</span><span class="sap-detail-field__value"><span class="asset-id-chip">${c.assetId||'—'}</span></span></div>
+        <div class="sap-detail-field"><span class="sap-detail-field__label">Customer ID</span><span class="sap-detail-field__value"><span class="asset-id-chip">${c.client}</span> <span style="font-size:12px;color:var(--sap-text-secondary);">${CLIENTS_MAP[c.client]||''}</span></span></div>
+        <div class="sap-detail-field"><span class="sap-detail-field__label">Uploaded By</span><span class="sap-detail-field__value">${c.uploadedBy}</span></div>
+        ${c.fileName ? `<div class="sap-detail-field span-full"><span class="sap-detail-field__label">File</span><span class="sap-detail-field__value"><span class="file-chip" onclick="previewFile('${c.certId}')">📄 ${c.fileName}</span></span></div>` : ''}
+        ${c.rejectionReason ? `<div class="sap-detail-field span-full"><span class="sap-detail-field__label" style="color:var(--sap-error);">Rejection Reason</span><span class="sap-detail-field__value" style="color:var(--sap-error);">${c.rejectionReason}</span></div>` : ''}
+      </div>
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section__title"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Activity Timeline</div>
+      <div class="cert-timeline">
+        ${timeline.map(t => `
+          <div class="cert-tl-item">
+            <div class="cert-tl-dot cert-tl-dot--${t.dot}"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${t.dot==='success'?'<polyline points="20 6 9 17 4 12"/>':t.dot==='error'?'<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>':t.dot==='warning'?'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>':'<circle cx="12" cy="12" r="10"/>'}</svg></div>
+            <div class="cert-tl-content">
+              <div class="cert-tl-content__title">${t.title}</div>
+              <div class="cert-tl-content__meta">${t.meta}</div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    ${role === 'technician' ? `<div class="drawer-section">
+      <div class="drawer-section__title"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Edit Window</div>
+      ${getEditWindowBadge(c)}
+    </div>` : ''}
+
+    ${buildAssetCertHistory(c.assetId, c.certId)}
+  `;
+
+  /* Drawer footer */
+  const canApprove2  = role === 'admin' || role === 'manager';
+  const editAllowed2 = (role === 'technician' && canTechnicianEdit(c) && c.approvalStatus !== 'approved') || canApprove2;
+  const canDelete2   = role === 'admin' || canDeleteFile(c);  // admin always; tech within 24hr window
+
+  document.getElementById('drawerFooter').innerHTML = `
+    <button class="btn btn-ghost" onclick="closeDrawer()">Close</button>
+    ${editAllowed2 ? `<button class="btn btn-secondary" onclick="closeDrawer();openEditModal('${c.certId}')">Edit</button>` : ''}
+    ${canApprove2 && c.approvalStatus==='pending' ? `
+      <button class="btn btn-success" onclick="closeDrawer();approveCert('${c.certId}')">Approve</button>
+      <button class="btn btn-danger"  onclick="closeDrawer();openRejectModal('${c.certId}')">Reject</button>` : ''}
+    ${canDelete2 ? `<button class="btn btn-danger" onclick="closeDrawer();openDeleteModal('${c.certId}')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+      Delete
+    </button>` : ''}
+  `;
+
+  document.getElementById('drawerOverlay').classList.add('open');
+}
+function closeDrawer() { document.getElementById('drawerOverlay').classList.remove('open'); }
+document.getElementById('drawerOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeDrawer();
+});
+
+document.getElementById('certDeleteConfirmModal').addEventListener('click', function(e) {
+  if (e.target === this) closeCertDeleteModal();
+});
+
+/* ── Certificate file link opener ── */
+async function openCertLink(certId) {
+  const cert = CERTS.find(x => x.certId === certId);
+  if (!cert) { showToast('error','Not Found','Certificate not found.'); return; }
+  if (!cert.fileName && !cert.fileUrl) { showToast('info','No File','No file attached to this certificate.'); return; }
+  // The worker now streams the file directly — open the API endpoint as a URL.
+  // The Bearer token must be passed; we use a temporary anchor with the token as a query param
+  // is NOT safe. Instead we open the URL: the Worker checks the Authorization header.
+  // Since window.open can't set headers, we fetch the blob and open it as an object URL.
+  const uuid = cert.id || certId;
+  try {
+    const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
+    const res = await fetch('/api/certificates/file/' + uuid, {
+      headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast('info', 'No File', (err.data || err).error || 'Could not retrieve file.');
+      return;
+    }
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    // For PDFs open inline; for others trigger download
+    if (blob.type !== 'application/pdf') {
+      a.download = cert.fileName || 'certificate';
+    }
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+  } catch(e) { showToast('error','Error','Could not open file. Please try again.'); }
+}
+
+/* ── File preview ── */
+function previewFile(id) {
+  const c = CERTS.find(x => x.certId === id);
+  showToast('info',
+    'File Preview',
+    `"${c?.fileName||'file'}" would open in browser.`);
+}
+
+/* ── Delete ── */
+function openDeleteModal(id) {
+  const c = CERTS.find(x => x.certId === id);
+  if (!c) return;
+  openCertDeleteModal(id);
+}
+
+/* ── New cert delete modal (admin always; technician within 24hrs own records only) ── */
+function openCertDeleteModal(id) {
+  const c = CERTS.find(x => x.certId === id);
+  if (!c) return;
+
+  const role = session?.role;
+
+  // Manager / user: never
+  if (role !== 'admin' && role !== 'technician') {
+    showToast('error', 'Not Allowed', 'Only admins and technicians can delete certificate files.');
+    return;
+  }
+
+  // Technician: enforce 24hr window and ownership client-side
+  if (role === 'technician') {
+    if (!canTechnicianEdit(c)) {
+      showToast('error', 'Window Expired', 'You can only delete certificate files within 24 hours of upload.');
+      return;
+    }
+    // Ownership check using userId stored at login
+    const myId = session?.userId || session?.sub;
+    if (c.uploaded_by && myId && c.uploaded_by !== myId) {
+      showToast('error', 'Not Allowed', 'You can only delete your own uploads.');
+      return;
+    }
+  }
+
+  deleteTargetId = id;
+
+  // Populate modal info
+  const infoEl = document.getElementById('certDeleteModalInfo');
+  const noteEl = document.getElementById('certDeleteWindowNote');
+
+  infoEl.innerHTML = `
+    <div style="font-weight:700;font-size:14px;margin-bottom:4px;">${h(c.name)}</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span class="cert-id-chip">${fmtCertId(c)}</span>
+      ${getApprovalBadge(c.approvalStatus)}
+      ${c.fileName ? `<span style="font-size:11px;color:var(--sap-brand);">📎 ${h(c.fileName)}</span>` : '<span style="font-size:11px;color:var(--sap-text-disabled);">No file attached</span>'}
+    </div>`;
+
+  if (role === 'technician') {
+    const uploaded = new Date(c.uploadTime);
+    const hoursLeft = Math.max(0, 24 - (Date.now() - uploaded.getTime()) / 3600000);
+    const hh = Math.floor(hoursLeft);
+    const mm = Math.floor((hoursLeft % 1) * 60);
+    noteEl.textContent = `⏱ Your file-delete window closes in ${hh}h ${mm}m.`;
+    noteEl.style.color = hoursLeft < 2 ? 'var(--sap-error)' : 'var(--sap-text-secondary)';
+  } else {
+    noteEl.textContent = '';
+  }
+
+  document.getElementById('certDeleteConfirmModal').classList.add('open');
+}
+
+function closeCertDeleteModal() {
+  document.getElementById('certDeleteConfirmModal').classList.remove('open');
+  deleteTargetId = null;
+}
+
+async function confirmCertDelete() {
+  const targetId = deleteTargetId;                            // capture before closeCertDeleteModal nulls it
+  const cert = CERTS.find(x => x.certId === targetId);
+  closeCertDeleteModal();
+
+  const btn = document.getElementById('certDeleteConfirmBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
+
+  try {
+    const res  = await apiFetch('/api/certificates/' + (cert?.id || targetId) + '/file', { method: 'DELETE' });
+    const data = await res.json();
+
+    if (!data.success) {
+      const errMsg = (data.data || data).error || 'Could not delete.';
+      const friendly = errMsg.includes('window') || errMsg.includes('expired')
+        ? 'Your 24-hour delete window has expired.'
+        : errMsg;
+      showToast('error', 'Delete Failed', friendly);
+      if (btn) { btn.disabled = false; btn.textContent = 'Delete File'; }
+      return;
+    }
+
+    CERTS = CERTS.map(x => x.certId === targetId ? ({ ...x, fileName:'', fileUrl:'' }) : x);
+    showToast('success', 'File Deleted', `File removed from "${cert?.name || targetId}". Row kept with No file.`);
+    renderTable();
+  } catch(e) {
+    showToast('error', 'Network Error', 'Could not delete. Please try again.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Delete File'; }
+  }
+}
+
+async function confirmDelete() {
+  // Legacy — redirect to new handler
+  await confirmCertDelete();
+}
+
+async function deleteCertificateRecord(certId) {
+  if (!isAdmin()) {
+    showToast('error', 'Not Allowed', 'Only admins can delete certificate rows.');
+    return;
+  }
+  const cert = CERTS.find(x => x.certId === certId);
+  if (!cert) return;
+  if (!confirm(`Delete certificate row "${cert.name}"? This will remove only this certificate record and its file.`)) return;
+  try {
+    const res = await apiFetch('/api/certificates/' + (cert.id || certId), { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('error', 'Delete Failed', (data.data || data).error || 'Could not delete certificate row.');
+      return;
+    }
+    CERTS = CERTS.filter(x => x.certId !== certId);
+    showToast('success', 'Row Deleted', `Certificate "${cert.name}" was deleted.`);
+    renderTable();
+  } catch (e) {
+    showToast('error', 'Network Error', 'Could not delete certificate row.');
+  }
+}
+
+async function deleteAssetCertificates(certId) {
+  if (!isAdmin()) {
+    showToast('error', 'Not Allowed', 'Only admins can delete related certificate rows.');
+    return;
+  }
+  const cert = CERTS.find(x => x.certId === certId);
+  if (!cert) return;
+  const assetDisplay = cert.assetId || cert.asset_id || 'Unknown Asset';
+  if (!confirm(`Delete ALL certificates for asset ${assetDisplay}? This will remove all related certificate rows and files.`)) return;
+  try {
+    const res = await apiFetch('/api/certificates/' + (cert.id || certId) + '?delete_scope=asset', { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('error', 'Delete Failed', (data.data || data).error || 'Could not delete related certificates.');
+      return;
+    }
+    const deletedIds = new Set((data.data?.deleted_ids || data.deleted_ids || []).map(String));
+    CERTS = CERTS.filter(x => !deletedIds.has(String(x.id)));
+    const deletedCount = data.data?.deleted_count ?? data.deleted_count ?? deletedIds.size;
+    showToast('success', 'Rows Deleted', `${deletedCount} certificate row(s) deleted for asset ${assetDisplay}.`);
+    clearSelection();
+    renderTable();
+  } catch (e) {
+    showToast('error', 'Network Error', 'Could not delete related certificates.');
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   COLUMN VISIBILITY
+═══════════════════════════════════════════════════════ */
+const COL_KEYS = ['jobNumber','certId','fileLink','certType','issuedBy','expiry','approval','assetId','client'];
+
+/**
+ * fmtCertId(cert)
+ * Returns the display-format ID: "{jobYear-jobSeq}/{certSeq}"
+ * e.g. cert { jobNumber:'JOB-2024-006', certId:'CERT-0012' } → "2024-006/012"
+ * Falls back to raw certId if jobNumber is missing.
+ */
+function fmtCertId(cert) {
+  if (!cert || !cert.certId) return '—';
+  const rawCert = cert.certId;
+  // Extract numeric suffix from CERT-0012 → "012"
+  const certNum = rawCert.replace(/^CERT-0*/i, '') || rawCert;
+  const padded  = certNum.padStart(3, '0');
+  if (!cert.jobNumber) return rawCert;
+  // Extract the meaningful part of JOB-2024-006 → "2024-006"
+  const jobPart = cert.jobNumber.replace(/^JOB-/i, '');
+  return `${jobPart}/${padded}`;
+}
+
+function toggleColDropdown() {
+  document.getElementById('colDropdown').classList.toggle('open');
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#colSelectorWrap'))
+    document.getElementById('colDropdown')?.classList.remove('open');
+});
+
+function applyColVisibility() {
+  let visible = 0;
+  COL_KEYS.forEach(key => {
+    const cb   = document.getElementById('col_' + key);
+    const show = cb ? cb.checked : true;
+    if (show) visible++;
+    const th = document.querySelector(`th[data-col="${key}"]`);
+    if (th) th.style.display = show ? '' : 'none';
+    document.querySelectorAll(`td[data-col="${key}"]`).forEach(td => {
+      td.style.display = show ? '' : 'none';
+    });
+  });
+  const badge = document.getElementById('colBadge');
+  if (badge) badge.textContent = visible + 2; /* +2: name + actions always visible */
+  const state = {};
+  COL_KEYS.forEach(k => { const cb = document.getElementById('col_'+k); if(cb) state[k]=cb.checked; });
+  localStorage.setItem('cert_col_state', JSON.stringify(state));
+}
+
+function resetColumns() {
+  COL_KEYS.forEach(k => {
+    const cb = document.getElementById('col_'+k);
+    if (cb) cb.checked = true;
+  });
+  applyColVisibility();
+}
+
+function loadColState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('cert_col_state') || '{}');
+    COL_KEYS.forEach(k => {
+      const cb = document.getElementById('col_'+k);
+      if (cb && saved[k] !== undefined) cb.checked = saved[k];
+    });
+  } catch(e) {}
+  applyColVisibility();
+}
+
+
+async function exportHistoryPDF() {
+  try {
+    const res = await apiFetch('/api/certificates/history/export?limit=5000');
+    const data = await res.json();
+    const history = data?.data?.history || data?.history || [];
+    if (!history.length) {
+      showToast('info', 'No History', 'No certificate history records found.');
+      return;
+    }
+
+    const rows = history.map((h, idx) => `
+      <tr style="background:${idx % 2 ? '#f9fafb' : '#fff'};">
+        <td style="padding:7px 8px;border-bottom:1px solid #e8eaed;font-size:11px;">${h.cert_number || '—'}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #e8eaed;font-size:11px;">${h.name || '—'}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #e8eaed;font-size:11px;">${h.action_type || 'update'}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #e8eaed;font-size:11px;">${h.changed_by_username || h.changed_by || 'Unknown User'}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #e8eaed;font-size:11px;">${(h.changed_at || '').replace('T',' ').slice(0,19)}</td>
+      </tr>`).join('');
+
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Certificate History Export</title></head>
+<body style="font-family:Arial,sans-serif;padding:20px;color:#1d2d3e;">
+  <h2 style="margin:0 0 8px;">Certificate History (All Certificates)</h2>
+  <div style="font-size:12px;color:#6a6d70;margin-bottom:14px;">Generated: ${new Date().toLocaleString('en-GB')}</div>
+  <table style="width:100%;border-collapse:collapse;">
+    <thead><tr>
+      <th style="text-align:left;padding:8px;background:#1d2d3e;color:#fff;font-size:11px;">Cert ID</th>
+      <th style="text-align:left;padding:8px;background:#1d2d3e;color:#fff;font-size:11px;">Name</th>
+      <th style="text-align:left;padding:8px;background:#1d2d3e;color:#fff;font-size:11px;">Action</th>
+      <th style="text-align:left;padding:8px;background:#1d2d3e;color:#fff;font-size:11px;">Changed By</th>
+      <th style="text-align:left;padding:8px;background:#1d2d3e;color:#fff;font-size:11px;">Changed At</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div style="margin-top:14px;"><button onclick="window.print()" style="padding:8px 16px;background:#188918;border:none;color:#fff;border-radius:4px;font-weight:700;">Print / Save as PDF</button></div>
+</body></html>`;
+    const win = window.open('', '_blank', 'width=1100,height=700');
+    win.document.write(html);
+    win.document.close();
+    showToast('success', 'History Ready', 'History export opened. Print / Save as PDF.');
+  } catch (e) {
+    showToast('error', 'Export Failed', 'Could not export certificate history.');
+  }
+}
+
+/* ── Export PDF ── */
+function exportPDF() {
+  const data = filteredData.length ? filteredData : CERTS;
+  const total = data.length;
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const end   = Math.min(start + PAGE_SIZE, total);
+  const pageData = data.slice(start, end);
+
+  const approvalColors = { approved:'#188918', pending:'#f57f17', rejected:'#bb0000' };
+  const dir = 'ltr';
+
+  const visibleCols = [
+    { key:'jobNumber',label: 'Job No.',          fn: c => c.jobNumber||'—' },
+    { key:'certId',   label: 'Cert ID',          fn: c => fmtCertId(c) },
+    { key:'name',     label: 'Certificate Name', fn: c => c.name },
+    { key:'certType', label: 'Type',             fn: c => c.certType + (c.liftingSubtype ? ' — ' + c.liftingSubtype : '') },
+    { key:'issuedBy', label: 'Issued By',        fn: c => c.issuedBy },
+    { key:'expiry',   label: 'Expiry Date',      fn: c => {
+        const days = getDaysToExpiry(c);
+        const color = days < 0 ? '#bb0000' : days <= 30 ? '#e76500' : '#188918';
+        return `<span style="color:${color};font-weight:700;">${c.expiryDate}</span>${days < 0 ? ` <span style="color:#bb0000;font-size:10px;">(${Math.abs(days)}d overdue)</span>` : days <= 30 ? ` <span style="color:#e76500;font-size:10px;">(${days}d left)</span>` : ''}`;
+      }
+    },
+    { key:'approval', label: 'Approval',         fn: c => {
+        const color = approvalColors[c.approvalStatus] || '#6a6d70';
+        return `<span style="font-weight:700;color:${color};">${c.approvalStatus}</span>`;
+      }
+    },
+    { key:'fileLink', label: 'Certificate Link', fn: c => {
+        if (!c.fileName) return '<span style="color:#a9b0b8;font-size:11px;">—</span>';
+        const url = (window._certUrls || {})[c.certId];
+        if (url) {
+          return `<a href="${url}" target="_blank" class="cert-link"
+            style="display:inline-flex;align-items:center;gap:5px;color:#0070f2;font-weight:600;font-size:11px;text-decoration:none;background:#e8f3ff;border:1px solid #90caf9;border-radius:4px;padding:3px 8px;white-space:nowrap;"
+            title="Open ${c.fileName}">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            ${c.fileName}
+            <svg width="9" height="9" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:.5;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          </a>`;
+        }
+        /* no data-URI yet (cert viewer not built) — still show a styled label */
+        return `<span style="display:inline-flex;align-items:center;gap:4px;color:#6a6d70;font-size:11px;background:#f5f6f7;border:1px solid #e8eaed;border-radius:4px;padding:3px 8px;white-space:nowrap;">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          ${c.fileName}
+        </span>`;
+      }
+    },
+    { key:'assetId',  label: 'Asset ID',         fn: c => c.assetId||'—' },
+    { key:'client',   label: 'Client',            fn: c => (CLIENTS_MAP[c.client]||c.client) + ' (' + c.client + ')' },
+  ].filter(col => {
+    if (col.key === 'name') return true;
+    const cb = document.getElementById('col_' + col.key);
+    return cb ? cb.checked : true;
+  });
+
+  const now     = new Date();
+  const dateStr = now.toLocaleDateString('en-GB', {year:'numeric',month:'long',day:'numeric'});
+  const timeStr = now.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'});
+
+  const theadCells = visibleCols.map(c =>
+    `<th style="background:#1d2d3e;color:#fff;padding:8px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;text-align:${dir==='rtl'?'right':'left'};">${c.label}</th>`
+  ).join('');
+
+  const tbodyRows = pageData.map((c, i) => {
+    const cells = visibleCols.map(col => {
+      return `<td style="padding:7px 10px;font-size:12px;border-bottom:1px solid #e8eaed;text-align:${dir==='rtl'?'right':'left'};">${col.fn(c)}</td>`;
+    }).join('');
+    const bg = i % 2 === 0 ? '#fff' : '#f9fafb';
+    return `<tr style="background:${bg};">${cells}</tr>`;
+  }).join('');
+
+  const filterNote = activeStatusFilter !== 'all'
+    ? `<span style="background:#f0faf0;color:#188918;border-radius:10px;padding:2px 9px;font-size:11px;font-weight:600;margin-left:8px;">Filter: ${activeStatusFilter}</span>` : '';
+
+  const html = `<!DOCTYPE html><html dir="ltr" lang="en">
+<head><meta charset="UTF-8"/>
+<title>Certificates – Rigways Group</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family: 'Inter','Arial', sans-serif; background:#fff; color:#32363a; padding:32px; }
+  a { color:#0070f2; text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  @media print {
+    body { padding:20px; }
+    button { display:none !important; }
+    .no-print { display:none !important; }
+    a { color:#0070f2 !important; }
+    /* Show the URL next to each link when printing to paper */
+    a[href]::after { content: ' (' attr(href) ')'; font-size:8px; color:#6a6d70; word-break:break-all; }
+    /* But don't expand the cert-link chips — keep them tidy */
+    a.cert-link::after { content: none; }
+    @page { margin:15mm; size:A4 landscape; }
+  }
+</style>
+</head><body>
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:3px solid #188918;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:36px;height:36px;background:#188918;border-radius:8px;display:flex;align-items:center;justify-content:center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#188918;text-transform:uppercase;letter-spacing:1px;">Rigways Group ACM</div>
+        <div style="font-size:18px;font-weight:800;color:#1d2d3e;">Certificate Report</div>
+      </div>
+    </div>
+    <div style="text-align:${dir==='rtl'?'left':'right'};font-size:11px;color:#6a6d70;">
+      <div style="font-weight:600;color:#32363a;">${dateStr}</div>
+      <div>${timeStr}</div>
+      <div style="margin-top:4px;">Total records <strong style="color:#188918;">${total}</strong> ${filterNote}</div>
+      <div>Current page ${start+1}–${end}</div>
+    </div>
+  </div>
+  <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr>${theadCells}</tr></thead>
+      <tbody>${tbodyRows}</tbody>
+    </table>
+  </div>
+  <div style="margin-top:20px;padding-top:12px;border-top:1px solid #e8eaed;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#a9b0b8;">
+    <span>Exported by Rigways Group ACM</span>
+    <span style="display:inline-flex;align-items:center;gap:5px;background:#e8f3ff;border:1px solid #90caf9;border-radius:4px;padding:3px 8px;color:#0070f2;font-size:10px;font-weight:600;">
+      <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Certificate links are clickable — click any link in the table to open the certificate
+    </span>
+    <span>${`${visibleCols.length} columns shown`}</span>
+  </div>
+  <div style="margin-top:16px;text-align:center;">
+    <button onclick="window.print()" style="padding:10px 28px;background:#188918;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">
+      🖨 Print / Save as PDF
+    </button>
+  </div>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=1000,height=700');
+  win.document.write(html);
+  win.document.close();
+  showToast('success',
+    'PDF Ready',
+    'Print window opened. Click "Print / Save as PDF".');
+}
+
+/* ── Export CSV ── */
+function exportCSV() {
+  const data = filteredData.length ? filteredData : CERTS;
+  const headers = ['Job Number','Cert ID','Name','Type','Lifting Sub-type','Issued By','Issue Date','Expiry Date','Approval','Asset ID','Customer ID','Client','Uploaded By','File'];
+  const rows = data.map(c => [
+    c.jobNumber||'', fmtCertId(c), c.name, c.certType, c.liftingSubtype||'', c.issuedBy, c.issueDate, c.expiryDate,
+    c.approvalStatus, c.assetId||'', c.client, CLIENTS_MAP[c.client]||'', c.uploadedBy, c.fileName
+  ].map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(','));
+  const csv  = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type:'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a'); a.href = url;
+  a.download = `certificates_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast('success',
+    'Exported',
+    `${data.length} certificates exported.`);
+}
+
+/* ── Toast ── */
+function showToast(type, title, msg) {
+  const icons = {
+    success:'<path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    error:'<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+    warning:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>',
+    info:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+  };
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `sap-toast sap-toast--${type}`;
+  t.innerHTML = `
+    <div class="sap-toast__icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${icons[type]}</svg></div>
+    <div class="sap-toast__body"><div class="sap-toast__title">${title}</div><div class="sap-toast__msg">${msg}</div></div>
+    <button class="sap-toast__close" onclick="this.parentElement.remove()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
+  c.appendChild(t);
+  setTimeout(() => { if (t.parentElement) t.remove(); }, 4500);
+}
+
+/* ═══════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════ */
+
+async function loadAssetDropdown() {
+  const sel = document.getElementById('f_assetId');
+  if (!sel) return;
+  try {
+    const res    = await apiFetch('/api/assets?limit=500');
+    const data   = await res.json();
+    const assets = (data.data?.assets || data.data || []);
+    sel.innerHTML = '<option value="">Select asset…</option>' +
+      assets.map(a => `<option value="${a.asset_number || a.id}">${a.asset_number || a.id} — ${a.name}</option>`).join('');
+  } catch(e) { sel.innerHTML = '<option value="">Could not load assets</option>'; }
+}
+
+async function loadInspectorDropdown(selectedValue) {
+  const sel = document.getElementById('f_issuedBy');
+  if (!sel) return;
+  // Only admin/manager can call GET /api/inspectors; for others keep existing options
+  if (!['admin', 'manager'].includes(session?.role)) return;
+  try {
+    const res  = await apiFetch('/api/inspectors?status=active&limit=200');
+    const data = await res.json();
+    const list = (data.data?.inspectors || data.data || []);
+    sel.innerHTML = '<option value="">Select inspector…</option>' +
+      list.map(i => {
+        const name = i.name || '';
+        const sel2 = selectedValue && (name === selectedValue) ? ' selected' : '';
+        return `<option value="${name}"${sel2}>${name}${i.title ? ' — ' + i.title : ''}</option>`;
+      }).join('');
+  } catch(e) { /* keep existing hardcoded options as fallback */ }
+}
+
+async function loadClientDropdown(selectedValue) {
+  if (!['admin', 'manager'].includes(session?.role)) return;
+  try {
+    const res  = await apiFetch('/api/clients?status=active&limit=200');
+    const data = await res.json();
+    const list = (data.data?.clients || data.data || []);
+
+    // Rebuild CLIENTS_MAP from live data
+    list.forEach(c => { CLIENTS_MAP[c.client_id || c.id] = c.name; });
+
+    const options = list.map(c => {
+      const val = c.client_id || c.id;
+      return `<option value="${val}">${c.name} (${val})</option>`;
+    }).join('');
+
+    // Populate toolbar filter, preserve current selection
+    const filterSel = document.getElementById('clientFilter');
+    if (filterSel) {
+      const cur = filterSel.value;
+      filterSel.innerHTML = '<option value="all">All Clients</option>' + options;
+      if (cur && cur !== 'all') filterSel.value = cur;
+    }
+
+    // Populate modal f_client, apply selectedValue if provided
+    const modalSel = document.getElementById('f_client');
+    if (modalSel) {
+      modalSel.innerHTML = '<option value="">Select client…</option>' + options;
+      if (selectedValue) modalSel.value = selectedValue;
+    }
+  } catch(e) { console.warn('Could not load clients:', e); }
+}
+
+async function loadCerts() {
+  try {
+    const [certRes, assetRes] = await Promise.all([
+      apiFetch('/api/certificates?limit=200').then(r => r.json()),
+      apiFetch('/api/assets?limit=500').then(r => r.json()),
+    ]);
+    const cd = certRes.data  || certRes;
+    const ad = assetRes.data || assetRes;
+    const assetMap = {};
+    (ad.assets || ad || []).forEach(a => { if (a.id) assetMap[a.id] = a.asset_number || a.id; });
+    window._assetMap = assetMap;
+    CERTS = (cd.certificates || cd || []).map(cert => ({
+      ...cert,
+      certId:          cert.cert_number || cert.id,
+      certType:        cert.cert_type,
+      approvalStatus:  cert.approval_status,
+      expiryDate:      cert.expiry_date,
+      issueDate:       cert.issue_date,
+      issuedBy:        cert.issued_by,
+      assetId:         assetMap[cert.asset_id] || cert.asset_id || '—',
+      client:          cert.client_id,
+      fileName:        cert.file_name || '',
+      fileUrl:         cert.file_url  || '',
+      rejectionReason: cert.rejection_reason || '',
+      jobNumber:       cert.notes || '',
+      uploadTime:      cert.created_at || '',   // full ISO timestamp for accurate 24hr window
+      uploadedBy:      cert.uploaded_by_username || cert.uploaded_by || '',
+      uploaded_by:     cert.uploaded_by || '',
+    }));
+    window._certUrls = {};
+    CERTS.forEach(cert => { if (cert.file_url) window._certUrls[cert.id] = cert.file_url; });
+  } catch(e) { CERTS = []; }
+  renderTable();
+  if (_pendingCertOpenId) {
+    const match = CERTS.find(c => c.id === _pendingCertOpenId || c.certId === _pendingCertOpenId);
+    if (match) {
+      openDrawer(match.certId);
+      _pendingCertOpenId = null;
+    }
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  session = getSession();
+  if (!session) return;
+  const role = session.role;
+  const lang = 'en';
+  applyLang(lang);
+  _pendingCertOpenId = new URLSearchParams(window.location.search).get('open');
+
+  /* Shell */
+  const initials = session.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  document.getElementById('shellAvatar').textContent = initials;
+  document.getElementById('menuUserName').textContent = session.name;
+  const rl = {admin:'Administrator',manager:'Manager',technician:'Technician',user:'Regular User'};
+  document.getElementById('menuUserRole').textContent = rl[role]||role;
+
+  if (role !== 'admin') {
+    document.getElementById('adminSection').style.display = 'none';
+    document.getElementById('adminClientsLink').style.display = 'none';
+  }
+  if (role !== 'admin' && role !== 'manager') {
+    const il = document.getElementById('inspectorsLink'); if (il) il.style.display = 'none';
+    const fl = document.getElementById('funcLocsLink'); if (fl) fl.style.display = 'none';
+  } else if (role === 'manager') {
+    const as = document.getElementById('adminSection'); if (as) as.style.display = '';
+    const fl2 = document.getElementById('funcLocsLink'); if (fl2) fl2.style.display = 'none';
+  }
+  if (role === 'admin' || role === 'manager') document.getElementById('clientFilter').style.display = 'inline-block';
+  if (role !== 'user') document.getElementById('notifBadge').style.display = 'block';
+
+  /* Subtitle */
+  document.getElementById('pageSubtitle').textContent = session.customerId
+    ? (`Your certificates — Client ${session.customerId}`)
+    : ('All certificates across clients');
+
+  /* Header actions */
+  const ha = document.getElementById('headerActions');
+  if (role === 'admin' || role === 'manager' || role === 'technician') {
+    ha.innerHTML = `<button class="btn btn-primary" onclick="openUploadModal()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
+      <span>Upload Certificate</span>
+    </button>`;
+    if (role === 'admin' || role === 'manager') {
+      ha.innerHTML += `<a href="notifications.html" class="btn btn-secondary">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>
+        <span>Expiry Alerts</span>
+      </a>`;
+    }
+  } else {
+    ha.innerHTML = `<span class="sap-badge sap-badge--neutral" style="font-size:12px;padding:6px 12px;">Read-Only View</span>`;
+  }
+
+  loadClientDropdown();
+  loadCerts(); // also calls syncCerts() inside
+  loadColState();
+
+  /* ESC key closes any open modal/drawer */
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const deleteModal = document.getElementById('certDeleteConfirmModal');
+    if (deleteModal?.classList.contains('open')) { closeCertDeleteModal(); return; }
+    const rejectMod = document.getElementById('rejectModal');
+    if (rejectMod?.classList.contains('open')) { closeRejectModal(); return; }
+    const certMod = document.getElementById('certModal');
+    if (certMod?.classList.contains('open')) { closeModal(); return; }
+    const drawer = document.getElementById('drawerOverlay');
+    if (drawer?.classList.contains('open')) { closeDrawer(); return; }
+  });
+});
+</script>
+</body>
+</html>
