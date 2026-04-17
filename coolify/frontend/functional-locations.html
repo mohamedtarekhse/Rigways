@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data: blob:;
+    connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787;
+    object-src 'none';
+    base-uri 'self';
+  "/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Functional Locations – Rigways Group</title>
+  <script src="app.js"></script>
+  <link rel="stylesheet" href="styles.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    .loc-type-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;}
+    .loc-type-badge--rig{background:#e8f3ff;color:#0070f2;border:1px solid #90caf9;}
+    .loc-type-badge--workshop{background:#fff3e0;color:#e76500;border:1px solid #ffcc80;}
+    .loc-type-badge--other{background:#f5f6f7;color:#6a6d70;border:1px solid #e8eaed;}
+    .loc-id-chip{font-family:monospace;font-size:11px;font-weight:700;background:var(--sap-page-bg);border:1px solid var(--sap-table-border);border-radius:4px;padding:2px 6px;color:var(--sap-brand);}
+    .client-dot-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--sap-page-bg);border:1px solid var(--sap-table-border);}
+    .client-dot-badge::before{content:'';width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+    .cell-check{width:36px;text-align:center;}
+    .sap-checkbox{width:16px;height:16px;accent-color:var(--sap-brand);cursor:pointer;}
+    .asset-pill{display:inline-flex;align-items:center;gap:4px;background:var(--sap-brand-light);border:1px solid var(--sap-info-border);border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;color:var(--sap-brand);text-decoration:none;transition:background .15s;}
+    .asset-pill:hover{background:#d0e8ff;text-decoration:none;}
+    .asset-pill svg{width:11px;height:11px;}
+    .loc-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--sp-md);}
+    .loc-card{background:var(--sap-card-bg);border:var(--sap-card-border);border-radius:var(--sap-card-radius);box-shadow:var(--sap-card-shadow);overflow:hidden;transition:box-shadow .2s,transform .2s;}
+    .loc-card:hover{box-shadow:0 6px 20px rgba(0,0,0,.1);transform:translateY(-2px);}
+    .loc-card__accent{height:3px;}
+    .loc-card__body{padding:var(--sp-md) var(--sp-lg);}
+    .loc-card__id{font-family:monospace;font-size:11px;font-weight:700;color:var(--sap-brand);margin-bottom:4px;}
+    .loc-card__name{font-size:16px;font-weight:800;color:var(--sap-text-primary);margin-bottom:4px;}
+    .loc-card__desc{font-size:12px;color:var(--sap-text-secondary);margin-bottom:8px;min-height:16px;}
+    .loc-card__footer{display:flex;align-items:center;justify-content:space-between;padding:var(--sp-sm) var(--sp-lg);background:#fafbfc;border-top:var(--sap-card-border);}
+    .view-toggle{display:flex;align-items:center;background:var(--sap-page-bg);border:1px solid var(--sap-table-border);border-radius:6px;padding:2px;gap:2px;}
+    .view-btn{width:30px;height:30px;border-radius:4px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--sap-text-secondary);transition:all .15s;}
+    .view-btn.active{background:#fff;color:var(--sap-brand);box-shadow:0 1px 4px rgba(0,0,0,.1);}
+    .view-btn svg{width:15px;height:15px;}
+    .filter-chips{display:flex;gap:6px;flex-wrap:wrap;}
+    .filter-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:16px;font-size:11px;font-weight:600;border:1px solid var(--sap-input-border);background:#fff;cursor:pointer;transition:all .15s;color:var(--sap-text-secondary);}
+    .filter-chip.active{background:var(--sap-brand);color:#fff;border-color:var(--sap-brand);}
+    .filter-chip:hover:not(.active){border-color:var(--sap-brand);color:var(--sap-brand);}
+    .filter-chip__dot{width:7px;height:7px;border-radius:50%;}
+    .mass-action-bar{display:none;align-items:center;gap:6px;padding:5px 12px;background:#e8f3ff;border-bottom:1px solid #90caf9;border-top:1px solid #90caf9;}
+    .mass-action-bar.visible{display:flex;}
+    .mass-action-bar__count{font-size:12px;font-weight:700;color:var(--sap-brand);white-space:nowrap;padding-right:6px;border-right:1px solid #90caf9;margin-right:2px;}
+    .mass-action-bar__spacer{flex:1;}
+    .mass-action-bar .btn{height:26px;font-size:11px;padding:0 9px;}
+    /* Read-only notice banner */
+    .readonly-banner{display:flex;align-items:center;gap:10px;padding:10px var(--sp-md);background:#f0faf0;border:1px solid var(--sap-success-border);border-radius:var(--sap-card-radius);margin-bottom:var(--sp-md);font-size:13px;color:var(--sap-success);font-weight:600;}
+    .readonly-banner svg{width:18px;height:18px;flex-shrink:0;}
+  
+  /* ── Rigways Logo ── */
+  .rigways-shell-logo {
+    height: 22px;
+    width: auto;
+    flex-shrink: 0;
+    /* Make logo white on dark shell header */
+    filter: brightness(0) invert(1);
+  }
+  .rigways-login-logo-dark {
+    height: 36px;
+    width: auto;
+    /* White version for dark backgrounds */
+    filter: brightness(0) invert(1);
+  }
+  .rigways-login-logo {
+    height: 32px;
+    width: auto;
+    /* Original colors for light backgrounds */
+  }
+
+  </style>
+</head>
+<body>
+
+<header class="sap-shell">
+  <a href="dashboard.html" class="sap-shell__logo">
+    <svg class="rigways-shell-logo" height="22" aria-label="Rigways Group" xmlns="http://www.w3.org/2000/svg"   viewBox="0 0 190.81 25.51"><defs><style>      .cls-1 {        fill: #231f20;      }      .cls-2 {        fill: #00aded;      }      .cls-3 {        fill: #2e3d54;      }    </style></defs><g  ><g><path class="cls-2" d="M74.28,0c0,.13-.08.18-.14.25-1.61,2.01-3.23,4.01-4.83,6.03-.14.17-.29.2-.48.2-18.2,0-36.39,0-54.59,0-1.71,0-3.08,1.43-2.97,3.11.09,1.42,1.26,2.6,2.67,2.71.28.02.56.03.84.03,7.99,0,15.99,0,23.98,0q.37,0,.37.38c0,4.16,0,8.31,0,12.47,0,.28-.08.33-.34.33-2.53-.01-5.06,0-7.59,0-.24,0-.32-.04-.31-.3.01-1.95,0-3.89.01-5.84,0-.24-.07-.29-.3-.29-3.64,0-7.28,0-10.92,0-.2,0-.35.06-.5.19-2.4,2.03-4.81,4.07-7.22,6.1-.11.09-.21.14-.35.14-3.83,0-7.65,0-11.48,0-.03,0-.05,0-.15-.02,3.1-2.56,6.17-5.09,9.23-7.62-2.24-.69-3.72-2.27-4.96-4.12-.69-1.03-1.15-2.15-1.37-3.37-.31-1.74-.1-3.43.65-5.03C4.85,2.55,7.07.88,10.06.2,10.72.05,11.4,0,12.08,0c20.65,0,41.3,0,61.95,0h.25Z"></path><path class="cls-3" d="M74.36,25.21c0,.25-.05.31-.3.31-5.81,0-11.62,0-17.43,0-3.24,0-6.25-.82-8.96-2.6-3.69-2.42-6-5.8-6.83-10.16-.15-.78-.2-1.56-.23-2.35,0-.17.02-.24.22-.24,2.77,0,5.55,0,8.32,0,.17,0,.22.05.23.22.04,1.02.2,2.02.6,2.97.87,2.07,2.29,3.63,4.3,4.66,1.38.71,2.84,1.01,4.38,1.01,2.43.01,4.87,0,7.31.01.26,0,.31-.08.3-.32-.02-.64-.02-1.28,0-1.92,0-.23-.06-.28-.28-.28-3.31,0-6.62,0-9.93,0-.17,0-.29-.04-.41-.18-1.71-2.02-3.42-4.03-5.13-6.04-.03-.03-.06-.07-.13-.16h.34c7.77,0,15.53,0,23.3,0,.26,0,.34.05.34.33-.01,4.92,0,9.84,0,14.75"></path><g><path class="cls-1" d="M91.12,10.1l-1.35-1.95h-1.49v1.95h-1.62V3.1h3.03c1.87,0,3.04.97,3.04,2.54,0,1.05-.53,1.82-1.44,2.21l1.57,2.25h-1.74ZM89.6,4.42h-1.32v2.44h1.32c.99,0,1.49-.46,1.49-1.22s-.5-1.22-1.49-1.22Z"></path><path class="cls-1" d="M94.21,3.1c0-.49.39-.87.97-.87s.97.36.97.84c0,.52-.39.9-.97.9s-.97-.38-.97-.87ZM94.4,4.72h1.56v5.38h-1.56v-5.38Z"></path><path class="cls-1" d="M103.46,4.72v4.48c0,2-1.08,2.92-3.02,2.92-1.02,0-2.01-.25-2.64-.74l.62-1.12c.46.37,1.21.61,1.9.61,1.1,0,1.58-.5,1.58-1.47v-.23c-.41.45-1,.67-1.7.67-1.49,0-2.69-1.03-2.69-2.6s1.2-2.6,2.69-2.6c.75,0,1.37.25,1.78.77v-.69h1.48ZM101.92,7.24c0-.79-.59-1.32-1.41-1.32s-1.42.53-1.42,1.32.6,1.32,1.42,1.32,1.41-.53,1.41-1.32Z"></path><path class="cls-1" d="M114.04,4.72l-1.95,5.38h-1.5l-1.21-3.34-1.25,3.34h-1.5l-1.94-5.38h1.47l1.27,3.64,1.32-3.64h1.32l1.28,3.64,1.31-3.64h1.38Z"></path><path class="cls-1" d="M120.04,7.03v3.07h-1.46v-.67c-.29.49-.85.75-1.64.75-1.26,0-2.01-.7-2.01-1.63s.67-1.61,2.31-1.61h1.24c0-.67-.4-1.06-1.24-1.06-.57,0-1.16.19-1.55.5l-.56-1.09c.59-.42,1.46-.65,2.32-.65,1.64,0,2.59.76,2.59,2.39ZM118.48,8.4v-.55h-1.07c-.73,0-.96.27-.96.63,0,.39.33.65.88.65.52,0,.97-.24,1.15-.73Z"></path><path class="cls-1" d="M127.29,4.72l-2.43,5.71c-.52,1.3-1.26,1.69-2.23,1.69-.55,0-1.15-.18-1.5-.49l.57-1.11c.24.21.57.34.88.34.43,0,.67-.19.88-.67l.02-.05-2.33-5.42h1.61l1.51,3.65,1.52-3.65h1.5Z"></path><path class="cls-1" d="M127.91,9.6l.52-1.12c.48.31,1.21.52,1.87.52.72,0,.99-.19.99-.49,0-.88-3.25.02-3.25-2.13,0-1.02.92-1.74,2.49-1.74.74,0,1.56.17,2.07.47l-.52,1.11c-.53-.3-1.06-.4-1.55-.4-.7,0-1,.22-1,.5,0,.92,3.25.03,3.25,2.15,0,1-.93,1.71-2.54,1.71-.91,0-1.83-.25-2.33-.58Z"></path><path class="cls-1" d="M142.41,6.49h1.48v2.84c-.77.58-1.83.89-2.83.89-2.2,0-3.82-1.51-3.82-3.62s1.62-3.62,3.85-3.62c1.23,0,2.25.42,2.93,1.21l-1.04.96c-.51-.54-1.1-.79-1.81-.79-1.36,0-2.29.91-2.29,2.24s.93,2.24,2.27,2.24c.44,0,.85-.08,1.26-.3v-2.05Z"></path><path class="cls-1" d="M149.12,4.64v1.44c-.13,0-.23-.02-.35-.02-.86,0-1.43.47-1.43,1.5v2.54h-1.56v-5.38h1.49v.71c.38-.52,1.02-.79,1.85-.79Z"></path><path class="cls-1" d="M150.19,7.41c0-1.62,1.25-2.77,2.96-2.77s2.95,1.15,2.95,2.77-1.24,2.77-2.95,2.77-2.96-1.15-2.96-2.77ZM154.52,7.41c0-.93-.59-1.49-1.37-1.49s-1.38.56-1.38,1.49.6,1.49,1.38,1.49,1.37-.56,1.37-1.49Z"></path><path class="cls-1" d="M163.06,4.72v5.38h-1.48v-.64c-.41.47-1.01.72-1.67.72-1.35,0-2.3-.76-2.3-2.42v-3.04h1.56v2.81c0,.9.4,1.3,1.09,1.3s1.24-.46,1.24-1.45v-2.66h1.56Z"></path><path class="cls-1" d="M170.86,7.41c0,1.69-1.17,2.77-2.68,2.77-.67,0-1.22-.21-1.62-.65v2.51h-1.56v-7.32h1.49v.62c.39-.47.97-.7,1.69-.7,1.51,0,2.68,1.08,2.68,2.77ZM169.29,7.41c0-.93-.59-1.49-1.37-1.49s-1.37.56-1.37,1.49.59,1.49,1.37,1.49,1.37-.56,1.37-1.49Z"></path></g><g><path class="cls-1" d="M86.31,18.6c0-2.05,1.58-3.58,3.73-3.58s3.71,1.52,3.71,3.58-1.58,3.58-3.71,3.58-3.73-1.53-3.73-3.58ZM92.75,18.6c0-1.55-1.16-2.69-2.71-2.69s-2.73,1.14-2.73,2.69,1.16,2.69,2.73,2.69,2.71-1.14,2.71-2.69Z"></path><path class="cls-1" d="M95.47,15.16c0-.35.28-.63.65-.63s.65.27.65.61c0,.36-.27.64-.65.64s-.65-.27-.65-.62ZM95.64,16.8h.96v5.3h-.96v-5.3Z"></path><path class="cls-1" d="M98.93,14.68h.96v7.42h-.96v-7.42Z"></path><path class="cls-1" d="M110.67,22.21l-.93-.93c-.61.59-1.41.9-2.34.9-1.42,0-2.45-.75-2.45-1.82,0-.86.49-1.46,1.7-2.15-.63-.63-.84-1.08-.84-1.6,0-.94.74-1.57,1.89-1.57,1.06,0,1.74.55,1.74,1.46,0,.71-.42,1.22-1.49,1.83l1.73,1.72c.19-.36.34-.78.43-1.27l.77.25c-.12.62-.33,1.16-.61,1.6l.94.94-.54.64ZM109.17,20.72l-1.99-1.98c-.98.55-1.29.96-1.29,1.52,0,.67.63,1.12,1.57,1.12.67,0,1.26-.22,1.71-.66ZM106.7,16.59c0,.36.14.62.71,1.2.92-.52,1.22-.84,1.22-1.28s-.33-.77-.93-.77c-.63,0-1,.35-1,.85Z"></path><path class="cls-1" d="M120.95,18.56h.96v2.73c-.7.59-1.67.89-2.65.89-2.15,0-3.73-1.51-3.73-3.58s1.58-3.58,3.75-3.58c1.11,0,2.05.37,2.69,1.08l-.62.62c-.58-.56-1.24-.81-2.03-.81-1.62,0-2.79,1.13-2.79,2.69s1.17,2.69,2.78,2.69c.59,0,1.14-.13,1.64-.45v-2.28Z"></path><path class="cls-1" d="M128.38,18.9v3.2h-.91v-.7c-.32.48-.91.76-1.74.76-1.2,0-1.96-.64-1.96-1.56,0-.85.55-1.55,2.13-1.55h1.52v-.19c0-.81-.47-1.28-1.42-1.28-.63,0-1.27.22-1.68.57l-.4-.72c.55-.44,1.34-.68,2.19-.68,1.45,0,2.27.7,2.27,2.15ZM127.42,20.48v-.74h-1.48c-.95,0-1.22.37-1.22.82,0,.53.44.86,1.17.86s1.29-.33,1.53-.94Z"></path><path class="cls-1" d="M129.99,21.54l.4-.76c.45.32,1.17.55,1.86.55.89,0,1.26-.27,1.26-.72,0-1.19-3.35-.16-3.35-2.27,0-.95.85-1.59,2.21-1.59.69,0,1.47.18,1.93.48l-.41.76c-.48-.31-1.01-.42-1.53-.42-.84,0-1.25.31-1.25.73,0,1.25,3.36.23,3.36,2.29,0,.96-.88,1.57-2.29,1.57-.88,0-1.75-.27-2.19-.62Z"></path><path class="cls-1" d="M138.93,18.6c0-2.07,1.58-3.58,3.71-3.58,1.08,0,2.02.37,2.66,1.09l-.65.63c-.54-.57-1.2-.83-1.97-.83-1.58,0-2.75,1.14-2.75,2.69s1.17,2.69,2.75,2.69c.77,0,1.43-.27,1.97-.84l.65.63c-.64.72-1.58,1.1-2.67,1.1-2.12,0-3.7-1.51-3.7-3.58Z"></path><path class="cls-1" d="M146.6,19.45c0-1.58,1.17-2.7,2.76-2.7s2.75,1.12,2.75,2.7-1.16,2.71-2.75,2.71-2.76-1.13-2.76-2.71ZM151.14,19.45c0-1.13-.76-1.86-1.78-1.86s-1.79.73-1.79,1.86.77,1.87,1.79,1.87,1.78-.74,1.78-1.87Z"></path><path class="cls-1" d="M162.73,19.05v3.05h-.96v-2.94c0-1.04-.5-1.55-1.37-1.55-.96,0-1.59.61-1.59,1.76v2.73h-.96v-2.94c0-1.04-.5-1.55-1.37-1.55-.96,0-1.59.61-1.59,1.76v2.73h-.96v-5.3h.92v.79c.38-.54,1.03-.84,1.83-.84s1.49.32,1.84.98c.4-.6,1.14-.98,2.04-.98,1.29,0,2.17.74,2.17,2.3Z"></path><path class="cls-1" d="M170.49,19.45c0,1.63-1.13,2.71-2.68,2.71-.75,0-1.41-.29-1.85-.86v2.74h-.96v-7.24h.92v.84c.43-.59,1.11-.89,1.89-.89,1.55,0,2.68,1.08,2.68,2.7ZM169.53,19.45c0-1.12-.77-1.86-1.79-1.86s-1.78.74-1.78,1.86.77,1.87,1.78,1.87,1.79-.74,1.79-1.87Z"></path><path class="cls-1" d="M176.53,18.9v3.2h-.91v-.7c-.32.48-.91.76-1.74.76-1.2,0-1.96-.64-1.96-1.56,0-.85.55-1.55,2.13-1.55h1.52v-.19c0-.81-.47-1.28-1.42-1.28-.63,0-1.27.22-1.68.57l-.4-.72c.55-.44,1.34-.68,2.19-.68,1.45,0,2.27.7,2.27,2.15ZM175.57,20.48v-.74h-1.48c-.95,0-1.22.37-1.22.82,0,.53.44.86,1.17.86s1.29-.33,1.53-.94Z"></path><path class="cls-1" d="M183.83,19.05v3.05h-.96v-2.94c0-1.04-.52-1.55-1.43-1.55-1.02,0-1.68.61-1.68,1.76v2.73h-.96v-5.3h.92v.8c.39-.54,1.07-.85,1.91-.85,1.29,0,2.2.74,2.2,2.3Z"></path><path class="cls-1" d="M190.81,16.8l-2.57,5.83c-.47,1.12-1.08,1.47-1.89,1.47-.51,0-1.03-.17-1.36-.49l.41-.72c.26.25.59.39.95.39.46,0,.75-.21,1.01-.82l.17-.37-2.34-5.29h1l1.85,4.24,1.83-4.24h.94Z"></path></g></g></g></svg>
+    <span class="sap-shell__logo-badge">ACM</span>
+  </a>
+  <div class="sap-shell__divider"></div>
+  <span class="sap-shell__app-title">Functional Locations</span>
+  <div class="sap-shell__spacer"></div>
+  <div class="sap-shell__actions">
+    <button class="sap-shell__btn" onclick="window.location.href='notifications.html'">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span class="sap-shell__badge" id="notifBadge" style="display:none;"></span>
+    </button>
+    <div class="sap-shell__avatar" id="shellAvatar" onclick="toggleUserMenu()">AD</div>
+  </div>
+  <div class="sap-user-menu" id="userMenu">
+    <div class="sap-user-menu__header">
+      <div class="sap-user-menu__name" id="menuUserName">Admin</div>
+      <div class="sap-user-menu__role" id="menuUserRole">Administrator</div>
+    </div>
+    <div class="sap-user-menu__item" onclick="window.location.href='dashboard.html'">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard
+    </div>
+    <div class="sap-user-menu__sep"></div>
+    <div class="sap-user-menu__item sap-user-menu__item--danger" onclick="logout()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign Out
+    </div>
+  </div>
+</header>
+
+<nav class="sap-navbar">
+  <div class="sap-navbar__inner">
+    <a href="dashboard.html" class="sap-nav-item"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard</a>
+    <a href="assets.html" class="sap-nav-item"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Assets</a>
+    <a href="certificates.html" class="sap-nav-item"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>Certificates</a>
+    <a href="notifications.html" class="sap-nav-item"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>Notifications</a>
+    <div class="sap-navbar__divider" id="adminDivider"></div>
+    <a href="clients.html" class="sap-nav-item sap-nav-item--admin" id="adminClientsLink"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Clients</a>
+    <a href="inspectors.html" class="sap-nav-item sap-nav-item--admin" id="inspectorsLink"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M9 12l2 2 4-4"/></svg>Inspectors</a>
+    <a href="functional-locations.html" class="sap-nav-item sap-nav-item--admin active" id="funcLocsLink"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>Func. Locations</a>
+  </div>
+</nav>
+
+<main class="sap-main" id="mainContent">
+  <div id="mainBody">
+
+    <!-- Page header -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:var(--sp-md);flex-wrap:wrap;gap:var(--sp-sm);">
+      <div>
+        <div class="sap-page-header__breadcrumb">
+          <a href="dashboard.html">Home</a><span>›</span><span>Functional Locations</span>
+        </div>
+        <div style="font-size:20px;font-weight:800;color:var(--sap-text-primary);margin-top:2px;">Functional Locations</div>
+        <div style="font-size:12px;color:var(--sap-text-secondary);margin-top:2px;" id="pageSubtitle">Manage rigs, workshops and other locations — grouped by client</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:var(--sp-sm);" id="headerActions">
+        <div class="view-toggle">
+          <button class="view-btn active" id="tableViewBtn" onclick="setView('table')" title="Table View"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>
+          <button class="view-btn" id="cardViewBtn" onclick="setView('card')" title="Card View"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
+        </div>
+        <button class="btn btn-primary" id="addLocBtn" onclick="openAddModal()">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Location
+        </button>
+      </div>
+    </div>
+
+    <!-- Read-only notice for non-admin/manager -->
+    <div class="readonly-banner" id="readonlyBanner" style="display:none;">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      Read-only view — showing your fleet locations only
+    </div>
+
+    <!-- KPIs -->
+    <div class="sap-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:var(--sp-md);">
+      <div class="sap-kpi sap-kpi--blue"><div class="sap-kpi__accent"></div><div class="sap-kpi__value" id="kpiTotal">0</div><div class="sap-kpi__label">Total Locations</div></div>
+      <div class="sap-kpi sap-kpi--green"><div class="sap-kpi__accent"></div><div class="sap-kpi__value" id="kpiRigs">0</div><div class="sap-kpi__label">Rigs</div></div>
+      <div class="sap-kpi sap-kpi--orange"><div class="sap-kpi__accent"></div><div class="sap-kpi__value" id="kpiWorkshops">0</div><div class="sap-kpi__label">Workshops</div></div>
+      <div class="sap-kpi sap-kpi--gray"><div class="sap-kpi__accent"></div><div class="sap-kpi__value" id="kpiOther">0</div><div class="sap-kpi__label">Other</div></div>
+    </div>
+
+    <!-- Filters -->
+    <div style="display:flex;align-items:center;gap:var(--sp-sm);margin-bottom:var(--sp-md);flex-wrap:wrap;">
+      <div class="filter-chips">
+        <div class="filter-chip active" onclick="filterType('all',this)">All</div>
+        <div class="filter-chip" onclick="filterType('Rig',this)"><span class="filter-chip__dot" style="background:#0070f2"></span>Rigs</div>
+        <div class="filter-chip" onclick="filterType('Workshop',this)"><span class="filter-chip__dot" style="background:#e76500"></span>Workshops</div>
+        <div class="filter-chip" onclick="filterType('Other',this)"><span class="filter-chip__dot" style="background:#9ea3a8"></span>Other</div>
+      </div>
+      <!-- Client filter — admin/manager only -->
+      <select class="sap-select" id="clientFilter" style="height:28px;font-size:12px;max-width:180px;display:none;" onchange="render()">
+        <option value="all">All Clients</option>
+      </select>
+      <div class="sap-search-box" style="width:220px;">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="searchInput" placeholder="Search locations…" oninput="render()"/>
+      </div>
+      <span style="font-size:12px;color:var(--sap-text-secondary);margin-left:auto;" id="locCount"></span>
+    </div>
+
+    <!-- TABLE VIEW -->
+    <div class="sap-card" id="tableView">
+      <div class="sap-toolbar" style="padding:6px 12px;border-bottom:1px solid var(--sap-table-border);gap:6px;">
+        <input type="checkbox" class="sap-checkbox" id="selectAllChk" onchange="toggleSelectAll(this)" style="margin-right:4px;"/>
+        <span class="sap-toolbar__title">Locations <span class="sap-toolbar__count" id="tableCount">0</span></span>
+        <div style="margin-left:auto;">
+          <button class="btn btn-ghost btn-sm" onclick="exportCSV()">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>CSV
+          </button>
+        </div>
+      </div>
+      <div class="mass-action-bar" id="massActionBar">
+        <span class="mass-action-bar__count" id="massCount">0 selected</span>
+        <div class="mass-action-bar__spacer"></div>
+        <button class="btn btn-danger" id="massDeleteBtn" onclick="massDelete()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>Delete Selected</button>
+        <button class="btn btn-ghost" onclick="clearSelection()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="12" height="12"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Deselect All</button>
+      </div>
+      <div class="sap-table-wrapper">
+        <table class="sap-table">
+          <thead><tr>
+            <th class="cell-check" id="thCheck"><input type="checkbox" class="sap-checkbox" onchange="toggleSelectAll(this)"/></th>
+            <th onclick="sortBy('id')" style="cursor:pointer;">Location ID <span class="sort-icon">↕</span></th>
+            <th onclick="sortBy('name')" style="cursor:pointer;">Location Name <span class="sort-icon">↕</span></th>
+            <th onclick="sortBy('type')" style="cursor:pointer;">Type <span class="sort-icon">↕</span></th>
+            <th onclick="sortBy('client')" style="cursor:pointer;" id="thClient">Client <span class="sort-icon">↕</span></th>
+            <th>Description</th>
+            <th>Assets</th>
+            <th class="cell-actions" id="thActions">Actions</th>
+          </tr></thead>
+          <tbody id="locTableBody"></tbody>
+        </table>
+        <div id="emptyState" class="sap-table__empty" style="display:none;">
+          <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <p>No functional locations found.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD VIEW -->
+    <div id="cardView" style="display:none;">
+      <div class="loc-card-grid" id="locCardGrid"></div>
+      <div id="emptyStateCard" style="display:none;text-align:center;padding:60px;color:var(--sap-text-secondary);">
+        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:48px;height:48px;margin:0 auto 12px;opacity:.3;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <p>No functional locations found.</p>
+      </div>
+    </div>
+
+  </div><!-- /mainBody -->
+</main>
+
+<!-- ADD / EDIT MODAL (admin only) -->
+<div class="sap-modal-overlay" id="locModal">
+  <div class="sap-modal sap-modal--sm">
+    <div class="sap-modal__header">
+      <div class="sap-modal__title"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg><span id="modalTitle">Add Functional Location</span></div>
+      <button class="sap-modal__close" onclick="closeModal()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="sap-modal__body">
+      <input type="hidden" id="editLocId"/>
+      <div style="display:flex;flex-direction:column;gap:var(--sp-md);">
+        <div class="sap-field">
+          <label class="sap-label">Location Name <span class="required">*</span></label>
+          <input type="text" id="f_loc_name" class="sap-input" placeholder="e.g. Rig 15 or Workshop D"/>
+        </div>
+        <div class="sap-field">
+          <label class="sap-label">Location Type <span class="required">*</span></label>
+          <select id="f_loc_type" class="sap-select">
+            <option value="Rig">Rig</option>
+            <option value="Workshop">Workshop</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="sap-field">
+          <label class="sap-label">Assigned Client <span class="required">*</span></label>
+          <select id="f_loc_client" class="sap-select">
+            <option value="">Select client…</option>
+          </select>
+        </div>
+        <div class="sap-field">
+          <label class="sap-label">Description</label>
+          <input type="text" id="f_loc_desc" class="sap-input" placeholder="e.g. Offshore jackup, Arabian Gulf Block 12"/>
+        </div>
+      </div>
+    </div>
+    <div class="sap-modal__footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLocation()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
+        <span id="saveBtnLabel">Save Location</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE MODAL -->
+<div class="sap-modal-overlay" id="deleteModal">
+  <div class="sap-modal sap-modal--sm">
+    <div class="sap-modal__header" style="background:var(--sap-error);">
+      <div class="sap-modal__title"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>Delete Location</div>
+      <button class="sap-modal__close" onclick="document.getElementById('deleteModal').classList.remove('open')"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="sap-modal__body">
+      <div class="sap-alert sap-alert--error mb-md"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg><div class="sap-alert__body">Assets assigned to this location will not be deleted, but their location reference will be unset.</div></div>
+      <p style="font-size:14px;" id="deleteMsg">Are you sure?</p>
+    </div>
+    <div class="sap-modal__footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('deleteModal').classList.remove('open')">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">Delete Location</button>
+    </div>
+  </div>
+</div>
+
+<div class="sap-toast-container" id="toastContainer"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   SECURITY UTILITIES
+═══════════════════════════════════════════════════════ */
+function h(s){if(s===null||s===undefined)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;').replace(/\//g,'&#x2F;');}
+function safeUrl(url){if(!url||typeof url!=='string')return null;try{const u=new URL(url);if(u.protocol!=='http:'&&u.protocol!=='https:')return null;return url;}catch{return null;}}
+function safeOpen(url){const safe=safeUrl(url);if(!safe){showToast('error','Invalid URL','Only http and https links can be opened.');return;}window.open(safe,'_blank','noopener,noreferrer');}
+
+/* ── State ── */
+let session = null;
+let sortCol = 'client'; let sortDir = 1;
+let activeTypeFilter = 'all';
+let filteredData = [];
+let deleteTargetId = null;
+let currentView = 'table';
+let canEdit = false; // true for admin only
+
+/* ── Shared store (same key as assets.html) ── */
+const FL_KEY = 'sap_functional_locations';
+const DEFAULT_FUNC_LOCS = [
+  { id:'FL-001', name:'Rig 7',      type:'Rig',      client:'C001', desc:'Jackup rig, Arabian Gulf' },
+  { id:'FL-002', name:'Rig 12',     type:'Rig',      client:'C002', desc:'Semi-submersible, Block 4' },
+  { id:'FL-003', name:'Workshop A', type:'Workshop', client:'C001', desc:'Main maintenance workshop' },
+  { id:'FL-004', name:'Workshop B', type:'Workshop', client:'C002', desc:'Heavy equipment workshop' },
+];
+let CLIENTS_MAP = {};
+
+/* ── Asset count per location ─────────────────────────────────
+   assets.html writes a minimal snapshot to sap_assets_data on
+   every renderTable() call. We fall back to DEFAULT_ASSETS if the
+   user hasn't visited assets.html yet in this browser session.
+────────────────────────────────────────────────────────────── */
+const ASSETS_SYNC_KEY = 'sap_assets_data';
+const DEFAULT_ASSETS = [
+  {assetId:'AST-0001', location:'Rig 7'},
+  {assetId:'AST-0002', location:'Rig 7'},
+  {assetId:'AST-0003', location:'Rig 7'},
+  {assetId:'AST-0004', location:'Rig 12'},
+  {assetId:'AST-0005', location:'Rig 12'},
+  {assetId:'AST-0006', location:'Workshop B'},
+  {assetId:'AST-0007', location:'Rig 7'},
+  {assetId:'AST-0008', location:'Rig 12'},
+  {assetId:'AST-0009', location:'Rig 7'},
+  {assetId:'AST-0010', location:'Rig 12'},
+  {assetId:'AST-0011', location:'Workshop A'},
+  {assetId:'AST-0012', location:'Rig 7'},
+  {assetId:'AST-0013', location:'Rig 12'},
+  {assetId:'AST-0014', location:'Rig 7'},
+  {assetId:'AST-0015', location:'Workshop B'},
+  {assetId:'AST-0016', location:'Rig 12'},
+  {assetId:'AST-0017', location:'Rig 7'},
+  {assetId:'AST-0018', location:'Workshop A'},
+];
+
+function loadAssets() {
+  try {
+    const s = localStorage.getItem(ASSETS_SYNC_KEY);
+    if (s) return JSON.parse(s);
+  } catch(e) {}
+  return DEFAULT_ASSETS;
+}
+
+function countAssetsForLoc(locName) {
+  return loadAssets().filter(a => a.location === locName).length;
+}
+let CLIENT_COLORS = {};
+let _clientsCache = null;
+
+let _locsCache = null;
+async function loadLocs() {
+  if (_locsCache) return _locsCache;
+  try {
+    const res = await apiFetch('/api/functional-locations?limit=200');
+    const data = await res.json();
+    const d = data.data || data;
+    _locsCache = (d.functional_locations || d || []).map(l => ({
+      ...l, id: l.fl_id || l.id, client: l.client_id || '', desc: l.notes || ''
+    }));
+  } catch(e) { _locsCache = DEFAULT_FUNC_LOCS || []; }
+  return _locsCache;
+}
+function saveLocs() {} /* handled by API */
+
+function hydrateClientMaps(clients) {
+  CLIENTS_MAP = {};
+  CLIENT_COLORS = {};
+  (clients || []).forEach(c => {
+    const id = c.client_id || c.id;
+    if (!id) return;
+    CLIENTS_MAP[id] = c.name || id;
+    CLIENT_COLORS[id] = c.color || '#6a6d70';
+  });
+}
+
+function fillClientSelects(clients) {
+  const clientFilter = document.getElementById('clientFilter');
+  const formSelect = document.getElementById('f_loc_client');
+  if (!clientFilter || !formSelect) return;
+
+  const currentFilter = clientFilter.value || 'all';
+  const currentForm = formSelect.value || '';
+
+  clientFilter.innerHTML = `<option value="all">All Clients</option>`;
+  formSelect.innerHTML = `<option value="">Select client…</option>`;
+  (clients || []).forEach(c => {
+    const id = c.client_id || c.id;
+    if (!id) return;
+    const label = `${c.name || id} (${id})`;
+    clientFilter.insertAdjacentHTML('beforeend', `<option value="${id}">${label}</option>`);
+    formSelect.insertAdjacentHTML('beforeend', `<option value="${id}">${label}</option>`);
+  });
+
+  clientFilter.value = [...clientFilter.options].some(o => o.value === currentFilter) ? currentFilter : 'all';
+  formSelect.value = [...formSelect.options].some(o => o.value === currentForm) ? currentForm : '';
+}
+
+async function loadClients() {
+  if (_clientsCache) return _clientsCache;
+  let clients = [];
+  try {
+    const res = await apiFetch('/api/clients?limit=500');
+    const payload = await res.json();
+    if (payload?.success) {
+      const wrapped = payload.data || payload;
+      clients = wrapped.clients || [];
+    }
+  } catch (e) {}
+  if (!clients.length) {
+    const locs = await loadLocs();
+    const uniq = new Map();
+    locs.forEach(l => {
+      if (!l.client) return;
+      if (!uniq.has(l.client)) uniq.set(l.client, { client_id: l.client, name: l.client, color: '#6a6d70' });
+    });
+    clients = [...uniq.values()];
+  }
+  _clientsCache = clients;
+  hydrateClientMaps(clients);
+  fillClientSelects(clients);
+  return clients;
+}
+
+/* ── Auth ── */
+/* Session helpers — delegate to SapSession from app.js */
+function getSession() {
+  if (typeof SapSession !== 'undefined') return SapSession.get();
+  try {
+    const s = sessionStorage.getItem('sap_session');
+    if (!s) { window.location.href = 'index.html'; return null; }
+    return JSON.parse(s);
+  } catch(e) { window.location.href = 'index.html'; return null; }
+}
+function logout() {
+  if (typeof SapSession !== 'undefined') { SapSession.logout(); return; }
+  const s = JSON.parse(sessionStorage.getItem('sap_session') || '{}');
+  fetch('/api/auth/logout', {
+    method: 'POST',
+    headers: s.token ? { 'Authorization': 'Bearer ' + s.token } : {},
+  }).catch(() => {});
+  sessionStorage.removeItem('sap_session');
+  window.location.href = 'index.html';
+}
+function toggleUserMenu() { document.getElementById('userMenu').classList.toggle('open'); }
+document.addEventListener('click', e => {
+  if (!e.target.closest('#shellAvatar') && !e.target.closest('#userMenu'))
+    document.getElementById('userMenu').classList.remove('open');
+});
+
+/* ── View toggle ── */
+function setView(v) {
+  currentView = v;
+  document.getElementById('tableView').style.display = v === 'table' ? 'block' : 'none';
+  document.getElementById('cardView').style.display  = v === 'card'  ? 'block' : 'none';
+  document.getElementById('tableViewBtn').classList.toggle('active', v === 'table');
+  document.getElementById('cardViewBtn').classList.toggle('active',  v === 'card');
+}
+
+/* ── Type config ── */
+const TYPE_CFG = {
+  'Rig':      { cls:'loc-type-badge--rig',      accent:'#0070f2' },
+  'Workshop': { cls:'loc-type-badge--workshop',  accent:'#e76500' },
+  'Other':    { cls:'loc-type-badge--other',     accent:'#9ea3a8' },
+};
+
+/* ── Render ── */
+function render() {
+  const search      = (document.getElementById('searchInput').value || '').toLowerCase();
+  const clientFilter= document.getElementById('clientFilter').value || 'all';
+  const role        = session?.role;
+  const myClientId  = session?.customerId;
+
+  let data = window._locsData || [];
+
+  /* Scope: user sees only their client's locations */
+  if (role === 'user' || role === 'technician') {
+    data = data.filter(l => l.client === myClientId);
+  } else if (clientFilter !== 'all') {
+    data = data.filter(l => l.client === clientFilter);
+  }
+
+  if (activeTypeFilter !== 'all') data = data.filter(l => l.type === activeTypeFilter);
+  if (search) data = data.filter(l =>
+    l.name.toLowerCase().includes(search) ||
+    l.id.toLowerCase().includes(search) ||
+    (l.desc||'').toLowerCase().includes(search) ||
+    (CLIENTS_MAP[l.client]||'').toLowerCase().includes(search)
+  );
+  data.sort((a, b) => {
+    const av = (a[sortCol]||'').toLowerCase();
+    const bv = (b[sortCol]||'').toLowerCase();
+    return av < bv ? -sortDir : av > bv ? sortDir : 0;
+  });
+  filteredData = data;
+
+  /* KPIs — based on visible data */
+  document.getElementById('kpiTotal').textContent     = data.length;
+  document.getElementById('kpiRigs').textContent      = data.filter(l=>l.type==='Rig').length;
+  document.getElementById('kpiWorkshops').textContent = data.filter(l=>l.type==='Workshop').length;
+  document.getElementById('kpiOther').textContent     = data.filter(l=>l.type==='Other').length;
+  document.getElementById('locCount').textContent     = `${data.length} location${data.length!==1?'s':''}`;
+  document.getElementById('tableCount').textContent   = data.length;
+
+  renderTable(data);
+  renderCards(data);
+}
+
+function clientBadge(clientId) {
+  const color = CLIENT_COLORS[clientId] || '#6a6d70';
+  const name  = CLIENTS_MAP[clientId]   || clientId;
+  return `<span class="client-dot-badge" style="--c:${color};border-color:${color}22;">
+    <span style="width:7px;height:7px;border-radius:50%;background:${color};flex-shrink:0;display:inline-block;"></span>
+    <span style="color:${color};">${name}</span>
+  </span>`;
+}
+
+function renderTable(data) {
+  const tbody = document.getElementById('locTableBody');
+  const empty = document.getElementById('emptyState');
+  if (!data.length) { tbody.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = data.map(loc => {
+    const cfg = TYPE_CFG[loc.type] || TYPE_CFG['Other'];
+    const actionBtns = canEdit ? `
+      <div style="display:flex;gap:3px;justify-content:flex-end;">
+        <button class="btn btn-secondary btn-icon" onclick="openEditModal('${loc.id}')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <button class="btn btn-danger btn-icon" onclick="openDeleteModal('${loc.id}')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button>
+      </div>` : '<span style="color:var(--sap-text-disabled);font-size:11px;">—</span>';
+
+    return `<tr onmouseenter="showRow(this)" onmouseleave="hideRow(this)">
+      <td class="cell-check">${canEdit ? `<input type="checkbox" class="sap-checkbox" data-id="${loc.id}" onchange="updateMassBar()"/>` : ''}</td>
+      <td><span class="loc-id-chip">${loc.id}</span></td>
+      <td>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+          <div style="font-weight:700;font-size:13px;">${loc.name}</div>
+          ${canEdit ? `<div class="row-actions" style="display:none;gap:3px;align-items:center;flex-shrink:0;">
+            <button class="btn btn-secondary btn-icon" onclick="openEditModal('${loc.id}')" style="width:26px;height:26px;"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+            <button class="btn btn-danger btn-icon" onclick="openDeleteModal('${loc.id}')" style="width:26px;height:26px;"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button>
+          </div>` : ''}
+        </div>
+      </td>
+      <td><span class="loc-type-badge ${cfg.cls}">${loc.type}</span></td>
+      <td>${clientBadge(loc.client)}</td>
+      <td style="font-size:12px;color:var(--sap-text-secondary);">${loc.desc||'—'}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px;">
+          ${(() => {
+            const n = countAssetsForLoc(loc.name);
+            return n > 0
+              ? `<span style="font-size:15px;font-weight:800;color:var(--sap-brand);">${n}</span>`
+              : `<span style="font-size:13px;font-weight:600;color:var(--sap-text-disabled);">0</span>`;
+          })()}
+          <a href="assets.html" class="asset-pill" title="View assets at ${loc.name}">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            View
+          </a>
+        </div>
+      </td>
+      <td class="cell-actions">${actionBtns}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderCards(data) {
+  const grid  = document.getElementById('locCardGrid');
+  const empty = document.getElementById('emptyStateCard');
+  if (!data.length) { grid.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display = 'none';
+  grid.innerHTML = data.map(loc => {
+    const cfg   = TYPE_CFG[loc.type] || TYPE_CFG['Other'];
+    const color = CLIENT_COLORS[loc.client] || '#6a6d70';
+    const cname = CLIENTS_MAP[loc.client]   || loc.client;
+    return `<div class="loc-card">
+      <div class="loc-card__accent" style="background:${cfg.accent};"></div>
+      <div class="loc-card__body">
+        <div class="loc-card__id">${loc.id}</div>
+        <div class="loc-card__name">${loc.name}</div>
+        <div class="loc-card__desc">${loc.desc||'No description provided'}</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span class="loc-type-badge ${cfg.cls}">${loc.type}</span>
+          <span style="font-size:11px;font-weight:700;color:${color};background:${color}11;border:1px solid ${color}33;border-radius:10px;padding:2px 8px;">
+            ${cname}
+          </span>
+        </div>
+      </div>
+      <div class="loc-card__footer">
+        <div style="display:flex;align-items:center;gap:6px;">
+          ${(() => {
+            const n = countAssetsForLoc(loc.name);
+            return `<span style="font-size:14px;font-weight:800;color:var(--sap-brand);">${n}</span>
+                    <span style="font-size:11px;color:var(--sap-text-secondary);font-weight:500;">${n===1?'asset':'assets'}</span>`;
+          })()}
+          <a href="assets.html" class="asset-pill" style="margin-left:4px;" title="View assets">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            View
+          </a>
+        </div>
+        ${canEdit ? `<div style="display:flex;gap:4px;">
+          <button class="btn btn-secondary btn-icon" onclick="openEditModal('${loc.id}')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+          <button class="btn btn-danger btn-icon" onclick="openDeleteModal('${loc.id}')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button>
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function showRow(r){const b=r.querySelector('.row-actions');if(b)b.style.display='flex';}
+function hideRow(r){const b=r.querySelector('.row-actions');if(b)b.style.display='none';}
+function sortBy(col){if(sortCol===col)sortDir*=-1;else{sortCol=col;sortDir=1;}render();}
+function filterType(val,el){activeTypeFilter=val;document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');render();}
+
+/* ── Selection (admin only) ── */
+function getSelectedIds(){return[...document.querySelectorAll('#locTableBody input[type="checkbox"]:checked')].map(cb=>cb.getAttribute('data-id'));}
+function toggleSelectAll(cb){document.querySelectorAll('#locTableBody input[type="checkbox"]').forEach(c=>c.checked=cb.checked);updateMassBar();}
+function updateMassBar(){
+  if(!canEdit) return;
+  const ids=getSelectedIds();const bar=document.getElementById('massActionBar');
+  if(!ids.length){bar.classList.remove('visible');return;}
+  bar.classList.add('visible');
+  document.getElementById('massCount').textContent=`${ids.length} selected`;
+}
+function clearSelection(){document.querySelectorAll('#locTableBody input[type="checkbox"]').forEach(c=>c.checked=false);const sc=document.getElementById('selectAllChk');if(sc)sc.checked=false;updateMassBar();}
+async function massDelete(){
+  if(!canEdit)return;
+  const ids=getSelectedIds();if(!ids.length)return;
+  if(!confirm(`Delete ${ids.length} location${ids.length>1?'s':''}? This cannot be undone.`))return;
+  try {
+    const results = await Promise.all(
+      ids.map(id => apiFetch('/api/functional-locations/' + id, { method:'DELETE' }).then(r => r.json()))
+    );
+    const failed = results.filter(r => !r.success);
+    if (failed.length) {
+      showToast('warning','Partial Delete',`${ids.length - failed.length} deleted, ${failed.length} failed.`);
+    } else {
+      showToast('success','Deleted',`${ids.length} location${ids.length>1?'s':''} deleted.`);
+    }
+    _locsCache = null;
+    const locs = await loadLocs();
+    window._locsData = locs;
+    clearSelection();
+    render();
+  } catch(e) {
+    showToast('error','Network Error','Could not delete locations. Please try again.');
+  }
+}
+
+/* ── Modal ── */
+function locDraftKey(){ const id=document.getElementById('editLocId')?.value||''; return id?`locs:edit:${id}`:'locs:add'; }
+function saveLocDraft(){ if(!window.SapDraft) return; SapDraft.save(locDraftKey(), { editLocId:document.getElementById('editLocId')?.value||'', f_loc_name:document.getElementById('f_loc_name')?.value||'', f_loc_type:document.getElementById('f_loc_type')?.value||'', f_loc_client:document.getElementById('f_loc_client')?.value||'', f_loc_desc:document.getElementById('f_loc_desc')?.value||'' }); }
+function restoreLocDraft(){ if(!window.SapDraft) return; const d=SapDraft.load(locDraftKey(),24*60*60*1000); if(d && confirm('A saved draft was found. Restore it?')) Object.entries(d).forEach(([k,v])=>{const el=document.getElementById(k); if(el) el.value=v;}); }
+function clearLocDraft(){ if(!window.SapDraft) return; const id=document.getElementById('editLocId')?.value||''; SapDraft.clear('locs:add'); if(id) SapDraft.clear(`locs:edit:${id}`); }
+function bindLocDraft(){ const m=document.getElementById('locModal'); if(!m||m.dataset.draftBound==='1') return; m.addEventListener('input',saveLocDraft); m.addEventListener('change',saveLocDraft); m.dataset.draftBound='1'; }
+function openAddModal(){
+  if(!canEdit)return;
+  document.getElementById('editLocId').value='';
+  document.getElementById('f_loc_name').value='';
+  document.getElementById('f_loc_type').value='Rig';
+  document.getElementById('f_loc_client').value='';
+  document.getElementById('f_loc_desc').value='';
+  document.getElementById('modalTitle').textContent='Add Functional Location';
+  document.getElementById('saveBtnLabel').textContent='Save Location';
+  bindLocDraft(); restoreLocDraft(); document.getElementById('locModal').classList.add('open');
+}
+function openEditModal(id){
+  if(!canEdit)return;
+  const loc=(window._locsData||[]).find(l=>l.id===id);if(!loc)return;
+  document.getElementById('editLocId').value=id;
+  document.getElementById('f_loc_name').value=loc.name;
+  document.getElementById('f_loc_type').value=loc.type;
+  document.getElementById('f_loc_client').value=loc.client||loc.client_id||'';
+  document.getElementById('f_loc_desc').value=loc.desc||loc.notes||'';
+  document.getElementById('modalTitle').textContent='Edit Functional Location';
+  document.getElementById('saveBtnLabel').textContent='Save Changes';
+  bindLocDraft(); restoreLocDraft(); document.getElementById('locModal').classList.add('open');
+}
+function closeModal(force){
+  if(!force && (document.getElementById('f_loc_name')?.value||'').trim() && !confirm('Close this modal? Draft will be kept for 24 hours and can be restored.')) return;
+  saveLocDraft();
+  document.getElementById('locModal').classList.remove('open');
+}
+async function saveLocation() {
+  const name   = document.getElementById('f_loc_name')?.value?.trim() || '';
+  const type   = document.getElementById('f_loc_type')?.value || 'Other';
+  const client = document.getElementById('f_loc_client')?.value || '';
+  const desc   = document.getElementById('f_loc_desc')?.value?.trim() || '';
+  const editId = document.getElementById('editLocId')?.value || '';
+  if (!name) { showToast('error','Required','Location name is required.'); return; }
+  if (!client) { showToast('error','Required','Assigned client is required.'); return; }
+  const payload = {
+    name, type,
+    client_id: client,
+    notes:     desc   || null,
+    fl_id:     editId ? undefined : ('FL-' + Date.now().toString().slice(-4)),
+    status:    'active',
+  };
+  try {
+    const url    = editId ? '/api/functional-locations/' + editId : '/api/functional-locations';
+    const method = editId ? 'PATCH' : 'POST';
+    const res    = await apiFetch(url, { method, body: JSON.stringify(payload) });
+    const data   = await res.json();
+    if (!data.success) { showToast('error','Save Failed',(data.data||data).error||'Could not save.'); return; }
+    showToast('success', editId ? 'Updated' : 'Added', '"' + name + '" saved.');
+    clearLocDraft();
+    closeModal(true);
+    _locsCache = null;
+    const locs = await loadLocs();
+    window._locsData = locs;
+    if (typeof render === 'function') render();
+  } catch(e) { showToast('error','Network Error','Could not save.'); }
+}
+
+/* ── Delete ── */
+function openDeleteModal(id){
+  if(!canEdit)return;
+  deleteTargetId=id;
+  const loc=(window._locsData||[]).find(l=>l.id===id);
+  document.getElementById('deleteMsg').textContent=`Delete "${loc?.name||id}"? This cannot be undone.`;
+  document.getElementById('deleteModal').classList.add('open');
+}
+async function confirmDelete() {
+  const loc = (window._locsData||[]).find(l => l.id === deleteTargetId);
+  document.getElementById('deleteModal')?.classList.remove('open');
+  try {
+    const res  = await apiFetch('/api/functional-locations/' + deleteTargetId, { method:'DELETE' });
+    const data = await res.json();
+    if (!data.success) { showToast('error','Failed',(data.data||data).error||'Could not delete.'); return; }
+    _locsCache = null;
+    window._locsData = (window._locsData||[]).filter(l => l.id !== deleteTargetId);
+    showToast('success','Deleted','"' + (loc?.name||deleteTargetId) + '" deleted.');
+    if (typeof render === 'function') render();
+  } catch(e) { showToast('error','Network Error','Could not delete.'); }
+}
+
+/* ── Export CSV ── */
+function exportCSV(){
+  const data=filteredData.length?filteredData:(window._locsData||[]);
+  const headers=['Location ID','Name','Type','Client ID','Client Name','Description'];
+  const rows=data.map(l=>[l.id,l.name,l.type,l.client||'',CLIENTS_MAP[l.client]||'',l.desc||''].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','));
+  const csv=[headers.join(','),...rows].join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`functional_locations_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();URL.revokeObjectURL(url);
+  showToast('success','Exported',`${data.length} locations exported.`);
+}
+
+/* ── Toast ── */
+function showToast(type,title,msg){
+  const icons={success:'<path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',error:'<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',warning:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>',info:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'};
+  const c=document.getElementById('toastContainer');const t=document.createElement('div');
+  t.className=`sap-toast sap-toast--${type}`;
+  t.innerHTML=`<div class="sap-toast__icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${icons[type]}</svg></div><div class="sap-toast__body"><div class="sap-toast__title">${title}</div><div class="sap-toast__msg">${msg}</div></div><button class="sap-toast__close" onclick="this.parentElement.remove()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
+  c.appendChild(t);setTimeout(()=>{if(t.parentElement)t.remove();},4500);
+}
+
+/* ── Init ── */
+document.addEventListener('DOMContentLoaded',()=>{
+  session=getSession();if(!session)return;
+  const role=session.role;
+
+  /* Role capabilities */
+  canEdit = (role === 'admin');
+
+  /* Shell */
+  const initials=session.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  document.getElementById('shellAvatar').textContent=initials;
+  document.getElementById('menuUserName').textContent=session.name;
+  const rl={admin:'Administrator',manager:'Manager',technician:'Technician',user:'Regular User'};
+  document.getElementById('menuUserRole').textContent=rl[role]||role;
+  if(role!=='user') document.getElementById('notifBadge').style.display='block';
+
+  /* Nav visibility */
+  if(role!=='admin'){
+    document.getElementById('adminDivider').style.display='none';
+    document.getElementById('adminClientsLink').style.display='none';
+  }
+  if(role!=='admin'&&role!=='manager'){
+    document.getElementById('inspectorsLink').style.display='none';
+  }
+  /* funcLocsLink stays visible for all who can see this page */
+
+  /* Hide edit controls for non-admin */
+  if(!canEdit){
+    document.getElementById('addLocBtn').style.display='none';
+    document.getElementById('massActionBar').style.display='none';
+    document.getElementById('massDeleteBtn').style.display='none';
+    document.getElementById('selectAllChk').style.display='none';
+    document.getElementById('thCheck').style.display='none';
+    document.getElementById('thActions').style.display='none';
+    document.getElementById('readonlyBanner').style.display='flex';
+  }
+
+  /* Hide client column + filter for scoped users */
+  if(role==='user'||role==='technician'){
+    document.getElementById('thClient').style.display='none';
+    document.getElementById('clientFilter').style.display='none';
+  } else {
+    /* Show client filter for admin/manager */
+    document.getElementById('clientFilter').style.display='inline-block';
+  }
+
+  /* Page subtitle for scoped user */
+  if(session.customerId&&(role==='user'||role==='technician')){
+    document.getElementById('pageSubtitle').textContent=
+      `Your fleet locations — ${CLIENTS_MAP[session.customerId]||session.customerId}`;
+  }
+
+  Promise.all([loadClients(), loadLocs()]).then(([, locs]) => {
+    window._locsData = locs;
+    render();
+  });
+
+  document.querySelectorAll('.sap-modal-overlay').forEach(o=>o.addEventListener('click',e=>{
+    if(e.target!==o) return;
+    if (o.id === 'locModal') closeModal();
+    else o.classList.remove('open');
+  }));
+  document.addEventListener('keydown',e=>{
+    if(e.key!=='Escape') return;
+    const locModal = document.getElementById('locModal');
+    if (locModal?.classList.contains('open')) { closeModal(); return; }
+    document.querySelectorAll('.sap-modal-overlay.open').forEach(o=>o.classList.remove('open'));
+  });
+});
+</script>
+</body>
+</html>
