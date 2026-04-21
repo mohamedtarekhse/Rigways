@@ -144,7 +144,7 @@
     </div>
   </div>
 
-  <div class="sap-card jobs-create-card" id="jobsCreateCard">
+  <div class="sap-card" id="jobsCreateCard">
     <div class="sap-form-grid sap-form-grid--2col">
       <div class="sap-field">
         <label class="sap-label">Job Number (optional)</label>
@@ -191,9 +191,6 @@
 <script>
 let session = null;
 let jobsReadOnly = false;
-let INSPECTORS = [];
-let SELECTED_INSPECTOR_IDS = [];
-let FUNCTIONAL_LOCATIONS = [];
 function getSession(){ return (typeof SapSession!=='undefined') ? SapSession.get() : JSON.parse(sessionStorage.getItem('sap_session')||'null'); }
 function logout(){ if (typeof SapSession !== 'undefined') return SapSession.logout(); sessionStorage.removeItem('sap_session'); location.href='/'; }
 function toggleUserMenu(){ document.getElementById('userMenu')?.classList.toggle('open'); }
@@ -331,12 +328,19 @@ function formatJobStatus(status) {
   return '<span class="sap-badge sap-badge--success">Open</span>';
 }
 
+function formatJobStatus(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'closed' || s === 'done' || s === 'technician_done') return '<span class="sap-badge sap-badge--neutral">Closed</span>';
+  if (s === 'reopened') return '<span class="sap-badge sap-badge--warning">Reopened</span>';
+  return '<span class="sap-badge sap-badge--success">Open</span>';
+}
+
 async function loadJobs(){
   const res = await apiFetch('/api/jobs?limit=200');
   const raw = await res.json();
   const jobs = (raw.data||raw).jobs || [];
   document.getElementById('jobsBody').innerHTML = jobs.map(j => `<tr>
-    <td>${j.job_number||''}</td><td>${j.client_id||''}</td><td>${j.functional_location||'—'}</td><td>${j.title||'—'}</td><td>${formatJobStatus(j.status)}</td>
+    <td>${j.job_number||''}</td><td>${j.client_id||''}</td><td>${formatJobStatus(j.status)}</td>
     <td>${jobsReadOnly
       ? '<span class="sap-badge sap-badge--neutral">View only</span>'
       : `<div class="jobs-actions">
@@ -406,8 +410,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   if (jobsReadOnly) {
     await loadJobs();
   } else {
-    setupInspectorPicker();
-    await Promise.all([loadFunctionalLocations(), loadClientsDropdown(), loadInspectorsDropdown(), loadJobs()]);
+    await Promise.all([loadClientsDropdown(), loadInspectorsDropdown(), loadJobs()]);
   }
 });
 </script>

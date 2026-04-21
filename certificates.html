@@ -1478,7 +1478,7 @@ async function massDelete() {
    UPLOAD / EDIT MODAL
 ═══════════════════════════════════════════════════════ */
 function certDraftKey(){ const id=document.getElementById('editCertId')?.value||''; return id?`certs:edit:${id}`:'certs:add'; }
-function collectCertDraft(){ return { editCertId:document.getElementById('editCertId')?.value||'', f_jobNumber:document.getElementById('f_jobNumber')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_certType:document.getElementById('f_certType')?.value||'', f_liftingSubtype:document.getElementById('f_liftingSubtype')?.value||'', f_relatedStandard:document.getElementById('f_relatedStandard')?.value||'', f_issuedBy:document.getElementById('f_issuedBy')?.value||'', f_issueDate:document.getElementById('f_issueDate')?.value||'', f_validityPeriod:document.getElementById('f_validityPeriod')?.value||'', f_expiryDate:document.getElementById('f_expiryDate')?.value||'', f_client:document.getElementById('f_client')?.value||'', f_functionalLocation:document.getElementById('f_functionalLocation')?.value||'', f_assetId:document.getElementById('f_assetId')?.value||'' }; }
+function collectCertDraft(){ return { editCertId:document.getElementById('editCertId')?.value||'', f_jobNumber:document.getElementById('f_jobNumber')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_certType:document.getElementById('f_certType')?.value||'', f_liftingSubtype:document.getElementById('f_liftingSubtype')?.value||'', f_issuedBy:document.getElementById('f_issuedBy')?.value||'', f_issueDate:document.getElementById('f_issueDate')?.value||'', f_expiryDate:document.getElementById('f_expiryDate')?.value||'', f_client:document.getElementById('f_client')?.value||'', f_assetId:document.getElementById('f_assetId')?.value||'' }; }
 function saveCertDraft(){ if(window.SapDraft) SapDraft.save(certDraftKey(), collectCertDraft()); }
 function restoreCertDraft(){ if(!window.SapDraft) return; const d=SapDraft.load(certDraftKey(),24*60*60*1000); if(d&&confirm('A saved draft was found. Restore it?')) Object.entries(d).forEach(([k,v])=>{const el=document.getElementById(k); if(el) el.value=v;}); onCertTypeChange(); onValidityPeriodChange(); }
 function clearCertDraft(){ if(!window.SapDraft) return; const id=document.getElementById('editCertId')?.value||''; SapDraft.clear('certs:add'); if(id) SapDraft.clear(`certs:edit:${id}`); }
@@ -2690,7 +2690,7 @@ function exportCSV() {
   const data = filteredData.length ? filteredData : CERTS;
   const headers = ['Job Number','Cert ID','Name','Type','Lifting Sub-type','Related Standard','Issued By','Issue Date','Expiry Date','Approval','Asset ID','Customer ID','Client','Uploaded By','File'];
   const rows = data.map(c => [
-    c.jobNumber||'', fmtCertId(c), c.name, c.certType, c.liftingSubtype||'', c.relatedStandard||'', c.issuedBy, c.issueDate, c.expiryDate,
+    c.jobNumber||'', fmtCertId(c), c.name, c.certType, c.liftingSubtype||'', c.issuedBy, c.issueDate, c.expiryDate,
     c.approvalStatus, c.assetId||'', c.client, CLIENTS_MAP[c.client]||'', c.uploadedBy, (c.fileName ? 'Attached' : '—')
   ].map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(','));
   const csv  = [headers.join(','), ...rows].join('\n');
@@ -2851,9 +2851,11 @@ async function loadClientDropdown(selectedValue) {
   } catch(e) { console.warn('Could not load clients:', e); }
 }
 
-async function loadFunctionalLocationDropdown(clientId, selectedValue) {
-  const sel = document.getElementById('f_functionalLocation');
-  if (!sel) return;
+async function loadJobDropdown(selectedJobNumber) {
+  const input = document.getElementById('f_jobNumber');
+  const list = document.getElementById('jobNumberList');
+  const hint = document.getElementById('jobSourceHint');
+  if (!input || !list) return;
   try {
     if (!ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL.length) {
       const res = await apiFetch('/api/functional-locations?limit=500');
@@ -2922,13 +2924,7 @@ async function loadCerts() {
     const cd = certRes.data  || certRes;
     const ad = assetRes.data || assetRes;
     const assetMap = {};
-    (ad.assets || ad || []).forEach(a => {
-      if (!a.id) return;
-      assetMap[a.id] = {
-        assetNumber: a.asset_number || a.id,
-        functionalLocation: a.functional_location || '',
-      };
-    });
+    (ad.assets || ad || []).forEach(a => { if (a.id) assetMap[a.id] = a.asset_number || a.id; });
     CERTS = (cd.certificates || cd || []).map(cert => {
       const rawType = String(cert.cert_type || '');
       const parts = rawType.split(' — ');
@@ -2944,10 +2940,8 @@ async function loadCerts() {
       expiryDate:      cert.expiry_date,
       issueDate:       cert.issue_date,
       issuedBy:        cert.issued_by,
-      relatedStandard: cert.related_standard || '',
-      assetId:         assetMap[cert.asset_id]?.assetNumber || cert.asset_number || '—',
+      assetId:         assetMap[cert.asset_id] || cert.asset_number || '—',
       assetUuid:       cert.asset_id || '',
-      functionalLocation: assetMap[cert.asset_id]?.functionalLocation || '',
       client:          cert.client_id,
       fileName:        cert.file_name || '',
       fileUrl:         cert.file_url  || '',
