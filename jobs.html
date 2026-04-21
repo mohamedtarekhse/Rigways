@@ -335,6 +335,13 @@ function formatJobStatus(status) {
   return '<span class="sap-badge sap-badge--success">Open</span>';
 }
 
+function formatJobStatus(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'closed' || s === 'done' || s === 'technician_done') return '<span class="sap-badge sap-badge--neutral">Closed</span>';
+  if (s === 'reopened') return '<span class="sap-badge sap-badge--warning">Reopened</span>';
+  return '<span class="sap-badge sap-badge--success">Open</span>';
+}
+
 async function loadJobs(){
   const res = await apiFetch('/api/jobs?limit=200');
   const raw = await res.json();

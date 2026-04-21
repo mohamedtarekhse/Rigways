@@ -2857,29 +2857,6 @@ async function loadJobDropdown(selectedJobNumber) {
   const hint = document.getElementById('jobSourceHint');
   if (!input || !list) return;
   try {
-    if (!ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL.length) {
-      const res = await apiFetch('/api/functional-locations?limit=500');
-      const raw = await res.json();
-      ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL = raw.data?.functional_locations || raw.data || [];
-    }
-    const rows = (ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL || []).filter(fl => {
-      if (!clientId) return false;
-      return String(fl.client_id || '') === String(clientId);
-    });
-    sel.innerHTML = '<option value="">Select functional location…</option>' +
-      rows.map(fl => `<option value="${fl.fl_id}">${fl.fl_id} — ${fl.name}</option>`).join('');
-    if (selectedValue && Array.from(sel.options).some(o => o.value === selectedValue)) sel.value = selectedValue;
-  } catch (e) {
-    sel.innerHTML = '<option value="">Could not load functional locations</option>';
-  }
-}
-
-async function loadJobDropdown(selectedJobNumber) {
-  const input = document.getElementById('f_jobNumber');
-  const list = document.getElementById('jobNumberList');
-  const hint = document.getElementById('jobSourceHint');
-  if (!input || !list) return;
-  try {
     const res = await apiFetch('/api/jobs?limit=200');
     const raw = await res.json();
     const rows = ((raw.data || raw).jobs || []).filter(j => ['active', 'reopened', 'technician_done'].includes(j.status));
