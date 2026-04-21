@@ -5,7 +5,7 @@ import { ok, created, badReq, unauth, forbidden, notFound, serverErr } from '../
 import { validate, pick, compact }           from '../utils/validate.js';
 import { sendPushToUser, sendPushToRoles }   from '../lib/web-push.js';
 
-const TYPES    = ['Quality','Safety','Inspection','Compliance','Technical','Environmental','Other'];
+const TYPES    = ['CAT III','CAT IV','ORIGINAL COC','LOAD TEST','LIFTING','NDT','TUBULAR'];
 const STATUSES = ['pending','approved','rejected'];
 
 export async function handleCertificates(request, env, path) {
@@ -103,8 +103,12 @@ export async function handleCertificates(request, env, path) {
       issued_by:   { required: true, type:'string', minLength:2, maxLength:200 },
       issue_date:  { required: true, type:'string', pattern:/^\d{4}-\d{2}-\d{2}$/ },
       expiry_date: { required: true, type:'string', pattern:/^\d{4}-\d{2}-\d{2}$/ },
+      related_standard: { required: false, type:'string', maxLength:200 },
     });
     if (!valid) return badReq(errors.join('; '),'VALIDATION',env);
+    if (body.cert_type === 'TUBULAR' && !String(body.related_standard || '').trim()) {
+      return badReq('Related standard is required for TUBULAR certificates','VALIDATION',env);
+    }
 
     // Verify asset exists
     const { data: aRows } = await db.from('assets', { filters: { 'id.eq': body.asset_id }, select:'id,client_id', limit:1 });
@@ -125,6 +129,7 @@ export async function handleCertificates(request, env, path) {
       file_name:       body.file_name || null,
       file_url:        body.file_url  || null,
       notes:           body.notes     || null,
+      related_standard: String(body.related_standard || '').trim() || null,
       approval_status: session.role === 'admin' ? 'approved' : 'pending',
       uploaded_by:     session.sub,
     });
@@ -161,9 +166,17 @@ export async function handleCertificates(request, env, path) {
     if (!isApprover && body.approval_status)
       return forbidden(env);
 
+    const nextCertType = body.cert_type || existing.cert_type;
+    const nextRelatedStandard = Object.prototype.hasOwnProperty.call(body, 'related_standard')
+      ? body.related_standard
+      : existing.related_standard;
+    if (nextCertType === 'TUBULAR' && !String(nextRelatedStandard || '').trim()) {
+      return badReq('Related standard is required for TUBULAR certificates','VALIDATION',env);
+    }
+
     const allowed = isApprover
-      ? ['name','cert_type','issued_by','issue_date','expiry_date','file_name','file_url','notes','approval_status','rejection_reason','inspector_id']
-      : ['name','cert_type','issued_by','issue_date','expiry_date','file_name','file_url','notes'];
+      ? ['name','cert_type','issued_by','issue_date','expiry_date','file_name','file_url','notes','approval_status','rejection_reason','inspector_id','related_standard']
+      : ['name','cert_type','issued_by','issue_date','expiry_date','file_name','file_url','notes','related_standard'];
 
     const update = compact({
       ...pick(body, allowed),
@@ -258,6 +271,7 @@ async function _recordCertificateHistory(db, cert, session, action) {
       cert_number: cert.cert_number || null,
       name: cert.name || null,
       cert_type: cert.cert_type || null,
+      related_standard: cert.related_standard || null,
       asset_id: cert.asset_id || null,
       client_id: cert.client_id || null,
       issued_by: cert.issued_by || null,

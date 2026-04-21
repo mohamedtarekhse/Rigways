@@ -4,8 +4,7 @@
    Supports: EN (LTR) | AR (RTL)
    ============================================================ */
 
-/* ---------- Google Font Fallback (SAP 72 substitute) ------- */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* ---------- Font stack (self/OS fonts first) ---------------- */
 
 /* ---------- CSS Custom Properties (SAP Horizon Palette) ----- */
 :root {

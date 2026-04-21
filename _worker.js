@@ -519,6 +519,7 @@ async function handleJobs(request, env, path) {
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
     const { valid, errors } = validate(body, {
       client_id: { required: true, type: 'string', minLength: 1, maxLength: 20 },
+      functional_location: { required: true, type: 'string', minLength: 1, maxLength: 50 },
       title: { required: false, type: 'string', maxLength: 200 },
       notes: { required: false, type: 'string', maxLength: 4000 },
     });
@@ -527,10 +528,19 @@ async function handleJobs(request, env, path) {
     const inspectorIds = Array.isArray(body.inspector_ids) ? body.inspector_ids.filter(Boolean) : [];
     if (!inspectorIds.length) return badReq('At least one inspector is required', 'VALIDATION', env);
 
+    const { data: flRows } = await db.from('functional_locations', {
+      filters: { 'fl_id.eq': body.functional_location, 'client_id.eq': body.client_id },
+      select: 'id,fl_id',
+      limit: 1,
+    });
+    const fl = Array.isArray(flRows) ? flRows[0] : flRows;
+    if (!fl) return badReq('functional_location must belong to selected client', 'VALIDATION', env);
+
     const jobNumber = String(body.job_number || '').trim() || buildJobNumber();
     const { data, error } = await db.insert('jobs', {
       job_number: jobNumber,
       client_id: body.client_id,
+      functional_location: body.functional_location,
       title: body.title || null,
       notes: body.notes || null,
       status: 'active',
@@ -579,7 +589,16 @@ async function handleJobs(request, env, path) {
       await addJobEvent(jobId, 'reopened', { reason: body.reason || null });
     } else {
       if (!isAdminOrManager) return forbidden(env);
-      patch = compact(pick(body, ['title', 'notes']));
+      patch = compact(pick(body, ['title', 'notes', 'functional_location']));
+      if (patch.functional_location) {
+        const { data: flRows } = await db.from('functional_locations', {
+          filters: { 'fl_id.eq': patch.functional_location, 'client_id.eq': existing.client_id },
+          select: 'id',
+          limit: 1,
+        });
+        const fl = Array.isArray(flRows) ? flRows[0] : flRows;
+        if (!fl) return badReq('functional_location must belong to selected client', 'VALIDATION', env);
+      }
     }
     patch.updated_at = new Date().toISOString();
     const { data, error } = await db.update('jobs', patch, { filters: { 'id.eq': jobId } });
