@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   job_number   TEXT NOT NULL UNIQUE,
   client_id    TEXT NOT NULL REFERENCES clients(client_id) ON DELETE RESTRICT,
+  functional_location TEXT,
   title        TEXT,
   status       TEXT NOT NULL DEFAULT 'active'
                CHECK (status IN ('active', 'technician_done', 'closed', 'reopened')),
@@ -20,6 +21,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_client  ON jobs (client_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_functional_location ON jobs (functional_location);
 CREATE INDEX IF NOT EXISTS idx_jobs_status  ON jobs (status);
 CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs (created_at DESC);
 
