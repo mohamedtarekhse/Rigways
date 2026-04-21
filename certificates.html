@@ -20,6 +20,7 @@
   <script src="app.js"></script>
   <link rel="stylesheet" href="styles.css"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://unpkg.com/feather-icons"></script>
   <style>
     /* ── Certificate page extras ── */
 
@@ -397,33 +398,51 @@
 <nav class="sap-navbar" id="navbar">
   <div class="sap-navbar__inner">
     <a href="assets.html" class="sap-nav-item">
-      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      <i data-feather="box"></i>
       <span>Assets</span>
     </a>
     <a href="certificates.html" class="sap-nav-item active">
-      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+      <i data-feather="award"></i>
       <span>Certificates</span>
       <span class="sap-nav-item__badge" id="sidebarBadge">5</span>
     </a>
+    <a href="jobs.html" class="sap-nav-item">
+      <i data-feather="briefcase"></i>
+      <span>Jobs</span>
+    </a>
+    <a href="files.html" class="sap-nav-item">
+      <i data-feather="folder"></i>
+      <span>Files</span>
+    </a>
+    <a href="reports.html" class="sap-nav-item">
+      <i data-feather="bar-chart-2"></i>
+      <span>Reports</span>
+    </a>
     <a href="notifications.html" class="sap-nav-item">
-      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <i data-feather="bell"></i>
       <span>Notifications</span>
     </a>
     <div class="sap-navbar__divider" id="adminSection"></div>
     <a href="clients.html" class="sap-nav-item sap-nav-item--admin" id="adminClientsLink">
-      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+      <i data-feather="users"></i>
       <span>Clients</span>
     </a>
     <a href="inspectors.html" class="sap-nav-item sap-nav-item--admin" id="inspectorsLink">
-      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M9 12l2 2 4-4"/></svg>
+      <i data-feather="check-square"></i>
       <span>Inspectors</span>
     </a>
     <a href="functional-locations.html" class="sap-nav-item sap-nav-item--admin" id="funcLocsLink">
-      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      <i data-feather="map-pin"></i>
       <span>Func. Locations</span>
     </a>
   </div>
 </nav>
+
+<script>
+  if (typeof feather !== 'undefined') {
+    feather.replace();
+  }
+</script>
 
 <!-- ═══════════════════════ MAIN ═══════════════════════ -->
 <main class="sap-main" id="mainContent">
