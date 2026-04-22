@@ -906,8 +906,8 @@ async function handleAssets(request, env, path) {
     });
     const certs = Array.isArray(relCerts) ? relCerts : [];
     for (const cert of certs) {
-      if (cert.file_url && env.CERT_BUCKET) {
-        try { await env.CERT_BUCKET.delete(cert.file_url); } catch (e) { console.warn('R2 delete warning:', e.message); }
+      if (cert.file_url && isStorageConfigured(env)) {
+        try { await deleteStorageObject(env, cert.file_url); } catch (e) { console.warn('Storage delete warning:', e.message); }
       }
     }
     await _deleteCertificateFileRecords(db, env, certs.map(c => c.id));
@@ -931,6 +931,167 @@ async function audit(db, session, table, id, action, before, after) {
   } catch (e) { console.warn('Audit failed:', e); }
 }
 
+// ── storage.js ──
+// Supports Cloudflare R2 (CERT_BUCKET) or Backblaze B2 (B2_* env vars).
+
+let __b2AuthCache = null;
+
+function isStorageConfigured(env) {
+  return !!env.CERT_BUCKET || !!(env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME);
+}
+
+function storageBackendLabel(env) {
+  if (env.CERT_BUCKET) return 'R2';
+  if (env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) return 'B2';
+  return 'none';
+}
+
+async function getB2Auth(env) {
+  if (!env.B2_KEY_ID || !env.B2_APP_KEY || !env.B2_BUCKET_ID || !env.B2_BUCKET_NAME) {
+    throw new Error('B2 is not fully configured');
+  }
+  const now = Date.now();
+  if (__b2AuthCache && (__b2AuthCache.expiresAt - now > 60_000)) return __b2AuthCache;
+
+  const basic = btoa(`${env.B2_KEY_ID}:${env.B2_APP_KEY}`);
+  const authRes = await fetch('https://api.backblazeb2.com/b2api/v2/b2_authorize_account', {
+    headers: { Authorization: `Basic ${basic}` },
+  });
+  if (!authRes.ok) throw new Error(`B2 authorize failed (${authRes.status})`);
+  const auth = await authRes.json();
+  __b2AuthCache = {
+    authorizationToken: auth.authorizationToken,
+    apiUrl: auth.apiUrl,
+    downloadUrl: auth.downloadUrl,
+    expiresAt: now + 23 * 60 * 60 * 1000,
+  };
+  return __b2AuthCache;
+}
+
+async function putStorageObject(env, key, body, contentType = 'application/octet-stream', metadata = {}) {
+  if (env.CERT_BUCKET) {
+    await env.CERT_BUCKET.put(key, body, {
+      httpMetadata: { contentType },
+      customMetadata: metadata,
+    });
+    return;
+  }
+
+  const auth = await getB2Auth(env);
+  const uploadUrlRes = await fetch(`${auth.apiUrl}/b2api/v2/b2_get_upload_url`, {
+    method: 'POST',
+    headers: {
+      Authorization: auth.authorizationToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ bucketId: env.B2_BUCKET_ID }),
+  });
+  if (!uploadUrlRes.ok) throw new Error(`B2 upload URL failed (${uploadUrlRes.status})`);
+  const uploadUrl = await uploadUrlRes.json();
+  const encodedName = encodeURIComponent(key);
+  const metaHeaders = Object.fromEntries(Object.entries(metadata || {}).map(([k, v]) => [`X-Bz-Info-${k}`, String(v ?? '')]));
+  const uploadRes = await fetch(uploadUrl.uploadUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: uploadUrl.authorizationToken,
+      'X-Bz-File-Name': encodedName,
+      'Content-Type': contentType,
+      'X-Bz-Content-Sha1': 'do_not_verify',
+      ...metaHeaders,
+    },
+    body,
+  });
+  if (!uploadRes.ok) throw new Error(`B2 upload failed (${uploadRes.status})`);
+}
+
+async function getStorageObject(env, key) {
+  if (env.CERT_BUCKET) {
+    const obj = await env.CERT_BUCKET.get(key);
+    if (!obj) return null;
+    return {
+      body: obj.body,
+      contentType: obj.httpMetadata?.contentType || 'application/octet-stream',
+      uploadedAt: obj.uploaded ? new Date(obj.uploaded).toISOString() : null,
+      size: obj.size ?? null,
+    };
+  }
+
+  const auth = await getB2Auth(env);
+  const fileName = encodeURIComponent(key);
+  const dlUrl = `${auth.downloadUrl}/file/${encodeURIComponent(env.B2_BUCKET_NAME)}/${fileName}`;
+  const res = await fetch(dlUrl, { headers: { Authorization: auth.authorizationToken } });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`B2 download failed (${res.status})`);
+  return {
+    body: res.body,
+    contentType: res.headers.get('content-type') || 'application/octet-stream',
+    uploadedAt: res.headers.get('x-bz-upload-timestamp')
+      ? new Date(Number(res.headers.get('x-bz-upload-timestamp'))).toISOString()
+      : null,
+    size: Number(res.headers.get('content-length') || '0') || null,
+  };
+}
+
+async function listStorageObjects(env, prefix = '', limit = 500) {
+  if (env.CERT_BUCKET) return env.CERT_BUCKET.list({ prefix, limit });
+
+  const auth = await getB2Auth(env);
+  const res = await fetch(`${auth.apiUrl}/b2api/v2/b2_list_file_names`, {
+    method: 'POST',
+    headers: {
+      Authorization: auth.authorizationToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      bucketId: env.B2_BUCKET_ID,
+      prefix,
+      maxFileCount: limit,
+    }),
+  });
+  if (!res.ok) throw new Error(`B2 list failed (${res.status})`);
+  const data = await res.json();
+  return {
+    objects: (data.files || []).map(f => ({
+      key: f.fileName,
+      size: f.size,
+      uploaded: f.uploadTimestamp ? new Date(f.uploadTimestamp).toISOString() : null,
+    })),
+    truncated: !!data.nextFileName,
+  };
+}
+
+async function deleteStorageObject(env, key) {
+  if (env.CERT_BUCKET) return env.CERT_BUCKET.delete(key);
+
+  const auth = await getB2Auth(env);
+  const listRes = await fetch(`${auth.apiUrl}/b2api/v2/b2_list_file_names`, {
+    method: 'POST',
+    headers: {
+      Authorization: auth.authorizationToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      bucketId: env.B2_BUCKET_ID,
+      startFileName: key,
+      maxFileCount: 1,
+    }),
+  });
+  if (!listRes.ok) throw new Error(`B2 find object failed (${listRes.status})`);
+  const listData = await listRes.json();
+  const found = (listData.files || [])[0];
+  if (!found || found.fileName !== key) return;
+
+  const delRes = await fetch(`${auth.apiUrl}/b2api/v2/b2_delete_file_version`, {
+    method: 'POST',
+    headers: {
+      Authorization: auth.authorizationToken,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ fileName: found.fileName, fileId: found.fileId }),
+  });
+  if (!delRes.ok) throw new Error(`B2 delete failed (${delRes.status})`);
+}
+
 // ── certificates.js ──
 // worker/src/routes/certificates.js
 
@@ -950,8 +1111,8 @@ async function handleCertUpload(request, env, path) {
 
   // ── POST /api/certificates/upload ──
   if (path === '/certificates/upload' && request.method === 'POST') {
-    if (!env.CERT_BUCKET) {
-      return json({ success: false, error: 'R2 bucket not configured. Add [[r2_buckets]] binding in wrangler.toml', code: 'NO_BUCKET' }, 500, env);
+    if (!isStorageConfigured(env)) {
+      return json({ success: false, error: 'Storage is not configured. Configure CERT_BUCKET (R2) or B2_* variables.', code: 'NO_BUCKET' }, 500, env);
     }
 
     let formData;
@@ -995,16 +1156,13 @@ async function handleCertUpload(request, env, path) {
     const fileBuffer = await file.arrayBuffer();
 
     try {
-      await env.CERT_BUCKET.put(key, fileBuffer, {
-        httpMetadata: { contentType: file.type },
-        customMetadata: {
-          originalName: file.name,
-          uploadedBy: session.sub,
-          username: session.username,
-          certNumber,
-          jobNumber,
-          clientId,
-        },
+      await putStorageObject(env, key, fileBuffer, file.type, {
+        originalName: file.name,
+        uploadedBy: session.sub,
+        username: session.username,
+        certNumber,
+        jobNumber,
+        clientId,
       });
     } catch (e) {
       console.error('R2 upload error:', e);
@@ -1017,8 +1175,8 @@ async function handleCertUpload(request, env, path) {
   // ── GET /api/certificates/file/:certId — get signed URL ──
   const fileMatch = path.match(/^\/certificates\/file\/([^/]+)$/);
   if (fileMatch && request.method === 'GET') {
-    if (!env.CERT_BUCKET) {
-      return json({ success: false, error: 'R2 bucket not configured', code: 'NO_BUCKET' }, 500, env);
+    if (!isStorageConfigured(env)) {
+      return json({ success: false, error: 'Storage is not configured', code: 'NO_BUCKET' }, 500, env);
     }
 
     const certId = fileMatch[1];
@@ -1040,10 +1198,10 @@ async function handleCertUpload(request, env, path) {
     // Proxy the file directly through the Worker — works on free plan, no signed URL needed.
     // The browser opens /api/certificates/file/:id and the Worker streams the bytes back.
     try {
-      const obj = await env.CERT_BUCKET.get(cert.file_url);
+      const obj = await getStorageObject(env, cert.file_url);
       if (!obj) return json({ success: false, error: 'File not found in storage', code: 'FILE_MISSING' }, 404, env);
 
-      const contentType = obj.httpMetadata?.contentType || 'application/octet-stream';
+      const contentType = obj.contentType || 'application/octet-stream';
       const disposition = contentType === 'application/pdf' || contentType.startsWith('image/')
         ? 'inline'
         : 'attachment';
@@ -1059,7 +1217,7 @@ async function handleCertUpload(request, env, path) {
         },
       });
     } catch (e) {
-      console.error('R2 get error:', e);
+      console.error('Storage get error:', e);
       return json({ success: false, error: 'Could not retrieve file: ' + e.message, code: 'STORAGE_ERROR' }, 500, env);
     }
   }
@@ -1096,13 +1254,15 @@ async function handleCertificates(request, env, path) {
 
   if (path === '/diag' && method === 'GET') {
     const checks = {
+      STORAGE_BACKEND: storageBackendLabel(env),
       SUPABASE_URL: !!env.SUPABASE_URL,
       SUPABASE_SERVICE_ROLE_KEY: !!env.SUPABASE_SERVICE_ROLE_KEY,
       JWT_SECRET: !!env.JWT_SECRET,
       VAPID_PRIVATE_KEY: !!env.VAPID_PRIVATE_KEY,
       VAPID_PUBLIC_KEY: !!env.VAPID_PUBLIC_KEY,
       CRON_SECRET: !!env.CRON_SECRET,
-      CERT_BUCKET: !!env.CERT_BUCKET
+      CERT_BUCKET: !!env.CERT_BUCKET,
+      B2_BUCKET: !!(env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME)
     };
 
     // Crypto Self-Test
@@ -1356,9 +1516,9 @@ async function handleCertificates(request, env, path) {
     if (['user', 'technician'].includes(session.role) && session.customerId && existing.client_id !== session.customerId)
       return forbidden(env);
 
-    if (existing.file_url && env.CERT_BUCKET) {
-      try { await env.CERT_BUCKET.delete(existing.file_url); }
-      catch (e) { console.warn('R2 delete warning:', e.message); }
+    if (existing.file_url && isStorageConfigured(env)) {
+      try { await deleteStorageObject(env, existing.file_url); }
+      catch (e) { console.warn('Storage delete warning:', e.message); }
     }
 
     const { data: updatedRows, error: updateErr } = await db.update('certificates', {
@@ -1400,9 +1560,9 @@ async function handleCertificates(request, env, path) {
       if (relErr) return serverErr(env);
       const related = Array.isArray(relRows) ? relRows : [];
       for (const cert of related) {
-        if (cert.file_url && env.CERT_BUCKET) {
-          try { await env.CERT_BUCKET.delete(cert.file_url); }
-          catch (e) { console.warn('R2 delete warning:', e.message); }
+        if (cert.file_url && isStorageConfigured(env)) {
+          try { await deleteStorageObject(env, cert.file_url); }
+          catch (e) { console.warn('Storage delete warning:', e.message); }
         }
         await _recordCertificateHistory(db, cert, session, 'record_deleted');
       }
@@ -1417,9 +1577,9 @@ async function handleCertificates(request, env, path) {
     }
 
     // Delete one certificate row
-    if (existing.file_url && env.CERT_BUCKET) {
-      try { await env.CERT_BUCKET.delete(existing.file_url); }
-      catch (e) { console.warn('R2 delete warning:', e.message); }
+    if (existing.file_url && isStorageConfigured(env)) {
+      try { await deleteStorageObject(env, existing.file_url); }
+      catch (e) { console.warn('Storage delete warning:', e.message); }
     }
     await _deleteCertificateFileRecords(db, env, [certId]);
     await _recordCertificateHistory(db, { ...existing, id: certId }, session, 'record_deleted');
@@ -1443,11 +1603,11 @@ async function handleFiles(request, env, path) {
 
   if (path === '/files' && method === 'GET') {
     const q = url.searchParams;
-    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    if (!isStorageConfigured(env)) return badReq('Storage is not configured', 'NO_BUCKET', env);
     const limit = Math.min(Math.max(parseInt(q.get('limit') || '500', 10), 1), 1000);
     const jobNumber = q.get('job_number') || '';
     const prefix = q.get('prefix') || '';
-    const listRes = await env.CERT_BUCKET.list({ prefix, limit });
+    const listRes = await listStorageObjects(env, prefix, limit);
     const objects = (listRes.objects || []);
 
     const { data: metaRows } = await db.from('certificate_files', { select: '*', filters: {}, limit: 5000, order: 'uploaded_at.desc' });
@@ -1512,7 +1672,7 @@ async function handleFiles(request, env, path) {
   }
 
   if (path === '/files/upload' && method === 'POST') {
-    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    if (!isStorageConfigured(env)) return badReq('Storage is not configured', 'NO_BUCKET', env);
     const form = await request.formData();
     const file = form.get('file');
     if (!(file instanceof File)) return badReq('file is required', 'MISSING_FILE', env);
@@ -1546,15 +1706,12 @@ async function handleFiles(request, env, path) {
     const nextVersion = ((existingRows || [])[0]?.version_no || 0) + 1;
     const key = `files/jobs/${jobNumber}/certificates/${certificateId}/v${nextVersion}_${Date.now()}_${base}.${ext}`;
 
-    await env.CERT_BUCKET.put(key, file.stream(), {
-      httpMetadata: { contentType: file.type || 'application/octet-stream' },
-      customMetadata: {
-        originalName: file.name,
-        uploadedBy: session.sub,
-        certificateId,
-        jobNumber,
-        version: String(nextVersion),
-      },
+    await putStorageObject(env, key, await file.arrayBuffer(), file.type || 'application/octet-stream', {
+      originalName: file.name,
+      uploadedBy: session.sub,
+      certificateId,
+      jobNumber,
+      version: String(nextVersion),
     });
 
     // Mark previous versions as non-current
@@ -1612,17 +1769,17 @@ async function handleFiles(request, env, path) {
   }
 
   if (path === '/files/object/download' && method === 'GET') {
-    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    if (!isStorageConfigured(env)) return badReq('Storage is not configured', 'NO_BUCKET', env);
     const key = url.searchParams.get('key') || '';
     const exp = parseInt(url.searchParams.get('exp') || '0', 10);
     const sig = url.searchParams.get('sig') || '';
     if (!key || !exp || exp < Math.floor(Date.now() / 1000)) return forbidden(env);
     const valid = await _verifyFileToken(env, key, exp, sig);
     if (!valid) return forbidden(env);
-    const obj = await env.CERT_BUCKET.get(key);
+    const obj = await getStorageObject(env, key);
     if (!obj) return notFound('file', env);
     const headers = new Headers();
-    headers.set('Content-Type', obj.httpMetadata?.contentType || 'application/octet-stream');
+    headers.set('Content-Type', obj.contentType || 'application/octet-stream');
     headers.set('Content-Disposition', `inline; filename=\"${(key.split('/').pop() || 'file').replace(/\"/g, '')}\"`);
     headers.set('Cache-Control', 'private, max-age=30');
     Object.entries(cors(env)).forEach(([k, v]) => headers.set(k, v));
@@ -1631,7 +1788,7 @@ async function handleFiles(request, env, path) {
   }
 
   if (path === '/files/object' && method === 'DELETE') {
-    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    if (!isStorageConfigured(env)) return badReq('Storage is not configured', 'NO_BUCKET', env);
     const key = url.searchParams.get('key') || '';
     const mode = (url.searchParams.get('mode') || 'hard').toLowerCase();
     if (!key) return badReq('key is required', 'MISSING_KEY', env);
@@ -1641,7 +1798,7 @@ async function handleFiles(request, env, path) {
       await db.update('certificate_files', { status: 'deleted', deleted_at: new Date().toISOString(), is_current: false }, { filters: { 'id.eq': row.id } });
       return ok({ key, deleted: true, mode: 'soft' }, env);
     }
-    try { await env.CERT_BUCKET.delete(key); } catch (e) { console.warn('R2 delete warning:', e.message); }
+    try { await deleteStorageObject(env, key); } catch (e) { console.warn('Storage delete warning:', e.message); }
     if (row?.id) await db.delete('certificate_files', { filters: { 'id.eq': row.id } }).catch(() => {});
     return ok({ key, deleted: true, mode: 'hard' }, env);
   }
@@ -1670,7 +1827,7 @@ async function handleFiles(request, env, path) {
     if (error || !rows?.length) return notFound('file', env);
     const row = rows[0];
     if (!row.r2_key || row.deleted_at || row.status === 'deleted') return notFound('file', env);
-    const obj = await env.CERT_BUCKET.get(row.r2_key);
+    const obj = await getStorageObject(env, row.r2_key);
     if (!obj) return notFound('file', env);
     const headers = new Headers();
     headers.set('Content-Type', row.mime_type || 'application/octet-stream');
@@ -1701,8 +1858,8 @@ async function handleFiles(request, env, path) {
     if (error || !rows?.length) return notFound('file', env);
     const row = rows[0];
     if (mode === 'hard') {
-      if (row.r2_key && env.CERT_BUCKET) {
-        try { await env.CERT_BUCKET.delete(row.r2_key); } catch (e) { console.warn('R2 delete warning', e.message); }
+      if (row.r2_key && isStorageConfigured(env)) {
+        try { await deleteStorageObject(env, row.r2_key); } catch (e) { console.warn('Storage delete warning', e.message); }
       }
       await db.delete('certificate_files', { filters: { 'id.eq': fileId } });
       return ok({ id: fileId, deleted: true, mode: 'hard' }, env);
@@ -1746,8 +1903,8 @@ async function _deleteCertificateFileRecords(db, env, certificateIds = []) {
   });
   const files = Array.isArray(rows) ? rows : [];
   for (const file of files) {
-    if (file.r2_key && env.CERT_BUCKET) {
-      try { await env.CERT_BUCKET.delete(file.r2_key); } catch (e) { console.warn('R2 delete warning:', e.message); }
+    if (file.r2_key && isStorageConfigured(env)) {
+      try { await deleteStorageObject(env, file.r2_key); } catch (e) { console.warn('Storage delete warning:', e.message); }
     }
   }
   await db.delete('certificate_files', { filters: { 'certificate_id.in': ids } }).catch(() => {});
@@ -1991,7 +2148,7 @@ async function handleInspectors(request, env, path) {
 
   if (path === '/inspectors/upload-file' && method === 'POST') {
     if (!requireRole(session, ['admin'])) return forbidden(env);
-    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    if (!isStorageConfigured(env)) return badReq('Storage is not configured', 'NO_BUCKET', env);
     let formData;
     try { formData = await request.formData(); } catch { return badReq('Invalid form data', 'BAD_FORM_DATA', env); }
     const file = formData.get('file');
@@ -2008,9 +2165,10 @@ async function handleInspectors(request, env, path) {
     const finalName = `${safeLabel}.${ext}`;
     const key = `inspectors/${category}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${finalName}`;
     try {
-      await env.CERT_BUCKET.put(key, await file.arrayBuffer(), {
-        httpMetadata: { contentType: file.type },
-        customMetadata: { originalName: file.name, uploadedBy: session.sub, category },
+      await putStorageObject(env, key, await file.arrayBuffer(), file.type, {
+        originalName: file.name,
+        uploadedBy: session.sub,
+        category,
       });
     } catch {
       return badReq('File upload failed', 'UPLOAD_FAILED', env);
@@ -2020,7 +2178,7 @@ async function handleInspectors(request, env, path) {
 
   if (path === '/inspectors/upload-cv' && method === 'POST') {
     if (!requireRole(session, ['admin'])) return forbidden(env);
-    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
+    if (!isStorageConfigured(env)) return badReq('Storage is not configured', 'NO_BUCKET', env);
     let formData;
     try { formData = await request.formData(); } catch { return badReq('Invalid form data', 'BAD_FORM_DATA', env); }
     const file = formData.get('file');
@@ -2032,9 +2190,9 @@ async function handleInspectors(request, env, path) {
     const safeName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9-_]+/g, '_').slice(0, 80) || 'cv';
     const key = `inspectors/cv/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeName}.${ext}`;
     try {
-      await env.CERT_BUCKET.put(key, await file.arrayBuffer(), {
-        httpMetadata: { contentType: file.type },
-        customMetadata: { originalName: file.name, uploadedBy: session.sub },
+      await putStorageObject(env, key, await file.arrayBuffer(), file.type, {
+        originalName: file.name,
+        uploadedBy: session.sub,
       });
     } catch {
       return badReq('CV upload failed', 'UPLOAD_FAILED', env);
@@ -2048,13 +2206,13 @@ async function handleInspectors(request, env, path) {
     const idFilter = fileId.includes('-') ? { 'id.eq': fileId } : { 'inspector_number.eq': fileId };
     const { data } = await db.from('inspectors', { filters: idFilter, select: 'id', limit: 1 });
     if (!(Array.isArray(data) ? data[0] : data)) return notFound('Inspector', env);
-    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
-    const obj = await env.CERT_BUCKET.get(key);
+    if (!isStorageConfigured(env)) return badReq('Storage is not configured', 'NO_BUCKET', env);
+    const obj = await getStorageObject(env, key);
     if (!obj) return notFound('File', env);
     const fileName = url.searchParams.get('name') || key.split('/').pop() || 'inspector-file';
     return new Response(obj.body, {
       headers: {
-        'Content-Type': obj.httpMetadata?.contentType || 'application/octet-stream',
+        'Content-Type': obj.contentType || 'application/octet-stream',
         'Content-Disposition': `inline; filename="${fileName}"`,
         ...cors(env),
         ...securityHeaders(request, env),
@@ -2068,12 +2226,12 @@ async function handleInspectors(request, env, path) {
     const insp = Array.isArray(data) ? data[0] : data;
     if (!insp) return notFound('Inspector', env);
     if (!insp.cv_url) return notFound('CV file', env);
-    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured', 'NO_BUCKET', env);
-    const obj = await env.CERT_BUCKET.get(insp.cv_url);
+    if (!isStorageConfigured(env)) return badReq('Storage is not configured', 'NO_BUCKET', env);
+    const obj = await getStorageObject(env, insp.cv_url);
     if (!obj) return notFound('CV file', env);
     return new Response(obj.body, {
       headers: {
-        'Content-Type': obj.httpMetadata?.contentType || 'application/octet-stream',
+        'Content-Type': obj.contentType || 'application/octet-stream',
         'Content-Disposition': `inline; filename="${insp.cv_file || 'inspector-cv'}"`,
         ...cors(env),
         ...securityHeaders(request, env),
@@ -2962,13 +3120,15 @@ export default {
       /* ── GET /api/diag ── Configuration Diagnostics */
       if (path === '/diag' && request.method === 'GET') {
         const checks = {
+      STORAGE_BACKEND: storageBackendLabel(env),
           SUPABASE_URL: !!env.SUPABASE_URL,
           SUPABASE_SERVICE_ROLE_KEY: !!env.SUPABASE_SERVICE_ROLE_KEY,
           JWT_SECRET: !!env.JWT_SECRET,
           VAPID_PRIVATE_KEY: !!env.VAPID_PRIVATE_KEY,
           VAPID_PUBLIC_KEY: !!env.VAPID_PUBLIC_KEY,
           CRON_SECRET: !!env.CRON_SECRET,
-          CERT_BUCKET: !!env.CERT_BUCKET
+          CERT_BUCKET: !!env.CERT_BUCKET,
+      B2_BUCKET: !!(env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME)
         };
         
         let cryptoTest = { ok: false };

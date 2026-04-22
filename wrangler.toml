@@ -30,3 +30,7 @@ CRON_WORKER_URL  = "https://rigways-cron.mohamedtarekhse.workers.dev"
 [[r2_buckets]]
 binding     = "CERT_BUCKET"
 bucket_name = "rigways-certs"
+
+# ── Backblaze B2 (optional alternative to R2) ──
+# Configure as secrets/vars in Cloudflare (do NOT commit real keys):
+# B2_KEY_ID, B2_APP_KEY, B2_BUCKET_ID, B2_BUCKET_NAME
