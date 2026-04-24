@@ -2818,6 +2818,34 @@ async function loadInspectorDropdown(selectedValue) {
   } catch(e) { /* keep existing hardcoded options as fallback */ }
 }
 
+async function loadFunctionalLocationDropdown(clientId, selectedValue) {
+  const sel = document.getElementById('f_functionalLocation');
+  if (!sel) return;
+  const cid = String(clientId || '').trim();
+  try {
+    const query = cid
+      ? '/api/functional-locations?status=active&client_id=' + encodeURIComponent(cid) + '&limit=500'
+      : '/api/functional-locations?status=active&limit=500';
+    const res = await apiFetch(query);
+    const raw = await res.json();
+    const rows = (raw.data?.functional_locations || raw.data || [])
+      .filter(fl => fl.status !== 'inactive')
+      .filter(fl => !cid || String(fl.client_id || '') === cid);
+
+    sel.innerHTML = '<option value="">Select functional location…</option>' +
+      rows.map(fl => `<option value="${fl.fl_id}">${fl.fl_id} — ${fl.name}</option>`).join('');
+
+    if (selectedValue && Array.from(sel.options).some(o => o.value === selectedValue)) {
+      sel.value = selectedValue;
+    } else {
+      sel.value = '';
+    }
+  } catch (e) {
+    sel.innerHTML = '<option value="">Could not load locations</option>';
+    sel.value = '';
+  }
+}
+
 async function loadClientDropdown(selectedValue) {
   if (session?.role === 'technician') {
     const modalSel = document.getElementById('f_client');
