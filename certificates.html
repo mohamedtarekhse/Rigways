@@ -2746,6 +2746,8 @@ function showToast(type, title, msg) {
    INIT
 ═══════════════════════════════════════════════════════ */
 
+let ALL_JOBS_FOR_CERT_MODAL = [];
+
 async function loadAssetDropdown() {
   const sel = document.getElementById('f_assetId');
   if (!sel) return;
@@ -2753,8 +2755,45 @@ async function loadAssetDropdown() {
     const res    = await apiFetch('/api/assets?limit=500');
     const data   = await res.json();
     ALL_ASSETS_FOR_MODAL = (data.data?.assets || data.data || []);
+    
+    // Load jobs for inspector-based filtering
+    try {
+      const jobsRes = await apiFetch('/api/jobs?limit=500');
+      const jobsData = await jobsRes.json();
+      ALL_JOBS_FOR_CERT_MODAL = ((jobsData.data || jobsData).jobs || []);
+    } catch(e) {
+      ALL_JOBS_FOR_CERT_MODAL = [];
+    }
+    
     applyAssetNarrowing();
   } catch(e) { sel.innerHTML = '<option value="">Could not load assets</option>'; }
+}
+
+function getInspectorAssignedAssetIds() {
+  // For inspectors, get asset IDs from their assigned jobs
+  if (!session || session.role !== 'technician') return null;
+  const inspectorName = (session.name || '').trim();
+  if (!inspectorName) return null;
+  
+  const assignedJobs = ALL_JOBS_FOR_CERT_MODAL.filter(j => 
+    (j.inspector_ids || []).includes(inspectorName) || 
+    (j.inspector_name && j.inspector_name === inspectorName)
+  );
+  
+  // Extract unique asset IDs from job notes or related data
+  const assetIds = new Set();
+  assignedJobs.forEach(j => {
+    // Try to extract asset ID from job notes or other fields
+    if (j.notes) {
+      const match = j.notes.match(/AST-\d+/i);
+      if (match) assetIds.add(match[0]);
+    }
+    // If job has direct asset reference
+    if (j.asset_id) assetIds.add(j.asset_id);
+    if (j.asset_number) assetIds.add(j.asset_number);
+  });
+  
+  return assetIds.size > 0 ? assetIds : null;
 }
 
 function applyAssetNarrowing() {
@@ -2763,9 +2802,24 @@ function applyAssetNarrowing() {
   const selectedClient = (document.getElementById('f_client')?.value || '').trim();
   const selectedFl = (document.getElementById('f_functionalLocation')?.value || '').trim();
   const currentValue = sel.value;
+  
+  // Get inspector-assigned asset IDs if technician
+  const inspectorAssetIds = getInspectorAssignedAssetIds();
+  const isInspector = session && session.role === 'technician';
+  
   const narrowed = (ALL_ASSETS_FOR_MODAL || []).filter(a => {
-    if (selectedClient && String(a.client_id || '') !== selectedClient) return false;
-    if (selectedFl && String(a.functional_location || '') !== selectedFl) return false;
+    // For Admins: show all assets matching client/location (no job filtering)
+    // For Inspectors: additionally filter by assigned jobs
+    const assetClient = String(a.client_id || a.client || '');
+    const assetFl = String(a.functional_location || a.location || '');
+    const assetId = String(a.asset_number || a.id || '');
+    
+    // Filter by Client
+    if (selectedClient && assetClient !== selectedClient) return false;
+    // Filter by Functional Location
+    if (selectedFl && assetFl !== selectedFl) return false;
+    // For inspectors, also filter by assigned jobs
+    if (isInspector && inspectorAssetIds && !inspectorAssetIds.has(assetId)) return false;
     return true;
   });
   sel.innerHTML = '<option value="">Select asset…</option>' +
