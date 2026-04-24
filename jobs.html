@@ -8,9 +8,19 @@
   <script src="app.js"></script>
   <script src="https://unpkg.com/feather-icons"></script>
   <style>
-    .jobs-create-card { padding: 16px; }
+    .jobs-create-card,
+    #jobsCreateCard {
+      padding: 20px 22px;
+    }
+    #jobsCreateCard .sap-form-grid {
+      padding: 2px 2px 0;
+    }
     .jobs-create-card .sap-form-grid { gap: 14px 16px; }
-    .jobs-create-card .sap-field { margin-bottom: 2px; }
+    .jobs-create-card .sap-field,
+    #jobsCreateCard .sap-field {
+      margin-bottom: 2px;
+      padding-inline: 2px;
+    }
     .jobs-create-card .sap-input,
     .jobs-create-card .sap-select {
       padding: 0 24px;
@@ -75,6 +85,15 @@
     .btn-sm { padding:4px 8px; font-size:12px; }
     .sap-btn-danger { background:#d32f2f; color:#fff; border:1px solid #b71c1c; }
     .sap-btn-danger:hover { background:#b71c1c; }
+    @media (max-width: 768px) {
+      .jobs-create-card,
+      #jobsCreateCard {
+        padding: 16px;
+      }
+      #jobsCreateCard .sap-form-grid {
+        padding: 0;
+      }
+    }
   </style>
 </head>
 <body class="jobs-page">
