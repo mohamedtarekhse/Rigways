@@ -2775,10 +2775,12 @@ function getInspectorAssignedAssetIds() {
   // For inspectors, get asset IDs from their assigned jobs
   if (!session || session.role !== 'technician') return null;
   const inspectorName = (session.name || '').trim();
+  const inspectorUserId = (session.userId || '').trim();
   if (!inspectorName) return null;
   
   const assignedJobs = ALL_JOBS_FOR_CERT_MODAL.filter(j => 
-    (j.inspector_ids || []).includes(inspectorName) || 
+    (j.inspector_ids || []).includes(inspectorName) ||
+    (inspectorUserId && (j.inspector_ids || []).includes(inspectorUserId)) ||
     (j.inspector_name && j.inspector_name === inspectorName)
   );
   
@@ -2814,14 +2816,20 @@ function applyAssetNarrowing() {
     // For Inspectors: additionally filter by assigned jobs
     const assetClient = String(a.client_id || a.client || '');
     const assetFl = String(a.functional_location || a.location || '');
-    const assetId = String(a.asset_number || a.id || '');
+    const assetNumber = String(a.asset_number || '').trim();
+    const assetUuid = String(a.id || '').trim();
     
     // Filter by Client
     if (selectedClient && assetClient !== selectedClient) return false;
     // Filter by Functional Location
     if (selectedFl && assetFl !== selectedFl) return false;
     // For inspectors, also filter by assigned jobs
-    if (isInspector && inspectorAssetIds && !inspectorAssetIds.has(assetId)) return false;
+    if (
+      isInspector &&
+      inspectorAssetIds &&
+      !inspectorAssetIds.has(assetNumber) &&
+      !inspectorAssetIds.has(assetUuid)
+    ) return false;
     return true;
   });
   sel.innerHTML = '<option value="">Select asset…</option>' +
