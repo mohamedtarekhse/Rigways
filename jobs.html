@@ -11,6 +11,11 @@
     .jobs-create-card { padding: 16px; }
     .jobs-create-card .sap-form-grid { gap: 14px 16px; }
     .jobs-create-card .sap-field { margin-bottom: 2px; }
+    .jobs-create-card .sap-input,
+    .jobs-create-card .sap-select {
+      padding: 0 12px;
+      height: 38px;
+    }
     .inspector-picker { position: relative; }
     .inspector-picker__input {
       width: 100%;
@@ -192,6 +197,9 @@
 <script>
 let session = null;
 let jobsReadOnly = false;
+let FUNCTIONAL_LOCATIONS = [];
+let INSPECTORS = [];
+let SELECTED_INSPECTOR_IDS = [];
 function getSession(){ return (typeof SapSession!=='undefined') ? SapSession.get() : JSON.parse(sessionStorage.getItem('sap_session')||'null'); }
 function logout(){ if (typeof SapSession !== 'undefined') return SapSession.logout(); sessionStorage.removeItem('sap_session'); location.href='/'; }
 function toggleUserMenu(){ document.getElementById('userMenu')?.classList.toggle('open'); }
@@ -418,7 +426,8 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   if (jobsReadOnly) {
     await loadJobs();
   } else {
-    await Promise.all([loadClientsDropdown(), loadInspectorsDropdown(), loadJobs()]);
+    await Promise.all([loadClientsDropdown(), loadFunctionalLocations(), loadInspectorsDropdown(), loadJobs()]);
+    setupInspectorPicker();
   }
 });
 </script>
