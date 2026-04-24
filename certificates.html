@@ -662,6 +662,39 @@
         <input type="hidden" id="editUploadTime"/>
 
         <div class="sap-form-grid sap-form-grid--2col">
+          <!-- ═══════════ HIERARCHICAL SELECTION: Client → Functional Location → Asset ═══════════ -->
+          <!-- Client -->
+          <div class="sap-field" id="f_client_wrap">
+            <label class="sap-label">Linked Client <span class="required">*</span></label>
+            <select id="f_client" class="sap-select" onchange="onClientChangeForAssetNarrowing()">
+              <option value="">Select client…</option>
+            </select>
+          </div>
+
+          <!-- Functional Location -->
+          <div class="sap-field" id="f_functionalLocation_wrap">
+            <label class="sap-label">Functional Location <span class="required">*</span></label>
+            <select id="f_functionalLocation" class="sap-select" onchange="onFunctionalLocationChangeForAssetNarrowing()">
+              <option value="">Select functional location…</option>
+            </select>
+          </div>
+
+          <!-- Linked Asset -->
+          <div class="sap-field">
+            <label class="sap-label">Linked Asset ID</label>
+            <select id="f_assetId" class="sap-select" onchange="onAssetChangeForJob(this.value)">
+              <option value="">Select asset…</option>
+              <option value="AST-0001">AST-0001 – Server Rack #01</option>
+              <option value="AST-0002">AST-0002 – HVAC Unit #01</option>
+              <option value="AST-0003">AST-0003 – Generator #01</option>
+              <option value="AST-0004">AST-0004 – Forklift #03</option>
+              <option value="AST-0005">AST-0005 – Fire Panel #01</option>
+              <option value="AST-0006">AST-0006 – Pump Station #2</option>
+              <option value="AST-0007">AST-0007 – UPS System #01</option>
+              <option value="AST-0008">AST-0008 – Crane #01</option>
+            </select>
+          </div>
+
           <!-- Job Number -->
           <div class="sap-field">
             <label class="sap-label">Job Number <span class="required">*</span></label>
@@ -748,37 +781,6 @@
             <div style="font-size:11px;color:var(--sap-text-secondary);margin-top:4px;">
               Auto-calculated from Issue Date + Validity Period.
             </div>
-          </div>
-
-          <!-- Linked Asset -->
-          <div class="sap-field">
-            <label class="sap-label">Linked Asset ID</label>
-            <select id="f_assetId" class="sap-select" onchange="onAssetChangeForJob(this.value)">
-              <option value="">Select asset…</option>
-              <option value="AST-0001">AST-0001 – Server Rack #01</option>
-              <option value="AST-0002">AST-0002 – HVAC Unit #01</option>
-              <option value="AST-0003">AST-0003 – Generator #01</option>
-              <option value="AST-0004">AST-0004 – Forklift #03</option>
-              <option value="AST-0005">AST-0005 – Fire Panel #01</option>
-              <option value="AST-0006">AST-0006 – Pump Station #2</option>
-              <option value="AST-0007">AST-0007 – UPS System #01</option>
-              <option value="AST-0008">AST-0008 – Crane #01</option>
-            </select>
-          </div>
-
-          <!-- Client -->
-          <div class="sap-field" id="f_client_wrap">
-            <label class="sap-label">Linked Client <span class="required">*</span></label>
-            <select id="f_client" class="sap-select" onchange="onClientChangeForAssetNarrowing()">
-              <option value="">Select client…</option>
-            </select>
-          </div>
-
-          <div class="sap-field" id="f_functionalLocation_wrap">
-            <label class="sap-label">Functional Location <span class="required">*</span></label>
-            <select id="f_functionalLocation" class="sap-select" onchange="onFunctionalLocationChangeForAssetNarrowing()">
-              <option value="">Select functional location…</option>
-            </select>
           </div>
 
         </div><!-- /grid -->
