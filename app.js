@@ -1,6 +1,6 @@
 /**
  * ================================================================
- *  Rigways ACM - Asset & Certificate Management System
+ *  SAP S/4HANA – Asset & Certificate Management System
  *  app.js  –  Shared Application Core  v1.0
  * ================================================================
  *  Modules:
@@ -25,7 +25,7 @@
    1. CONFIG
 ================================================================ */
 const SAP_CONFIG = {
-  APP_NAME:    'Rigways ACM',
+  APP_NAME:    'SAP S/4HANA ACM',
   APP_VERSION: '1.0.0',
   SUPPORTED_LANGS: ['en'],
   DEFAULT_LANG:    'en',
@@ -54,7 +54,6 @@ const SAP_CONFIG = {
 
   /* Navigation items (ordered) */
   NAV: [
-    { id:'dashboard',     href:'dashboard.html',     iconKey:'chart',  en:'Command Center', ar:'Command Center', roles:['admin','manager','technician','user'] },
     { id:'assets',        href:'assets.html',        iconKey:'asset',  en:'Assets',        ar:'الأصول',       roles:['admin','manager','technician','user'] },
     { id:'certificates',  href:'certificates.html',  iconKey:'cert',   en:'Certificates',  ar:'الشهادات',     roles:['admin','manager','technician','user'] },
     { id:'jobs',          href:'jobs.html',          iconKey:'chart',  en:'Jobs',          ar:'الوظائف',      roles:['admin','manager','technician'] },
@@ -985,236 +984,8 @@ const SapEventBus = (() => {
 })();
 
 /* ================================================================
-   14. OPERATIONS UX HELPERS
-================================================================ */
-const SapOps = (() => {
-  function esc(value) {
-    return String(value ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
-  async function loadJson(path, options = {}) {
-    const res = await apiFetch(path, options);
-    let body = null;
-    try { body = await res.json(); } catch (e) {}
-    if (!res.ok || body?.success === false) {
-      const error = new Error(body?.error || `Request failed (${res.status})`);
-      error.status = res.status;
-      error.body = body;
-      throw error;
-    }
-    return body?.data ?? body;
-  }
-
-  function setLoading(el, message = 'Loading operation data...') {
-    if (!el) return;
-    el.innerHTML = `<div class="ops-state ops-state--loading">${esc(message)}</div>`;
-  }
-
-  function setEmpty(el, message = 'No work needs attention right now.') {
-    if (!el) return;
-    el.innerHTML = `<div class="ops-state ops-state--empty">${esc(message)}</div>`;
-  }
-
-  function setError(el, error, retryLabel = 'Try again') {
-    if (!el) return;
-    el.innerHTML = `<div class="ops-state ops-state--error">
-      <strong>Could not load this workspace.</strong>
-      <span>${esc(error?.message || error || 'Unexpected error')}</span>
-      <button class="btn btn-secondary btn-sm" type="button" data-retry>${esc(retryLabel)}</button>
-    </div>`;
-  }
-
-  function badge(text, tone = 'neutral') {
-    return `<span class="ops-badge ops-badge--${esc(tone)}">${esc(text)}</span>`;
-  }
-
-  function priorityTone(priority) {
-    if (priority === 'critical') return 'critical';
-    if (priority === 'high') return 'high';
-    if (priority === 'medium') return 'medium';
-    return 'low';
-  }
-
-  function statusTone(status) {
-    const s = String(status || '').toLowerCase();
-    if (['expired', 'missing file', 'reopened'].includes(s)) return 'critical';
-    if (['pending approval', 'expiring', 'technician_done'].includes(s)) return 'medium';
-    if (['active', 'approved', 'open'].includes(s)) return 'success';
-    return 'neutral';
-  }
-
-  function formatDate(value) {
-    if (!value) return 'No due date';
-    const d = new Date(value);
-    if (isNaN(d)) return String(value).slice(0, 10);
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
-  }
-
-  return { esc, loadJson, setLoading, setEmpty, setError, badge, priorityTone, statusTone, formatDate };
-})();
-
-const SapActionQueue = (() => {
-  function renderItem(item, options = {}) {
-    const id = SapOps.esc(item.id || '');
-    const priority = SapOps.priorityTone(item.priority);
-    const status = SapOps.statusTone(item.status);
-    const title = SapOps.esc(item.title || 'Action item');
-    const subtitle = SapOps.esc(item.subtitle || '');
-    const meta = [
-      item.client_id ? `Client ${item.client_id}` : '',
-      item.due_date ? `Due ${SapOps.formatDate(item.due_date)}` : '',
-    ].filter(Boolean).join(' · ');
-    const action = SapOps.esc(item.action_label || 'Open');
-    const button = item.job_id
-      ? `<button class="ops-action__button" type="button" data-job-context="${SapOps.esc(item.job_id)}">${action}</button>`
-      : `<a class="ops-action__button" href="${SapOps.esc(item.href || '#')}">${action}</a>`;
-
-    return `<article class="ops-action ops-action--${priority}" data-action-id="${id}">
-      <div class="ops-action__rail"></div>
-      <div class="ops-action__body">
-        <div class="ops-action__top">
-          ${SapOps.badge(item.priority || 'low', priority)}
-          ${SapOps.badge(item.status || 'Open', status)}
-        </div>
-        <h3>${title}</h3>
-        <p>${subtitle}</p>
-        <div class="ops-action__meta">${SapOps.esc(meta || item.type || '')}</div>
-      </div>
-      ${options.readonly ? '' : button}
-    </article>`;
-  }
-
-  function render(container, items, options = {}) {
-    if (!container) return;
-    const list = Array.isArray(items) ? items : [];
-    if (!list.length) {
-      SapOps.setEmpty(container, options.emptyText || 'No action items need attention.');
-      return;
-    }
-    container.innerHTML = list.map(item => renderItem(item, options)).join('');
-  }
-
-  return { render, renderItem };
-})();
-
-const SapContextDrawer = (() => {
-  let overlay = null;
-
-  function ensure() {
-    if (overlay) return overlay;
-    overlay = document.getElementById('opsContextDrawer');
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.id = 'opsContextDrawer';
-      overlay.className = 'ops-drawer-overlay';
-      overlay.innerHTML = `<aside class="ops-drawer" role="dialog" aria-modal="true" aria-labelledby="opsDrawerTitle">
-        <header class="ops-drawer__header">
-          <div>
-            <div class="ops-drawer__eyebrow">Lifecycle context</div>
-            <h2 id="opsDrawerTitle">Job workspace</h2>
-          </div>
-          <button class="ops-drawer__close" type="button" aria-label="Close context drawer">&times;</button>
-        </header>
-        <div class="ops-drawer__body" id="opsDrawerBody"></div>
-      </aside>`;
-      document.body.appendChild(overlay);
-    }
-    overlay.addEventListener('click', (event) => {
-      if (event.target === overlay || event.target.closest('.ops-drawer__close')) close();
-    });
-    return overlay;
-  }
-
-  function openLoading(title = 'Job workspace') {
-    const el = ensure();
-    el.querySelector('#opsDrawerTitle').textContent = title;
-    SapOps.setLoading(el.querySelector('#opsDrawerBody'), 'Loading lifecycle context...');
-    el.classList.add('open');
-  }
-
-  function close() {
-    if (overlay) overlay.classList.remove('open');
-  }
-
-  function renderJobContext(context) {
-    const el = ensure();
-    const body = el.querySelector('#opsDrawerBody');
-    const job = context?.job || {};
-    el.querySelector('#opsDrawerTitle').textContent = job.job_number || 'Job workspace';
-    const inspectors = context.inspectors || [];
-    const certificates = context.certificates || [];
-    const files = context.certificate_files || [];
-    const assets = context.assets || [];
-    const timeline = context.timeline || [];
-
-    body.innerHTML = `<section class="ops-drawer__summary">
-      <div>
-        <span class="ops-drawer__label">Client</span>
-        <strong>${SapOps.esc(context.client?.name || job.client_id || '-')}</strong>
-      </div>
-      <div>
-        <span class="ops-drawer__label">Location</span>
-        <strong>${SapOps.esc(context.functional_location?.name || job.functional_location || '-')}</strong>
-      </div>
-      <div>
-        <span class="ops-drawer__label">Status</span>
-        <strong>${SapOps.esc(job.status || '-')}</strong>
-      </div>
-    </section>
-    <section class="ops-drawer__section">
-      <h3>Assigned Inspectors</h3>
-      <div class="ops-chip-list">${inspectors.length ? inspectors.map(i => `<span class="ops-chip">${SapOps.esc(i.name || i.inspector_number || 'Inspector')}</span>`).join('') : '<span class="ops-muted">No inspectors assigned.</span>'}</div>
-    </section>
-    <section class="ops-drawer__section">
-      <h3>Linked Assets</h3>
-      ${assets.length ? assets.map(a => `<a class="ops-link-row" href="assets.html?asset=${SapOps.esc(a.id || a.asset_number || '')}"><span>${SapOps.esc(a.asset_number || '')}</span><strong>${SapOps.esc(a.name || '')}</strong></a>`).join('') : '<p class="ops-muted">No linked assets found for this job context.</p>'}
-    </section>
-    <section class="ops-drawer__section">
-      <h3>Certificates & Evidence</h3>
-      ${certificates.length ? certificates.map(c => `<a class="ops-link-row" href="certificates.html?cert=${SapOps.esc(c.id || '')}"><span>${SapOps.esc(c.cert_number || c.cert_type || '')}</span><strong>${SapOps.esc(c.name || '')}</strong><em>${SapOps.esc(c.approval_status || '')}</em></a>`).join('') : '<p class="ops-muted">No certificates linked to this job yet.</p>'}
-      <div class="ops-muted">${files.length} file record${files.length === 1 ? '' : 's'} connected to this job.</div>
-    </section>
-    <section class="ops-drawer__section">
-      <h3>Timeline</h3>
-      <div class="ops-timeline">${timeline.length ? timeline.slice(0, 8).map(t => `<div class="ops-timeline__item"><span>${SapOps.formatDate(t.created_at)}</span><strong>${SapOps.esc(t.type || 'Event')}</strong></div>`).join('') : '<p class="ops-muted">No lifecycle events recorded yet.</p>'}</div>
-    </section>`;
-    el.classList.add('open');
-  }
-
-  async function openJob(jobId) {
-    if (!jobId) return;
-    openLoading('Job workspace');
-    try {
-      const context = await SapOps.loadJson(`/api/jobs/${encodeURIComponent(jobId)}/context`);
-      renderJobContext(context);
-    } catch (error) {
-      SapOps.setError(ensure().querySelector('#opsDrawerBody'), error);
-    }
-  }
-
-  return { ensure, openJob, openLoading, renderJobContext, close };
-})();
-
-/* ================================================================
    14. AUTO-INIT
 ================================================================ */
-function ensureDashboardNavForRole(role) {
-  document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
-    if (inner.querySelector('a[href="dashboard.html"]')) return;
-    const a = document.createElement('a');
-    a.href = 'dashboard.html';
-    a.className = 'sap-nav-item';
-    if (location.pathname.endsWith('/dashboard.html')) a.classList.add('active');
-    a.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg><span>Command Center</span>';
-    inner.insertBefore(a, inner.firstChild);
-  });
-}
-
 function ensureJobsNavForRole(role) {
   if (!['admin', 'manager', 'technician'].includes(role)) return;
   document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
@@ -1295,7 +1066,7 @@ function applyPlanBMobileLayout() {
 
       /* Auto-redirect if already logged in */
       if (SapSession.get()) {
-        window.location.href = 'dashboard.html';
+        window.location.href = 'assets.html';
       }
       return;
     }
@@ -1313,7 +1084,6 @@ function applyPlanBMobileLayout() {
 
     /* ── Sidebar ── */
     SapSidebar.init();
-    ensureDashboardNavForRole(session.role);
     ensureJobsNavForRole(session.role);
     ensureFilesNavForRole(session.role);
 
@@ -1371,14 +1141,6 @@ function applyPlanBMobileLayout() {
     /* ── Notification badge ── */
     SapShell.setNotifBadge(session.role !== 'user');
 
-    document.addEventListener('click', e => {
-      const jobButton = e.target.closest('[data-job-context]');
-      if (jobButton) {
-        e.preventDefault();
-        SapContextDrawer.openJob(jobButton.getAttribute('data-job-context'));
-      }
-    });
-
     /* ── Admin-only sections ── */
     const adminSections = document.querySelectorAll('#adminSection, [data-admin-only]');
     adminSections.forEach(el => {
@@ -1418,9 +1180,6 @@ if (typeof module !== 'undefined' && module.exports) {
     SapExport,
     SapRoles,
     SapEventBus,
-    SapOps,
-    SapActionQueue,
-    SapContextDrawer,
   };
 }
 

@@ -6,8 +6,7 @@
   "scripts": {
     "dev":    "wrangler pages dev . --proxy 8787",
     "deploy": "wrangler pages deploy .",
-    "build":  "echo 'No build step required'",
-    "test":   "node tests/ux-plan-smoke.test.mjs"
+    "build":  "echo 'No build step required'"
   },
   "devDependencies": {
     "wrangler": "^3.60.0"

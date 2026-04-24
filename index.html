@@ -104,7 +104,7 @@
     }
     .login-logo-box svg { width: 32px; height: 32px; }
     .login-logo-text { color: #fff; }
-    .login-logo-text strong { display: block; font-size: 22px; font-weight: 800; letter-spacing: 0; }
+    .login-logo-text strong { display: block; font-size: 22px; font-weight: 800; letter-spacing: -.5px; }
     .login-logo-text span { font-size: 12px; color: rgba(255,255,255,.6); }
 
     .login-headline {
@@ -372,7 +372,7 @@
         font-size: 18px;
         font-weight: 800;
         color: #fff;
-        letter-spacing: 0;
+        letter-spacing: -.3px;
       }
       .mobile-brand-header__sub {
         font-size: 12px;
@@ -456,7 +456,7 @@
     </h1>
 
     <p class="login-tagline">
-      A unified inspection and certification workspace for jobs, assets, evidence, approvals, and renewal risk.
+      A unified platform built on SAP Fiori UX principles.
     </p>
 
     <div class="login-features">
@@ -677,7 +677,7 @@ async function handleLogin(e) {
     showToast('success', 'Signed In',
       `Welcome, ${h(data.user.name)} — ${roleLabel[data.user.role] || data.user.role}`);
 
-    setTimeout(() => { window.location.href = 'dashboard.html'; }, 900);
+    setTimeout(() => { window.location.href = 'assets.html'; }, 900);
 
   } catch {
     errorBox.classList.add('show');
@@ -713,7 +713,7 @@ function showToast(type, title, msg) {
 /* ── Init ── */
 (function() {
   if (sessionStorage.getItem('sap_session')) {
-    window.location.href = 'dashboard.html';
+    window.location.href = 'assets.html';
     return;
   }
   // EN-only mode
