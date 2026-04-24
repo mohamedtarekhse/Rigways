@@ -2773,12 +2773,40 @@ function applyAssetNarrowing() {
   if (currentValue && Array.from(sel.options).some(o => o.value === currentValue)) sel.value = currentValue;
 }
 
-function onClientChangeForAssetNarrowing() {
+function findModalAssetById(assetId) {
+  const key = String(assetId || '').trim();
+  if (!key) return null;
+  return (ALL_ASSETS_FOR_MODAL || []).find(a =>
+    String(a.asset_number || a.id || '').trim() === key
+  ) || null;
+}
+
+async function syncClientAndLocationFromAsset(assetId) {
+  const picked = findModalAssetById(assetId);
+  if (!picked) return;
+
+  const clientSel = document.getElementById('f_client');
+  const flSel = document.getElementById('f_functionalLocation');
+  const nextClient = String(picked.client_id || '').trim();
+  const nextFl = String(picked.functional_location || '').trim();
+  if (!clientSel || !flSel) return;
+
+  if (clientSel.value !== nextClient) clientSel.value = nextClient;
+  await loadFunctionalLocationDropdown(nextClient, nextFl);
+  applyAssetNarrowing();
+
+  const assetSel = document.getElementById('f_assetId');
+  if (assetSel && Array.from(assetSel.options).some(o => o.value === String(assetId || ''))) {
+    assetSel.value = String(assetId || '');
+  }
+}
+
+async function onClientChangeForAssetNarrowing() {
   const flSel = document.getElementById('f_functionalLocation');
   const assetSel = document.getElementById('f_assetId');
   if (flSel) flSel.value = '';
   if (assetSel) assetSel.value = '';
-  loadFunctionalLocationDropdown(document.getElementById('f_client')?.value || '', '');
+  await loadFunctionalLocationDropdown(document.getElementById('f_client')?.value || '', '');
   applyAssetNarrowing();
   onAssetChangeForJob(assetSel?.value || '');
 }
@@ -2927,6 +2955,7 @@ async function loadJobDropdown(selectedJobNumber) {
 }
 
 async function onAssetChangeForJob(assetId) {
+  await syncClientAndLocationFromAsset(assetId);
   if (session?.role === 'admin') return;
   const input = document.getElementById('f_jobNumber');
   if (!input) return;
