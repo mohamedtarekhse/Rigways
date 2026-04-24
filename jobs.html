@@ -13,7 +13,7 @@
     .jobs-create-card .sap-field { margin-bottom: 2px; }
     .jobs-create-card .sap-input,
     .jobs-create-card .sap-select {
-      padding: 0 12px;
+      padding: 0 24px;
       height: 38px;
     }
     .inspector-picker { position: relative; }
@@ -22,7 +22,7 @@
       border: 1px solid var(--sap-input-border);
       border-radius: 6px;
       height: 38px;
-      padding: 0 12px;
+      padding: 0 24px;
       font-size: 14px;
       background: #fff;
     }
@@ -71,6 +71,10 @@
       display:flex; align-items:center; justify-content:center; font-size: 13px;
     }
     .inspector-chip button:hover { background: rgba(10,79,156,.12); }
+    .jobs-actions { display:flex; gap:6px; flex-wrap:wrap; }
+    .btn-sm { padding:4px 8px; font-size:12px; }
+    .sap-btn-danger { background:#d32f2f; color:#fff; border:1px solid #b71c1c; }
+    .sap-btn-danger:hover { background:#b71c1c; }
   </style>
 </head>
 <body class="jobs-page">
@@ -355,15 +359,30 @@ async function loadJobs(){
   const res = await apiFetch('/api/jobs?limit=200');
   const raw = await res.json();
   const jobs = (raw.data||raw).jobs || [];
-  document.getElementById('jobsBody').innerHTML = jobs.map(j => `<tr>
-    <td>${j.job_number||''}</td><td>${j.client_id||''}</td><td>${formatJobStatus(j.status)}</td>
-    <td>${jobsReadOnly
+  const isAdmin = session && session.role === 'admin';
+  document.getElementById('jobsBody').innerHTML = jobs.map(j => {
+    const actionsHtml = jobsReadOnly
       ? '<span class="sap-badge sap-badge--neutral">View only</span>'
-      : `<div class="jobs-actions">
+      : `<div class="jobs-actions" style="display:flex;gap:4px;flex-wrap:wrap;">
           <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','close')">Close</button>
           <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','reopen')">Reopen</button>
           <button class="sap-btn-outline btn-sm" onclick="jobAction('${j.id}','mark_done')">Mark Done</button>
-        </div>`}</td></tr>`).join('');
+          ${isAdmin ? `<button class="btn btn-secondary btn-icon" onclick="editJob('${j.id}')" title="Edit" style="width:26px;height:26px;">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>` : ''}
+          ${isAdmin ? `<button class="btn btn-danger btn-icon" onclick="deleteJob('${j.id}')" title="Delete" style="width:26px;height:26px;">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+          </button>` : ''}
+        </div>`;
+    return `<tr>
+      <td>${j.job_number||''}</td>
+      <td>${j.client_id||''}</td>
+      <td>${j.functional_location||''}</td>
+      <td>${j.scope||''}</td>
+      <td>${formatJobStatus(j.status)}</td>
+      <td>${actionsHtml}</td>
+    </tr>`;
+  }).join('');
 }
 
 async function createJob(){
@@ -393,6 +412,36 @@ async function jobAction(id, action){
   const res = await apiFetch('/api/jobs/'+id,{method:'PATCH',body:JSON.stringify({action})});
   const raw = await res.json();
   if(!raw.success) return alert(raw.error||'Action failed');
+  await loadJobs();
+}
+
+async function editJob(id){
+  const res = await apiFetch('/api/jobs/'+id);
+  const raw = await res.json();
+  const job = raw.data || raw;
+  if(!job) return alert('Job not found');
+  
+  document.getElementById('jobNumber').value = job.job_number || '';
+  document.getElementById('jobClientSelect').value = job.client_id || '';
+  document.getElementById('jobFunctionalLocationSelect').value = job.functional_location || '';
+  document.getElementById('jobTitle').value = job.title || '';
+  
+  await onJobClientChange();
+  
+  const chipsContainer = document.getElementById('jobInspectorChips');
+  if (chipsContainer) chipsContainer.innerHTML = '';
+  setSelectedInspectors(job.inspector_ids || []);
+  
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  showToast('info', 'Edit Mode', 'Edit the job details and click Create Job to save changes.');
+}
+
+async function deleteJob(id){
+  if(!confirm('Are you sure you want to delete this job? This action cannot be undone.')) return;
+  const res = await apiFetch('/api/jobs/'+id, {method:'DELETE'});
+  const raw = await res.json();
+  if(!raw.success) return alert(raw.error||'Delete failed');
+  showToast('success', 'Deleted', 'Job deleted successfully.');
   await loadJobs();
 }
 

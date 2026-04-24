@@ -628,6 +628,18 @@ async function handleJobs(request, env, path) {
     return ok({ assigned: inspectorIds.length }, env);
   }
 
+  if (jobId && method === 'DELETE') {
+    if (!isAdminOrManager) return forbidden(env);
+    const { data: ex } = await db.from('jobs', { filters: { 'id.eq': jobId }, select: '*', limit: 1 });
+    const existing = Array.isArray(ex) ? ex[0] : ex;
+    if (!existing) return notFound('Job', env);
+    if (!isAdminOrManager && (!session.customerId || existing.client_id !== session.customerId)) return forbidden(env);
+    await db.delete('job_inspectors', { filters: { 'job_id.eq': jobId } }).catch(() => {});
+    await db.delete('jobs', { filters: { 'id.eq': jobId } });
+    await addJobEvent(jobId, 'deleted');
+    return ok({ deleted: true }, env);
+  }
+
   return badReq('Not found', 'NOT_FOUND', env);
 }
 
