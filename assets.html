@@ -3341,14 +3341,14 @@ async function runImport() {
   if (failed > 0)    msg += `<div style="color:var(--sap-error);font-weight:600;font-size:13px;">✗ ${failed} row${failed!==1?'s':''} failed: ${failedNums.slice(0,8).join(', ')}${failedNums.length>8?'…':''}</div>`;
   if (failedRows.length) msg += `<div style="margin-top:10px;"><button class="btn btn-secondary btn-sm" onclick="downloadImportErrorsCSV()">Download Failed Rows CSV</button></div>`;
   msg += `<div style="margin-top:16px;display:flex;gap:8px;justify-content:center;">
-    ${succeeded?`<button class="btn btn-success" onclick="closeImportModal();renderTable();">View Updated Assets</button>`:''}
+    ${succeeded?`<button class="btn btn-success" onclick="closeImportModal();loadAssets();">View Updated Assets</button>`:''}
     <button class="btn btn-ghost" onclick="closeImportModal()">Close</button>
   </div>`;
   resultMsg.innerHTML = msg;
   label.textContent = 'Done!';
 
   if (succeeded > 0) {
-    renderTable();
+    await loadAssets();
     showToast('success','Import Complete',`${succeeded} asset${succeeded!==1?'s':''} imported.`);
   }
   window._lastImportFailedRows = failedRows;

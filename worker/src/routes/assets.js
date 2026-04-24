@@ -7,6 +7,21 @@ import { validate, pick, compact }           from '../utils/validate.js';
 const TYPES    = ['Hoisting Equipment','Drilling Equipment','Mud System Low Pressure','Mud System High Pressure','Wirelines','Structure','Well Control','Tubular'];
 const STATUSES = ['operation','stacked'];
 
+async function resolveAssetId(db, rawId) {
+  if (!rawId) return null;
+  // Allow API callers to pass either UUID or business asset number (AST-xxxx)
+  if (/^AST-/i.test(rawId)) {
+    const { data } = await db.from('assets', {
+      filters: { 'asset_number.ilike': rawId },
+      select: 'id',
+      limit: 1,
+    });
+    const row = Array.isArray(data) ? data[0] : data;
+    return row?.id || null;
+  }
+  return rawId;
+}
+
 async function generateNextAssetNumber(db) {
   const { data } = await db.from('assets', { select:'asset_number', limit:5000 });
   const rows = Array.isArray(data) ? data : [];
@@ -90,7 +105,7 @@ export async function handleAssets(request, env, path) {
   }
 
   const idM  = path.match(/^\/assets\/([^/]+)$/);
-  const asId = idM?.[1];
+  const asId = idM?.[1] ? await resolveAssetId(db, idM[1]) : undefined;
 
   /* LIST */
   if (!asId && method === 'GET') {
