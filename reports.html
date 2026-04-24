@@ -1,23 +1,92 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Reports Module Removed</title>
+  <title>Operations Reports - Rigways ACM</title>
   <link rel="stylesheet" href="styles.css" />
-  <script>
-    setTimeout(function(){ window.location.href = 'assets.html'; }, 1200);
-  </script>
+  <script src="app.js"></script>
 </head>
 <body>
-  <main class="sap-main" style="display:flex;align-items:center;justify-content:center;min-height:100vh;">
-    <div class="sap-card" style="max-width:520px;width:100%;text-align:center;">
-      <div class="sap-card__body" style="padding:24px;">
-        <h1 style="font-size:20px;margin-bottom:10px;">Reports module removed</h1>
-        <p style="color:var(--sap-text-secondary);margin-bottom:14px;">The Reports module is no longer available for any role.</p>
-        <a class="btn btn-primary" href="assets.html">Go to Assets</a>
-      </div>
+  <header class="sap-shell">
+    <a href="dashboard.html" class="sap-shell__logo">
+      <span>Rigways Group</span><span class="sap-shell__logo-badge">ACM</span>
+    </a>
+    <div class="sap-shell__divider"></div>
+    <span class="sap-shell__app-title">Operations Reports</span>
+    <div class="sap-shell__spacer"></div>
+    <div class="sap-shell__actions">
+      <div class="sap-shell__avatar" id="shellAvatar" onclick="toggleUserMenu()">AD</div>
     </div>
+    <div class="sap-user-menu" id="userMenu">
+      <div class="sap-user-menu__header">
+        <div class="sap-user-menu__name" id="menuUserName">User</div>
+        <div class="sap-user-menu__role" id="menuUserRole">Role</div>
+      </div>
+      <div class="sap-user-menu__item" onclick="window.location.href='dashboard.html'"><span>Command Center</span></div>
+      <div class="sap-user-menu__sep"></div>
+      <div class="sap-user-menu__item sap-user-menu__item--danger" data-action="logout"><span>Sign Out</span></div>
+    </div>
+  </header>
+  <nav class="sap-navbar">
+    <div class="sap-navbar__inner">
+      <a href="dashboard.html" class="sap-nav-item"><span>Command Center</span></a>
+      <a href="reports.html" class="sap-nav-item active"><span>Reports</span></a>
+    </div>
+  </nav>
+  <main class="sap-main ops-main">
+    <section class="ops-hero">
+      <div>
+        <div class="sap-page-header__breadcrumb">Rigways ACM / Reports</div>
+        <h1>Operations Reports</h1>
+        <p>Reporting is now connected to the command center data model. Use this page for quick summaries and expiry extracts.</p>
+      </div>
+      <div class="ops-hero__actions">
+        <a class="btn btn-secondary" href="dashboard.html">Command Center</a>
+        <a class="btn btn-primary" href="certificates.html">Certificates</a>
+      </div>
+    </section>
+    <section class="ops-lower-grid">
+      <div class="ops-panel">
+        <div class="ops-panel__header"><div><h2>Summary</h2><p>Live counts from the reporting endpoint.</p></div></div>
+        <div id="reportSummary" class="ops-compact-list"></div>
+      </div>
+      <div class="ops-panel">
+        <div class="ops-panel__header"><div><h2>Expiring Certificates</h2><p>Approved certificates due within 30 days.</p></div></div>
+        <div id="reportExpiring" class="ops-compact-list"></div>
+      </div>
+    </section>
   </main>
+  <script>
+  async function loadReports() {
+    const summaryEl = document.getElementById('reportSummary');
+    const expiringEl = document.getElementById('reportExpiring');
+    SapOps.setLoading(summaryEl, 'Loading report summary...');
+    SapOps.setLoading(expiringEl, 'Loading expiry report...');
+    try {
+      const [summary, expiring] = await Promise.all([
+        SapOps.loadJson('/api/reports/summary'),
+        SapOps.loadJson('/api/reports/expiring?days=30')
+      ]);
+      const certs = summary.certificates || {};
+      const assets = summary.assets || {};
+      summaryEl.innerHTML = [
+        ['Assets', assets.total],
+        ['Active assets', assets.active],
+        ['Certificates', certs.total],
+        ['Pending approvals', certs.pending],
+        ['Expiring soon', certs.expiring],
+        ['Expired', certs.expired]
+      ].map(row => `<div class="ops-list-row"><span>${SapOps.esc(row[0])}</span><strong>${row[1] ?? 0}</strong></div>`).join('');
+      const rows = expiring.certificates || [];
+      if (!rows.length) SapOps.setEmpty(expiringEl, 'No approved certificates expire in the next 30 days.');
+      else expiringEl.innerHTML = rows.slice(0, 20).map(c => `<a class="ops-list-row" href="certificates.html?cert=${SapOps.esc(c.id || '')}"><span>${SapOps.esc(c.expiry_date || '')}</span><strong>${SapOps.esc(c.name || c.cert_number || 'Certificate')}</strong><em>${SapOps.esc(c.client_id || '')}</em></a>`).join('');
+    } catch (error) {
+      SapOps.setError(summaryEl, error);
+      SapOps.setError(expiringEl, error);
+    }
+  }
+  document.addEventListener('DOMContentLoaded', loadReports);
+  </script>
 </body>
 </html>
