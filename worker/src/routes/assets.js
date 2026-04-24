@@ -133,20 +133,40 @@ export async function handleAssets(request, env, path) {
 
     if (body.functional_location) {
       if (!body.client_id) return badReq('client_id is required when functional_location is set','VALIDATION',env);
+      
+      // First try exact match on fl_id
       let { data: flRows } = await db.from('functional_locations', {
         filters: { 'fl_id.eq': body.functional_location },
-        select:'id,client_id,status',
+        select:'fl_id,id,client_id,status,name',
         limit:1,
       });
       let fl = Array.isArray(flRows) ? flRows[0] : flRows;
+      
+      // If not found by fl_id, try matching by name (case-insensitive)
       if (!fl) {
         const { data: byNameRows } = await db.from('functional_locations', {
-          filters: { 'name.ilike': body.functional_location, 'client_id.eq': body.client_id }, select:'id,client_id,status', limit:1,
+          filters: { 'name.eq': body.functional_location, 'client_id.eq': body.client_id },
+          select:'fl_id,id,client_id,status,name',
+          limit:1,
         });
         fl = Array.isArray(byNameRows) ? byNameRows[0] : byNameRows;
       }
-      if (!fl) return badReq('Functional location not found','INVALID_LOCATION',env);
-      if (fl.client_id !== body.client_id) return badReq('Functional location must belong to the same client','CLIENT_LOCATION_MISMATCH',env);
+      
+      // Try without client_id filter as fallback
+      if (!fl) {
+        const { data: anyNameRows } = await db.from('functional_locations', {
+          filters: { 'name.eq': body.functional_location },
+          select:'fl_id,id,client_id,status,name',
+          limit:1,
+        });
+        fl = Array.isArray(anyNameRows) ? anyNameRows[0] : anyNameRows;
+      }
+      
+      if (!fl) return badReq(`Functional location "${body.functional_location}" not found. Please ensure the location exists and is active.`,'INVALID_LOCATION',env);
+      if (fl.client_id && body.client_id && fl.client_id !== body.client_id) return badReq('Functional location must belong to the same client','CLIENT_LOCATION_MISMATCH',env);
+      
+      // Use fl_id for storage, not the name
+      body.functional_location = fl.fl_id || fl.id;
     }
 
     const requestedNumber = String(body.asset_number || '').trim().toUpperCase();
