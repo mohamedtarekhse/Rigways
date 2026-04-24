@@ -476,8 +476,11 @@ async function handleJobs(request, env, path) {
   const session = await getSession(request, env);
   if (!session) return unauth(env);
 
+  // Route: /jobs/([^/]+)/context
+  const contextM = path.match(/^\/jobs\/([^/]+)\/context$/);
   const idM = path.match(/^\/jobs\/([^/]+)$/);
   const inspectorsM = path.match(/^\/jobs\/([^/]+)\/inspectors$/);
+  const contextId = contextM?.[1];
   const jobId = idM?.[1];
   const jobInspectorsId = inspectorsM?.[1];
 
@@ -501,7 +504,7 @@ async function handleJobs(request, env, path) {
     } catch (e) { console.warn('job event failed:', e); }
   }
 
-  if (!jobId && !jobInspectorsId && method === 'GET') {
+  if (!contextId && !jobId && !jobInspectorsId && method === 'GET') {
     const limit = Math.min(parseInt(new URL(request.url).searchParams.get('limit') || '50', 10), 200);
     const offset = parseInt(new URL(request.url).searchParams.get('offset') || '0', 10);
     const url = new URL(request.url);
@@ -514,7 +517,7 @@ async function handleJobs(request, env, path) {
     return ok({ jobs: data || [], limit, offset }, env);
   }
 
-  if (!jobId && !jobInspectorsId && method === 'POST') {
+  if (!contextId && !jobId && !jobInspectorsId && method === 'POST') {
     if (!isAdminOrManager) return forbidden(env);
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
     const { valid, errors } = validate(body, {
@@ -555,6 +558,12 @@ async function handleJobs(request, env, path) {
     }
     await addJobEvent(job.id, 'created', { inspector_ids: inspectorIds });
     return created(job, env);
+  }
+
+  if (contextId && method === 'GET') {
+    const context = await buildJobContext(db, session, contextId);
+    if (!context.job) return notFound('Job', env);
+    return ok(context, env);
   }
 
   if (jobId && method === 'GET') {
@@ -929,6 +938,337 @@ async function audit(db, session, table, id, action, before, after) {
       after: after ? JSON.stringify(after) : null,
     });
   } catch (e) { console.warn('Audit failed:', e); }
+}
+
+function scopedClientFilter(session) {
+  return (['user', 'technician'].includes(session.role) && session.customerId)
+    ? { 'client_id.eq': session.customerId }
+    : {};
+}
+
+function asArray(data) {
+  return Array.isArray(data) ? data : (data ? [data] : []);
+}
+
+function dayStamp(offset = 0) {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + offset);
+  return d.toISOString().split('T')[0];
+}
+
+function daysUntil(dateText) {
+  if (!dateText) return null;
+  const today = new Date(dayStamp() + 'T00:00:00.000Z');
+  const target = new Date(String(dateText) + 'T00:00:00.000Z');
+  if (isNaN(target)) return null;
+  return Math.ceil((target - today) / 86_400_000);
+}
+
+function certHasCurrentFile(cert, filesByCert) {
+  if (cert.file_url || cert.file_name) return true;
+  return (filesByCert.get(cert.id) || []).some(f => f.status !== 'deleted' && !f.deleted_at);
+}
+
+function actionPriorityRank(priority) {
+  return { critical: 0, high: 1, medium: 2, low: 3 }[priority] ?? 4;
+}
+
+function sortActionQueue(items) {
+  return items.sort((a, b) => {
+    const pr = actionPriorityRank(a.priority) - actionPriorityRank(b.priority);
+    if (pr) return pr;
+    return String(a.due_date || '9999-12-31').localeCompare(String(b.due_date || '9999-12-31'));
+  });
+}
+
+async function loadOperationsSnapshot(db, session) {
+  const clientFilter = scopedClientFilter(session);
+  const [jobsRes, certsRes, assetsRes, clientsRes, filesRes, auditsRes] = await Promise.all([
+    db.from('jobs', { select: '*', filters: clientFilter, limit: 500, order: 'created_at.desc' }),
+    db.from('certificates', { select: '*', filters: clientFilter, limit: 2000, order: 'expiry_date.asc' }),
+    db.from('assets', { select: '*', filters: clientFilter, limit: 2000, order: 'created_at.desc' }),
+    db.from('clients', { select: '*', filters: {}, limit: 500, order: 'name.asc' }),
+    db.from('certificate_files', { select: '*', filters: {}, limit: 5000, order: 'uploaded_at.desc' }).catch(() => ({ data: [] })),
+    db.from('audit_logs', { select: '*', filters: {}, limit: 40, order: 'created_at.desc' }).catch(() => ({ data: [] })),
+  ]);
+
+  const jobs = asArray(jobsRes.data);
+  const certificates = asArray(certsRes.data);
+  const assets = asArray(assetsRes.data);
+  const clients = asArray(clientsRes.data).filter(c => !clientFilter['client_id.eq'] || c.client_id === clientFilter['client_id.eq']);
+  const files = asArray(filesRes.data).filter(f => !clientFilter['client_id.eq'] || f.client_id === clientFilter['client_id.eq']);
+  const auditLogs = asArray(auditsRes.data);
+  const filesByCert = new Map();
+
+  files.forEach(f => {
+    if (!f.certificate_id) return;
+    const list = filesByCert.get(f.certificate_id) || [];
+    list.push(f);
+    filesByCert.set(f.certificate_id, list);
+  });
+
+  return { jobs, certificates, assets, clients, files, auditLogs, filesByCert };
+}
+
+function buildActionQueueFromSnapshot(snapshot, limit = 50) {
+  const today = dayStamp();
+  const in30 = dayStamp(30);
+  const items = [];
+
+  snapshot.certificates.forEach(cert => {
+    const certId = cert.id || cert.cert_number;
+    const base = {
+      client_id: cert.client_id || null,
+      certificate_id: cert.id || null,
+      asset_id: cert.asset_id || null,
+      href: `certificates.html?cert=${encodeURIComponent(cert.id || cert.cert_number || '')}`,
+    };
+
+    if (cert.approval_status === 'pending') {
+      items.push({
+        ...base,
+        id: `approval:${certId}`,
+        type: 'approval',
+        priority: 'high',
+        title: 'Certificate awaiting approval',
+        subtitle: `${cert.name || cert.cert_number || 'Certificate'} needs manager review`,
+        status: 'Pending approval',
+        due_date: cert.created_at || cert.issue_date || today,
+        action_label: 'Review certificate',
+      });
+    }
+
+    if (cert.approval_status === 'approved' && cert.expiry_date && cert.expiry_date < today) {
+      items.push({
+        ...base,
+        id: `expired:${certId}`,
+        type: 'expiry',
+        priority: 'critical',
+        title: 'Certificate expired',
+        subtitle: `${cert.name || cert.cert_number || 'Certificate'} expired on ${cert.expiry_date}`,
+        status: 'Expired',
+        due_date: cert.expiry_date,
+        action_label: 'Open certificate',
+      });
+    } else if (cert.approval_status === 'approved' && cert.expiry_date && cert.expiry_date <= in30) {
+      const due = daysUntil(cert.expiry_date);
+      items.push({
+        ...base,
+        id: `expiring:${certId}`,
+        type: 'expiry',
+        priority: due !== null && due <= 7 ? 'high' : 'medium',
+        title: 'Certificate expiring soon',
+        subtitle: `${cert.name || cert.cert_number || 'Certificate'} expires in ${due ?? '?'} days`,
+        status: 'Expiring',
+        due_date: cert.expiry_date,
+        action_label: 'Plan renewal',
+      });
+    }
+
+    if (!certHasCurrentFile(cert, snapshot.filesByCert)) {
+      items.push({
+        ...base,
+        id: `missing-file:${certId}`,
+        type: 'file',
+        priority: cert.approval_status === 'approved' ? 'high' : 'medium',
+        title: 'Certificate evidence missing',
+        subtitle: `${cert.name || cert.cert_number || 'Certificate'} has no current file attached`,
+        status: 'Missing file',
+        due_date: cert.created_at || today,
+        action_label: 'Attach evidence',
+      });
+    }
+  });
+
+  snapshot.jobs
+    .filter(j => ['active', 'reopened', 'technician_done'].includes(j.status))
+    .forEach(job => {
+      items.push({
+        id: `job:${job.id}`,
+        type: 'job',
+        priority: job.status === 'reopened' ? 'high' : (job.status === 'technician_done' ? 'medium' : 'low'),
+        title: job.status === 'technician_done' ? 'Job ready for manager closeout' : 'Active job needs follow-up',
+        subtitle: `${job.job_number || 'Job'}${job.title ? ` - ${job.title}` : ''}`,
+        status: job.status,
+        due_date: job.updated_at || job.created_at || today,
+        client_id: job.client_id || null,
+        job_id: job.id || null,
+        asset_id: null,
+        certificate_id: null,
+        href: `jobs.html?job=${encodeURIComponent(job.id || '')}`,
+        action_label: 'Open job',
+      });
+    });
+
+  return sortActionQueue(items).slice(0, limit);
+}
+
+async function handleActionQueue(request, env, path) {
+  const session = await getSession(request, env);
+  if (!session) return unauth(env);
+  if (path !== '/action-queue' || request.method !== 'GET') return badReq('Not found', 'NOT_FOUND', env);
+
+  const db = createSupabase(env);
+  const limit = Math.min(Math.max(parseInt(new URL(request.url).searchParams.get('limit') || '50', 10), 1), 100);
+  const snapshot = await loadOperationsSnapshot(db, session);
+  return ok({ items: buildActionQueueFromSnapshot(snapshot, limit), limit }, env, request);
+}
+
+async function handleDashboard(request, env, path) {
+  const session = await getSession(request, env);
+  if (!session) return unauth(env);
+  if (path !== '/dashboard/summary' || request.method !== 'GET') return badReq('Not found', 'NOT_FOUND', env);
+
+  const db = createSupabase(env);
+  const snapshot = await loadOperationsSnapshot(db, session);
+  const today = dayStamp();
+  const in7 = dayStamp(7);
+  const in30 = dayStamp(30);
+
+  const activeJobs = snapshot.jobs.filter(j => ['active', 'reopened'].includes(j.status)).length;
+  const technicianDoneJobs = snapshot.jobs.filter(j => j.status === 'technician_done').length;
+  const pendingApprovals = snapshot.certificates.filter(c => c.approval_status === 'pending').length;
+  const expiredCertificates = snapshot.certificates.filter(c => c.approval_status === 'approved' && c.expiry_date && c.expiry_date < today).length;
+  const expiring7 = snapshot.certificates.filter(c => c.approval_status === 'approved' && c.expiry_date && c.expiry_date >= today && c.expiry_date <= in7).length;
+  const expiring30 = snapshot.certificates.filter(c => c.approval_status === 'approved' && c.expiry_date && c.expiry_date >= today && c.expiry_date <= in30).length;
+  const missingFiles = snapshot.certificates.filter(c => !certHasCurrentFile(c, snapshot.filesByCert)).length;
+
+  const clientsById = new Map(snapshot.clients.map(c => [c.client_id, c]));
+  const riskByClient = new Map();
+  function ensureClient(clientId) {
+    const key = clientId || 'unassigned';
+    if (!riskByClient.has(key)) {
+      const client = clientsById.get(key) || {};
+      riskByClient.set(key, {
+        client_id: key,
+        name: client.name || key,
+        active_jobs: 0,
+        pending_approvals: 0,
+        expired: 0,
+        expiring_30: 0,
+        missing_files: 0,
+        score: 0,
+      });
+    }
+    return riskByClient.get(key);
+  }
+
+  snapshot.jobs.filter(j => ['active', 'reopened', 'technician_done'].includes(j.status)).forEach(j => {
+    const row = ensureClient(j.client_id);
+    row.active_jobs += 1;
+    row.score += j.status === 'reopened' ? 3 : 1;
+  });
+  snapshot.certificates.forEach(c => {
+    const row = ensureClient(c.client_id);
+    if (c.approval_status === 'pending') { row.pending_approvals += 1; row.score += 2; }
+    if (c.approval_status === 'approved' && c.expiry_date && c.expiry_date < today) { row.expired += 1; row.score += 5; }
+    if (c.approval_status === 'approved' && c.expiry_date && c.expiry_date >= today && c.expiry_date <= in30) { row.expiring_30 += 1; row.score += 2; }
+    if (!certHasCurrentFile(c, snapshot.filesByCert)) { row.missing_files += 1; row.score += 2; }
+  });
+
+  const recentActivity = snapshot.auditLogs.slice(0, 12).map(log => ({
+    id: log.id,
+    actor: log.username || 'System',
+    role: log.role || '',
+    action: log.action,
+    table_name: log.table_name,
+    record_id: log.record_id,
+    created_at: log.created_at,
+  }));
+
+  return ok({
+    kpis: {
+      active_jobs: activeJobs,
+      jobs_ready_to_close: technicianDoneJobs,
+      pending_approvals: pendingApprovals,
+      expired_certificates: expiredCertificates,
+      expiring_7_days: expiring7,
+      expiring_30_days: expiring30,
+      missing_files: missingFiles,
+      clients_at_risk: [...riskByClient.values()].filter(c => c.score > 0).length,
+    },
+    action_queue: buildActionQueueFromSnapshot(snapshot, 12),
+    active_jobs: snapshot.jobs.filter(j => ['active', 'reopened', 'technician_done'].includes(j.status)).slice(0, 10),
+    client_risk: [...riskByClient.values()].filter(c => c.score > 0).sort((a, b) => b.score - a.score).slice(0, 8),
+    recent_activity: recentActivity,
+    generated_at: new Date().toISOString(),
+  }, env, request);
+}
+
+async function buildJobContext(db, session, jobId) {
+  const { data: jobRows } = await db.from('jobs', { filters: { 'id.eq': jobId }, select: '*', limit: 1 });
+  let job = asArray(jobRows)[0];
+  if (!job) {
+    const { data: byNumberRows } = await db.from('jobs', { filters: { 'job_number.eq': jobId }, select: '*', limit: 1 });
+    job = asArray(byNumberRows)[0];
+  }
+  if (!job) return { job: null };
+  if (!isAdminOrManager(session) && session.customerId && job.client_id !== session.customerId) return { job: null };
+
+  const [clientRes, flRes, assignmentsRes, assetsRes, certsRes, filesRes, eventsRes, auditsRes] = await Promise.all([
+    db.from('clients', { filters: { 'client_id.eq': job.client_id }, select: '*', limit: 1 }).catch(() => ({ data: [] })),
+    db.from('functional_locations', { filters: { 'fl_id.eq': job.functional_location || '' }, select: '*', limit: 1 }).catch(() => ({ data: [] })),
+    db.from('job_inspectors', { filters: { 'job_id.eq': job.id }, select: '*', limit: 200, order: 'created_at.asc' }).catch(() => ({ data: [] })),
+    db.from('assets', { filters: { 'client_id.eq': job.client_id }, select: '*', limit: 1000, order: 'asset_number.asc' }).catch(() => ({ data: [] })),
+    db.from('certificates', { filters: { 'client_id.eq': job.client_id }, select: '*', limit: 2000, order: 'created_at.desc' }).catch(() => ({ data: [] })),
+    db.from('certificate_files', { filters: { 'job_number.eq': job.job_number }, select: '*', limit: 1000, order: 'uploaded_at.desc' }).catch(() => ({ data: [] })),
+    db.from('job_events', { filters: { 'job_id.eq': job.id }, select: '*', limit: 200, order: 'created_at.desc' }).catch(() => ({ data: [] })),
+    db.from('audit_logs', { filters: { 'record_id.eq': job.id }, select: '*', limit: 100, order: 'created_at.desc' }).catch(() => ({ data: [] })),
+  ]);
+
+  const assignments = asArray(assignmentsRes.data);
+  const inspectorIds = assignments.map(a => a.inspector_id).filter(Boolean);
+  let inspectors = [];
+  if (inspectorIds.length) {
+    const { data: inspectorRows } = await db.from('inspectors', {
+      filters: { 'id.in': inspectorIds },
+      select: '*',
+      limit: 200,
+    }).catch(() => ({ data: [] }));
+    inspectors = asArray(inspectorRows);
+  }
+
+  const allAssets = asArray(assetsRes.data);
+  const jobCertificates = asArray(certsRes.data).filter(c => {
+    const joined = `${c.job_number || ''} ${c.notes || ''} ${c.file_url || ''}`;
+    return joined.includes(job.job_number);
+  });
+  const certAssetIds = new Set(jobCertificates.map(c => c.asset_id).filter(Boolean));
+  const assets = allAssets.filter(a =>
+    certAssetIds.has(a.id) ||
+    (job.functional_location && a.functional_location === job.functional_location)
+  );
+
+  const timeline = [
+    ...asArray(eventsRes.data).map(e => ({
+      id: e.id,
+      type: e.event_type,
+      actor_user_id: e.actor_user_id,
+      payload: e.payload_json || {},
+      created_at: e.created_at,
+      source: 'job_event',
+    })),
+    ...asArray(auditsRes.data).map(a => ({
+      id: a.id,
+      type: `${a.table_name}.${a.action}`,
+      actor: a.username,
+      role: a.role,
+      created_at: a.created_at,
+      source: 'audit',
+    })),
+  ].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+
+  return {
+    job,
+    client: asArray(clientRes.data)[0] || null,
+    functional_location: asArray(flRes.data)[0] || null,
+    inspectors,
+    assignments,
+    assets,
+    certificates: jobCertificates,
+    certificate_files: asArray(filesRes.data),
+    timeline,
+  };
 }
 
 // ── storage.js ──
@@ -3102,6 +3442,8 @@ export default {
 
       if (path.startsWith('/auth')) return await handleAuth(request, env, path);
       if (path.startsWith('/users')) return await handleUsers(request, env, path);
+      if (path.startsWith('/dashboard')) return await handleDashboard(request, env, path);
+      if (path.startsWith('/action-queue')) return await handleActionQueue(request, env, path);
       if (path.startsWith('/jobs')) return await handleJobs(request, env, path);
       if (path.startsWith('/assets')) return await handleAssets(request, env, path);
       if (path.startsWith('/certificates/upload') || path.startsWith('/certificates/file/')) {

@@ -3,11 +3,191 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="refresh" content="0; url=assets.html" />
-  <title>Dashboard Removed</title>
-  <script>window.location.replace('assets.html');</script>
+  <title>Operations Command Center - Rigways ACM</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="app.js"></script>
 </head>
 <body>
-  <p>Dashboard module removed. Redirecting to Assets… <a href="assets.html">Go now</a></p>
+<header class="sap-shell">
+  <a href="dashboard.html" class="sap-shell__logo">
+    <span>Rigways Group</span><span class="sap-shell__logo-badge">ACM</span>
+  </a>
+  <div class="sap-shell__divider"></div>
+  <span class="sap-shell__app-title">Operations Command Center</span>
+  <div class="sap-shell__spacer"></div>
+  <div class="sap-shell__actions">
+    <button class="sap-shell__btn" onclick="window.location.href='notifications.html'" title="Notifications">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span class="sap-shell__badge" id="notifBadge" style="display:none;"></span>
+    </button>
+    <div class="sap-shell__avatar" id="shellAvatar" onclick="toggleUserMenu()">AD</div>
+  </div>
+  <div class="sap-user-menu" id="userMenu">
+    <div class="sap-user-menu__header">
+      <div class="sap-user-menu__name" id="menuUserName">User</div>
+      <div class="sap-user-menu__role" id="menuUserRole">Role</div>
+    </div>
+    <div class="sap-user-menu__item" onclick="window.location.href='dashboard.html'"><span>Command Center</span></div>
+    <div class="sap-user-menu__item" onclick="window.location.href='assets.html'"><span>Assets</span></div>
+    <div class="sap-user-menu__sep"></div>
+    <div class="sap-user-menu__item sap-user-menu__item--danger" data-action="logout"><span>Sign Out</span></div>
+  </div>
+</header>
+
+<nav class="sap-navbar">
+  <div class="sap-navbar__inner">
+    <a href="dashboard.html" class="sap-nav-item active">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Command Center</span>
+    </a>
+    <a href="assets.html" class="sap-nav-item"><span>Assets</span></a>
+    <a href="certificates.html" class="sap-nav-item"><span>Certificates</span></a>
+    <a href="jobs.html" class="sap-nav-item"><span>Jobs</span></a>
+    <a href="notifications.html" class="sap-nav-item"><span>Notifications</span></a>
+    <div class="sap-navbar__divider" id="adminSection"></div>
+    <a href="clients.html" class="sap-nav-item sap-nav-item--admin"><span>Clients</span></a>
+  </div>
+</nav>
+
+<main class="sap-main ops-main">
+  <section class="ops-hero">
+    <div>
+      <div class="sap-page-header__breadcrumb">Rigways ACM / Operations</div>
+      <h1>Operations Command Center</h1>
+      <p>One work surface for job follow-up, certificate risk, approvals, evidence, and client health.</p>
+    </div>
+    <div class="ops-hero__actions">
+      <a class="btn btn-secondary" href="jobs.html">Open Jobs</a>
+      <a class="btn btn-primary" href="certificates.html">Review Certificates</a>
+    </div>
+  </section>
+
+  <section class="ops-kpi-grid" id="kpiGrid">
+    <article class="ops-kpi"><span>Active Jobs</span><strong id="kpiActiveJobs">-</strong><em>Open or reopened</em></article>
+    <article class="ops-kpi"><span>Pending Approvals</span><strong id="kpiPending">-</strong><em>Needs manager action</em></article>
+    <article class="ops-kpi ops-kpi--risk"><span>Expired Certs</span><strong id="kpiExpired">-</strong><em>Immediate risk</em></article>
+    <article class="ops-kpi"><span>Expiring 30d</span><strong id="kpiExpiring">-</strong><em>Renewal pipeline</em></article>
+    <article class="ops-kpi"><span>Missing Files</span><strong id="kpiMissingFiles">-</strong><em>Evidence gaps</em></article>
+    <article class="ops-kpi"><span>Clients At Risk</span><strong id="kpiClientsRisk">-</strong><em>Grouped by account</em></article>
+  </section>
+
+  <section class="ops-layout">
+    <div class="ops-panel ops-panel--queue">
+      <div class="ops-panel__header">
+        <div>
+          <h2>Action Queue</h2>
+          <p>Prioritized work from approvals, expiry risk, active jobs, and evidence gaps.</p>
+        </div>
+        <a class="btn btn-ghost btn-sm" href="notifications.html">Notifications</a>
+      </div>
+      <div id="actionQueue" class="ops-action-list"></div>
+    </div>
+
+    <aside class="ops-panel">
+      <div class="ops-panel__header">
+        <div>
+          <h2>Active Jobs</h2>
+          <p>Click a job to inspect the lifecycle context.</p>
+        </div>
+      </div>
+      <div id="activeJobsList" class="ops-compact-list"></div>
+    </aside>
+  </section>
+
+  <section class="ops-lower-grid">
+    <div class="ops-panel">
+      <div class="ops-panel__header">
+        <div>
+          <h2>Client Risk</h2>
+          <p>Accounts with operational risk signals.</p>
+        </div>
+      </div>
+      <div id="clientRiskList" class="ops-compact-list"></div>
+    </div>
+
+    <div class="ops-panel">
+      <div class="ops-panel__header">
+        <div>
+          <h2>Recent Activity</h2>
+          <p>Audit events that show system movement.</p>
+        </div>
+      </div>
+      <div id="recentActivityList" class="ops-activity-list"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value ?? '-';
+}
+
+function renderJobs(jobs) {
+  const el = document.getElementById('activeJobsList');
+  if (!jobs?.length) return SapOps.setEmpty(el, 'No active jobs are waiting for follow-up.');
+  el.innerHTML = jobs.map(job => `
+    <button class="ops-list-row" type="button" data-job-context="${SapOps.esc(job.id)}">
+      <span>${SapOps.esc(job.job_number || 'Job')}</span>
+      <strong>${SapOps.esc(job.title || 'Untitled job')}</strong>
+      <em>${SapOps.esc(job.status || 'active')}</em>
+    </button>
+  `).join('');
+}
+
+function renderClientRisk(clients) {
+  const el = document.getElementById('clientRiskList');
+  if (!clients?.length) return SapOps.setEmpty(el, 'No client risk signals in the current dataset.');
+  el.innerHTML = clients.map(client => `
+    <a class="ops-list-row" href="clients.html?client=${SapOps.esc(client.client_id)}">
+      <span>${SapOps.esc(client.client_id)}</span>
+      <strong>${SapOps.esc(client.name)}</strong>
+      <em>${client.expired} expired · ${client.pending_approvals} pending · ${client.missing_files} missing files</em>
+    </a>
+  `).join('');
+}
+
+function renderActivity(items) {
+  const el = document.getElementById('recentActivityList');
+  if (!items?.length) return SapOps.setEmpty(el, 'No audit activity available yet.');
+  el.innerHTML = items.map(item => `
+    <div class="ops-activity">
+      <span>${SapOps.formatDate(item.created_at)}</span>
+      <strong>${SapOps.esc(item.actor)} ${SapOps.esc(item.action || '')}</strong>
+      <p>${SapOps.esc(item.table_name || 'record')} ${SapOps.esc(item.record_id || '')}</p>
+    </div>
+  `).join('');
+}
+
+async function loadCommandCenter() {
+  const actionQueue = document.getElementById('actionQueue');
+  SapOps.setLoading(actionQueue, 'Building the action queue...');
+  SapOps.setLoading(document.getElementById('activeJobsList'), 'Loading active jobs...');
+  SapOps.setLoading(document.getElementById('clientRiskList'), 'Checking client health...');
+  SapOps.setLoading(document.getElementById('recentActivityList'), 'Loading recent audit activity...');
+
+  try {
+    const data = await SapOps.loadJson('/api/dashboard/summary');
+    const k = data.kpis || {};
+    setText('kpiActiveJobs', k.active_jobs);
+    setText('kpiPending', k.pending_approvals);
+    setText('kpiExpired', k.expired_certificates);
+    setText('kpiExpiring', k.expiring_30_days);
+    setText('kpiMissingFiles', k.missing_files);
+    setText('kpiClientsRisk', k.clients_at_risk);
+    SapActionQueue.render(actionQueue, data.action_queue || []);
+    renderJobs(data.active_jobs || []);
+    renderClientRisk(data.client_risk || []);
+    renderActivity(data.recent_activity || []);
+  } catch (error) {
+    SapOps.setError(actionQueue, error);
+    SapOps.setError(document.getElementById('activeJobsList'), error);
+    SapOps.setError(document.getElementById('clientRiskList'), error);
+    SapOps.setError(document.getElementById('recentActivityList'), error);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadCommandCenter);
+</script>
 </body>
 </html>
