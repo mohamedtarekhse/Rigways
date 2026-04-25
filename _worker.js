@@ -1140,9 +1140,9 @@ async function handleCertUpload(request, env, path) {
       return badReq('Invalid file type. Allowed: PDF, JPG, PNG, WEBP', 'INVALID_TYPE', env);
     }
 
-    // Max 10MB
-    if (file.size > 10 * 1024 * 1024) {
-      return badReq('File too large. Maximum size is 10MB', 'FILE_TOO_LARGE', env);
+    // Max 200MB
+    if (file.size > 200 * 1024 * 1024) {
+      return badReq('File too large. Maximum size is 200MB', 'FILE_TOO_LARGE', env);
     }
 
     // Structured R2 key: clients/{clientId}/jobs/{jobNumber}/{certNumber}.{ext}
