@@ -2963,7 +2963,7 @@ async function loadCerts() {
       certId:          cert.cert_number || cert.id,
       certType:        baseType,
       liftingSubtype,
-      approvalStatus:  cert.approval_status,
+      approvalStatus:  cert.approval_status || 'pending',
       expiryDate:      cert.expiry_date,
       issueDate:       cert.issue_date,
       issuedBy:        cert.issued_by,
