@@ -7,6 +7,23 @@ import { validate, pick, compact }           from '../utils/validate.js';
 const TYPES    = ['Hoisting Equipment','Drilling Equipment','Mud System Low Pressure','Mud System High Pressure','Wirelines','Structure','Well Control','Tubular'];
 const STATUSES = ['operation','stacked'];
 
+async function resolveClientAliases(db, rawClientId) {
+  const key = String(rawClientId || '').trim();
+  if (!key) return [];
+  const out = new Set([key]);
+  const queries = [
+    { 'id.eq': key },
+    { 'client_id.eq': key },
+  ];
+  for (const filters of queries) {
+    const { data } = await db.from('clients', { filters, select:'id,client_id', limit:1 });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row?.id) out.add(String(row.id));
+    if (row?.client_id) out.add(String(row.client_id));
+  }
+  return Array.from(out);
+}
+
 async function resolveAssetId(db, rawId) {
   if (!rawId) return null;
   // Allow API callers to pass either UUID or business asset number (AST-xxxx)
@@ -112,14 +129,32 @@ export async function handleAssets(request, env, path) {
     const limit  = Math.min(parseInt(url.searchParams.get('limit')  || '50'),200);
     const offset = parseInt(url.searchParams.get('offset') || '0');
     const filters = {};
-    if (['user','technician'].includes(session.role) && session.customerId)
-      filters['client_id.eq'] = session.customerId;
+    const isRestricted = ['user','technician'].includes(session.role);
+    if (isRestricted && session.customerId) filters['client_id.eq'] = session.customerId;
     if (url.searchParams.get('status'))    filters['status.eq']    = url.searchParams.get('status');
     if (url.searchParams.get('type'))      filters['asset_type.eq']= url.searchParams.get('type');
     if (url.searchParams.get('client_id') && requireRole(session,['admin','manager']))
       filters['client_id.eq'] = url.searchParams.get('client_id');
-    const { data, error } = await db.from('assets', { select:'*', filters, limit, offset, order:'created_at.desc' });
+    let { data, error } = await db.from('assets', { select:'*', filters, limit, offset, order:'created_at.desc' });
     if (error) return serverErr(env);
+
+    // Backward-compat fallback: some deployments store assets.client_id as clients.id,
+    // while session.customerId contains clients.client_id (or vice versa).
+    if (isRestricted && session.customerId && (!Array.isArray(data) || data.length === 0)) {
+      const aliases = await resolveClientAliases(db, session.customerId);
+      for (const alias of aliases) {
+        if (!alias || alias === session.customerId) continue;
+        const f2 = { ...filters, 'client_id.eq': alias };
+        const retry = await db.from('assets', { select:'*', filters: f2, limit, offset, order:'created_at.desc' });
+        if (retry.error) continue;
+        const rows = Array.isArray(retry.data) ? retry.data : [];
+        if (rows.length) {
+          data = rows;
+          break;
+        }
+      }
+    }
+
     return ok({ assets: data || [], limit, offset }, env);
   }
 
@@ -128,8 +163,10 @@ export async function handleAssets(request, env, path) {
     const { data } = await db.from('assets', { filters: { 'id.eq': asId }, select:'*', limit: 1 });
     const asset = Array.isArray(data) ? data[0] : data;
     if (!asset) return notFound('Asset', env);
-    if (['user','technician'].includes(session.role) && session.customerId && asset.client_id !== session.customerId)
-      return forbidden(env);
+    if (['user','technician'].includes(session.role) && session.customerId) {
+      const aliases = await resolveClientAliases(db, session.customerId);
+      if (!aliases.includes(String(asset.client_id || ''))) return forbidden(env);
+    }
     return ok(asset, env);
   }
 
