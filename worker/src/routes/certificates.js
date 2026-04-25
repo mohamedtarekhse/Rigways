@@ -15,6 +15,19 @@ export async function handleCertificates(request, env, path) {
   const method = request.method;
   const db     = createSupabase(env);
   const url    = new URL(request.url);
+  async function clientAliases(rawClientId) {
+    const key = String(rawClientId || '').trim();
+    if (!key) return [];
+    const out = new Set([key]);
+    const queries = [{ 'id.eq': key }, { 'client_id.eq': key }];
+    for (const filters of queries) {
+      const { data } = await db.from('clients', { filters, select:'id,client_id', limit:1 });
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row?.id) out.add(String(row.id));
+      if (row?.client_id) out.add(String(row.client_id));
+    }
+    return Array.from(out);
+  }
 
   if (path === '/certificates/history/export' && method === 'GET') {
     if (!requireRole(session, ['admin','manager','technician'])) return forbidden(env);
@@ -114,8 +127,10 @@ export async function handleCertificates(request, env, path) {
     const { data: aRows } = await db.from('assets', { filters: { 'id.eq': body.asset_id }, select:'id,client_id', limit:1 });
     const asset = Array.isArray(aRows) ? aRows[0] : aRows;
     if (!asset) return notFound('Asset', env);
-    if (session.role === 'technician' && session.customerId && asset.client_id !== session.customerId)
-      return forbidden(env);
+    if (session.role === 'technician' && session.customerId) {
+      const aliases = await clientAliases(session.customerId);
+      if (!aliases.includes(String(asset.client_id || ''))) return forbidden(env);
+    }
 
     const { data, error } = await db.insert('certificates', {
       name:            body.name,
