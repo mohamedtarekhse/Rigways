@@ -2749,7 +2749,6 @@ function showToast(type, title, msg) {
 ═══════════════════════════════════════════════════════ */
 
 let ALL_JOBS_FOR_CERT_MODAL = [];
-let ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL = [];
 
 async function loadAssetDropdown() {
   const sel = document.getElementById('f_assetId');
@@ -2836,24 +2835,19 @@ function applyAssetNarrowing() {
   const isInspector = session && session.role === 'technician';
   
   const normalize = (v) => String(v || '').trim().toLowerCase();
-  const selectedFlAliases = new Set([normalize(selectedFl)]);
-  const selectedFlRow = (ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL || []).find(fl =>
-    String(fl.fl_id || '').trim() === selectedFl
-  );
-  if (selectedFlRow?.name) selectedFlAliases.add(normalize(selectedFlRow.name));
   const allAssets = (ALL_ASSETS_FOR_MODAL || []);
   let narrowed = allAssets.filter(a => {
     // For Admins: show all assets matching client/location (no job filtering)
     // For Inspectors: additionally filter by assigned jobs
     const assetClient = String(a.client_id || a.client || '');
-    const assetFl = normalize(a.functional_location || a.location || '');
+    const assetFl = String(a.functional_location || a.location || '');
     const assetNumber = String(a.asset_number || '').trim();
     const assetUuid = String(a.id || '').trim();
     
     // Filter by Client
     if (selectedClient && assetClient !== selectedClient) return false;
     // Filter by Functional Location
-    if (selectedFl && !selectedFlAliases.has(assetFl)) return false;
+    if (selectedFl && assetFl !== selectedFl) return false;
     // For inspectors, also filter by assigned jobs
     if (
       isInspector &&
@@ -2973,7 +2967,6 @@ async function loadFunctionalLocationDropdown(clientId, selectedValue) {
     const rows = (raw.data?.functional_locations || raw.data || [])
       .filter(fl => fl.status !== 'inactive')
       .filter(fl => !cid || String(fl.client_id || '') === cid);
-    ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL = rows;
 
     sel.innerHTML = '<option value="">Select functional location…</option>' +
       rows.map(fl => `<option value="${fl.fl_id}">${fl.fl_id} — ${fl.name}</option>`).join('');
@@ -2984,7 +2977,6 @@ async function loadFunctionalLocationDropdown(clientId, selectedValue) {
       sel.value = '';
     }
   } catch (e) {
-    ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL = [];
     sel.innerHTML = '<option value="">Could not load locations</option>';
     sel.value = '';
   }
