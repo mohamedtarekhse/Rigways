@@ -453,7 +453,12 @@
       <span style="font-size:15px; font-weight:700; color:var(--sap-text-primary);">Certificates</span>
       <span style="font-size:12px; color:var(--sap-text-secondary);" id="pageSubtitle">All certificates across clients</span>
     </div>
-    <div id="headerActions"></div>
+    <div id="headerActions">
+      <button class="btn btn-primary" onclick="openUploadModal()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
+        <span>Upload Certificate</span>
+      </button>
+    </div>
   </div>
 
   <!-- Table card -->
@@ -2749,6 +2754,7 @@ function showToast(type, title, msg) {
 ═══════════════════════════════════════════════════════ */
 
 let ALL_JOBS_FOR_CERT_MODAL = [];
+let ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL = [];
 
 async function loadAssetDropdown() {
   const sel = document.getElementById('f_assetId');
@@ -2774,13 +2780,30 @@ async function loadAssetDropdown() {
 function getInspectorAssignedAssetIds() {
   // For inspectors, get asset IDs from their assigned jobs
   if (!session || session.role !== 'technician') return null;
-  const inspectorName = (session.name || '').trim();
-  if (!inspectorName) return null;
+  const inspectorName = String(session.name || '').trim();
+  const inspectorUserId = (session.userId || '').trim();
+  if (!inspectorName && !inspectorUserId) return null;
+  const normalize = (v) => String(v || '').trim().toLowerCase();
+  const asArray = (v) => {
+    if (Array.isArray(v)) return v;
+    if (typeof v === 'string') {
+      const s = v.trim();
+      if (!s) return [];
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed)) return parsed;
+      } catch(_) {}
+      return s.split(',').map(x => x.trim()).filter(Boolean);
+    }
+    return [];
+  };
   
-  const assignedJobs = ALL_JOBS_FOR_CERT_MODAL.filter(j => 
-    (j.inspector_ids || []).includes(inspectorName) || 
-    (j.inspector_name && j.inspector_name === inspectorName)
-  );
+  const assignedJobs = ALL_JOBS_FOR_CERT_MODAL.filter(j => {
+    const ids = asArray(j.inspector_ids).map(normalize);
+    const byId = inspectorUserId && ids.includes(normalize(inspectorUserId));
+    const byName = inspectorName && (ids.includes(normalize(inspectorName)) || normalize(j.inspector_name) === normalize(inspectorName));
+    return byId || byName;
+  });
   
   // Extract unique asset IDs from job notes or related data
   const assetIds = new Set();
@@ -2791,8 +2814,16 @@ function getInspectorAssignedAssetIds() {
       if (match) assetIds.add(match[0]);
     }
     // If job has direct asset reference
-    if (j.asset_id) assetIds.add(j.asset_id);
-    if (j.asset_number) assetIds.add(j.asset_number);
+    if (j.asset_id) {
+      const v = String(j.asset_id).trim();
+      assetIds.add(v);
+      assetIds.add(v.toLowerCase());
+    }
+    if (j.asset_number) {
+      const v = String(j.asset_number).trim();
+      assetIds.add(v);
+      assetIds.add(v.toLowerCase());
+    }
   });
   
   return assetIds.size > 0 ? assetIds : null;
@@ -2809,21 +2840,53 @@ function applyAssetNarrowing() {
   const inspectorAssetIds = getInspectorAssignedAssetIds();
   const isInspector = session && session.role === 'technician';
   
-  const narrowed = (ALL_ASSETS_FOR_MODAL || []).filter(a => {
+  const normalize = (v) => String(v || '').trim().toLowerCase();
+  const selectedFlAliases = new Set([normalize(selectedFl)]);
+  const selectedFlRow = (ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL || []).find(fl =>
+    String(fl.fl_id || '').trim() === selectedFl
+  );
+  if (selectedFlRow?.name) selectedFlAliases.add(normalize(selectedFlRow.name));
+  const allAssets = (ALL_ASSETS_FOR_MODAL || []);
+  let narrowed = allAssets.filter(a => {
     // For Admins: show all assets matching client/location (no job filtering)
     // For Inspectors: additionally filter by assigned jobs
     const assetClient = String(a.client_id || a.client || '');
-    const assetFl = String(a.functional_location || a.location || '');
-    const assetId = String(a.asset_number || a.id || '');
+    const assetFl = normalize(a.functional_location || a.location || '');
+    const assetNumber = String(a.asset_number || '').trim();
+    const assetUuid = String(a.id || '').trim();
     
     // Filter by Client
     if (selectedClient && assetClient !== selectedClient) return false;
     // Filter by Functional Location
-    if (selectedFl && assetFl !== selectedFl) return false;
+    if (selectedFl && !selectedFlAliases.has(assetFl)) return false;
     // For inspectors, also filter by assigned jobs
-    if (isInspector && inspectorAssetIds && !inspectorAssetIds.has(assetId)) return false;
+    if (
+      isInspector &&
+      inspectorAssetIds &&
+      !inspectorAssetIds.has(assetNumber) &&
+      !inspectorAssetIds.has(assetUuid) &&
+      !inspectorAssetIds.has(normalize(assetNumber)) &&
+      !inspectorAssetIds.has(normalize(assetUuid))
+    ) return false;
     return true;
   });
+
+  // Resilient fallback: if strict filters produce no rows, keep technicians unblocked.
+  // First fallback to assigned assets regardless of client/location mismatches.
+  if (!narrowed.length && isInspector && inspectorAssetIds) {
+    narrowed = allAssets.filter(a => {
+      const assetNumber = String(a.asset_number || '').trim();
+      const assetUuid = String(a.id || '').trim();
+      return (
+        inspectorAssetIds.has(assetNumber) ||
+        inspectorAssetIds.has(assetUuid) ||
+        inspectorAssetIds.has(normalize(assetNumber)) ||
+        inspectorAssetIds.has(normalize(assetUuid))
+      );
+    });
+  }
+  // Last-resort fallback: if assignments could not be resolved, show all to avoid empty modal.
+  if (!narrowed.length && isInspector) narrowed = allAssets;
   sel.innerHTML = '<option value="">Select asset…</option>' +
     narrowed.map(a => `<option value="${a.asset_number || a.id}">${a.asset_number || a.id} — ${a.name}</option>`).join('');
   if (currentValue && Array.from(sel.options).some(o => o.value === currentValue)) sel.value = currentValue;
@@ -2915,6 +2978,7 @@ async function loadFunctionalLocationDropdown(clientId, selectedValue) {
     const rows = (raw.data?.functional_locations || raw.data || [])
       .filter(fl => fl.status !== 'inactive')
       .filter(fl => !cid || String(fl.client_id || '') === cid);
+    ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL = rows;
 
     sel.innerHTML = '<option value="">Select functional location…</option>' +
       rows.map(fl => `<option value="${fl.fl_id}">${fl.fl_id} — ${fl.name}</option>`).join('');
@@ -2925,6 +2989,7 @@ async function loadFunctionalLocationDropdown(clientId, selectedValue) {
       sel.value = '';
     }
   } catch (e) {
+    ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL = [];
     sel.innerHTML = '<option value="">Could not load locations</option>';
     sel.value = '';
   }
@@ -3071,15 +3136,17 @@ document.addEventListener('DOMContentLoaded', () => {
   if (pageSizeSelect) pageSizeSelect.value = String(PAGE_SIZE);
   session = getSession();
   if (!session) return;
-  const role = session.role;
+  const role = String(session.role || '').toLowerCase();
+  session.role = role;
   const lang = 'en';
   applyLang(lang);
 
   /* Shell */
-  const initials = session.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  const safeName = String(session.name || 'User').trim() || 'User';
+  const initials = safeName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   document.getElementById('shellAvatar').textContent = initials;
-  document.getElementById('menuUserName').textContent = session.name;
-  const rl = {admin:'Administrator',manager:'Manager',technician:'Technician',user:'Regular User'};
+  document.getElementById('menuUserName').textContent = safeName;
+  const rl = {admin:'Administrator',manager:'Manager',technician:'Technician',inspector:'Technician',user:'Regular User'};
   document.getElementById('menuUserRole').textContent = rl[role]||role;
 
   if (role !== 'admin') {
@@ -3103,7 +3170,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* Header actions */
   const ha = document.getElementById('headerActions');
-  if (role === 'admin' || role === 'manager' || role === 'technician') {
+  if (role === 'admin' || role === 'manager' || role === 'technician' || role === 'inspector') {
     ha.innerHTML = `<button class="btn btn-primary" onclick="openUploadModal()">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
       <span>Upload Certificate</span>
