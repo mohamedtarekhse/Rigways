@@ -1514,6 +1514,10 @@ function openUploadModal() {
   const customerId = String(session?.customerId || '').trim();
   const modal = document.getElementById('certModal');
   const form = document.getElementById('certForm');
+  if (modal) {
+    if (window.SapModal && typeof window.SapModal.open === 'function') window.SapModal.open('certModal');
+    else modal.classList.add('open');
+  }
   if (document.getElementById('editCertId')) document.getElementById('editCertId').value = '';
   if (form) form.reset();
   clearFile();
@@ -1542,7 +1546,6 @@ function openUploadModal() {
   if (document.getElementById('f_expiryDate')) document.getElementById('f_expiryDate').value = '';
   if (document.getElementById('f_functionalLocation')) document.getElementById('f_functionalLocation').value = '';
   bindCertDraft(); restoreCertDraft();
-  if (modal) modal.classList.add('open');
   // Load all dropdowns from API
   loadAssetDropdown();
   loadInspectorDropdown();
