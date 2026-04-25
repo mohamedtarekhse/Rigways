@@ -654,6 +654,14 @@
             </select>
           </div>
 
+          <!-- Linked Asset (moved after job number) -->
+          <div class="sap-field">
+            <label class="sap-label">Linked Asset ID</label>
+            <select id="f_assetId" class="sap-select">
+              <option value="">Select asset…</option>
+            </select>
+          </div>
+
           <!-- Cert Name -->
           <div class="sap-field">
             <label class="sap-label">Certificate Name / Title <span class="required">*</span></label>
@@ -701,30 +709,28 @@
 
           <!-- Issue Date -->
           <div class="sap-field">
-            <label class="sap-label">Issue Date <span class="required">*</span></label>
-            <input type="date" id="f_issueDate" class="sap-input"/>
+            <label class="sap-label">Inspection Date <span class="required">*</span></label>
+            <input type="date" id="f_issueDate" class="sap-input" onchange="calculateExpiryDate()"/>
+          </div>
+
+          <!-- Period -->
+          <div class="sap-field">
+            <label class="sap-label">Period <span class="required">*</span></label>
+            <select id="f_period" class="sap-select" onchange="calculateExpiryDate()">
+              <option value="">Select period…</option>
+              <option value="1">Monthly (1 month)</option>
+              <option value="3">Quarterly (3 months)</option>
+              <option value="6">Semi-Annually (6 months)</option>
+              <option value="12">Annually (1 year)</option>
+              <option value="60">5 Years</option>
+              <option value="120">10 Years</option>
+            </select>
           </div>
 
           <!-- Expiry Date -->
           <div class="sap-field">
             <label class="sap-label">Expiry Date <span class="required">*</span></label>
             <input type="date" id="f_expiryDate" class="sap-input"/>
-          </div>
-
-          <!-- Linked Asset -->
-          <div class="sap-field">
-            <label class="sap-label">Linked Asset ID</label>
-            <select id="f_assetId" class="sap-select">
-              <option value="">Select asset…</option>
-              <option value="AST-0001">AST-0001 – Server Rack #01</option>
-              <option value="AST-0002">AST-0002 – HVAC Unit #01</option>
-              <option value="AST-0003">AST-0003 – Generator #01</option>
-              <option value="AST-0004">AST-0004 – Forklift #03</option>
-              <option value="AST-0005">AST-0005 – Fire Panel #01</option>
-              <option value="AST-0006">AST-0006 – Pump Station #2</option>
-              <option value="AST-0007">AST-0007 – UPS System #01</option>
-              <option value="AST-0008">AST-0008 – Crane #01</option>
-            </select>
           </div>
 
           <!-- Client -->
@@ -744,7 +750,7 @@
             <input type="file" id="certFileInput" accept=".pdf,.jpg,.jpeg,.png,.webp" onchange="handleFileSelect(this)"/>
             <div class="upload-zone__icon">📄</div>
             <div class="upload-zone__title"><span>Click to upload</span> <span>or drag & drop</span></div>
-            <div class="upload-zone__hint">PDF, JPG, PNG up to 10MB</div>
+            <div class="upload-zone__hint">PDF, JPG, PNG up to 200MB</div>
           </div>
           <div id="uploadPreview" style="display:none;" class="upload-preview">
             <div class="upload-preview__icon" id="previewIcon">📄</div>
@@ -1449,7 +1455,7 @@ async function massDelete() {
    UPLOAD / EDIT MODAL
 ═══════════════════════════════════════════════════════ */
 function certDraftKey(){ const id=document.getElementById('editCertId')?.value||''; return id?`certs:edit:${id}`:'certs:add'; }
-function collectCertDraft(){ return { editCertId:document.getElementById('editCertId')?.value||'', f_jobNumber:document.getElementById('f_jobNumber')?.value||'', f_jobSelect:document.getElementById('f_jobSelect')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_certType:document.getElementById('f_certType')?.value||'', f_liftingSubtype:document.getElementById('f_liftingSubtype')?.value||'', f_issuedBy:document.getElementById('f_issuedBy')?.value||'', f_issueDate:document.getElementById('f_issueDate')?.value||'', f_expiryDate:document.getElementById('f_expiryDate')?.value||'', f_client:document.getElementById('f_client')?.value||'', f_assetId:document.getElementById('f_assetId')?.value||'' }; }
+function collectCertDraft(){ return { editCertId:document.getElementById('editCertId')?.value||'', f_jobNumber:document.getElementById('f_jobNumber')?.value||'', f_jobSelect:document.getElementById('f_jobSelect')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_certType:document.getElementById('f_certType')?.value||'', f_liftingSubtype:document.getElementById('f_liftingSubtype')?.value||'', f_issuedBy:document.getElementById('f_issuedBy')?.value||'', f_issueDate:document.getElementById('f_issueDate')?.value||'', f_period:document.getElementById('f_period')?.value||'', f_expiryDate:document.getElementById('f_expiryDate')?.value||'', f_client:document.getElementById('f_client')?.value||'', f_assetId:document.getElementById('f_assetId')?.value||'' }; }
 function saveCertDraft(){ if(window.SapDraft) SapDraft.save(certDraftKey(), collectCertDraft()); }
 function restoreCertDraft(){ if(!window.SapDraft) return; const d=SapDraft.load(certDraftKey(),24*60*60*1000); if(d&&confirm('A saved draft was found. Restore it?')) Object.entries(d).forEach(([k,v])=>{const el=document.getElementById(k); if(el) el.value=v;}); onCertTypeChange(); }
 function clearCertDraft(){ if(!window.SapDraft) return; const id=document.getElementById('editCertId')?.value||''; SapDraft.clear('certs:add'); if(id) SapDraft.clear(`certs:edit:${id}`); }
@@ -1475,8 +1481,10 @@ function openUploadModal() {
     document.getElementById('f_client_wrap').style.flexDirection = 'column';
   }
 
-  /* Set today as default issue date */
-  document.getElementById('f_issueDate').value = new Date().toISOString().split('T')[0];
+  /* Set today as default inspection date */
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('f_issueDate').value = today;
+  
   bindCertDraft(); restoreCertDraft(); document.getElementById('certModal').classList.add('open');
   // Load all dropdowns from API
   loadAssetDropdown();
@@ -1515,6 +1523,22 @@ function openEditModal(id) {
   document.getElementById('f_liftingSubtype').value = c.liftingSubtype || '';
   document.getElementById('f_issuedBy').value       = c.issuedBy;
   document.getElementById('f_issueDate').value      = c.issueDate;
+  // Calculate period from issue and expiry dates for edit mode
+  if (c.issueDate && c.expiryDate) {
+    const issue = new Date(c.issueDate);
+    const expiry = new Date(c.expiryDate);
+    const diffMonths = (expiry.getFullYear() - issue.getFullYear()) * 12 + (expiry.getMonth() - issue.getMonth());
+    const periodSelect = document.getElementById('f_period');
+    if (periodSelect) {
+      // Check if the diff matches one of our predefined periods
+      const options = ['1', '3', '6', '12', '60', '120'];
+      if (options.includes(String(diffMonths))) {
+        periodSelect.value = String(diffMonths);
+      } else {
+        periodSelect.value = ''; // Custom period
+      }
+    }
+  }
   document.getElementById('f_expiryDate').value     = c.expiryDate;
   document.getElementById('f_assetId').value        = c.assetId || '';
   document.getElementById('f_client').value         = c.client;
@@ -1550,6 +1574,37 @@ function onJobSelectChange(jobNumber) {
   if (!jobNumber) return;
   const input = document.getElementById('f_jobNumber');
   if (input) input.value = jobNumber;
+  // Load assets for the selected job
+  loadAssetsForJob(jobNumber);
+}
+
+function loadAssetsForJob(jobNumber) {
+  const assetSel = document.getElementById('f_assetId');
+  if (!assetSel) return;
+  // For now, keep all assets in dropdown - filtering can be added later if needed
+  // The asset dropdown is already populated by loadAssetDropdown()
+}
+
+function calculateExpiryDate() {
+  const issueDateVal = document.getElementById('f_issueDate')?.value;
+  const periodMonths = document.getElementById('f_period')?.value;
+  const expiryField = document.getElementById('f_expiryDate');
+  
+  if (!issueDateVal || !periodMonths || !expiryField) return;
+  
+  const issueDate = new Date(issueDateVal);
+  const months = parseInt(periodMonths, 10);
+  
+  // Calculate expiry date by adding months to inspection date
+  const expiryDate = new Date(issueDate);
+  expiryDate.setMonth(expiryDate.getMonth() + months);
+  
+  // Format as YYYY-MM-DD for the date input
+  const year = expiryDate.getFullYear();
+  const month = String(expiryDate.getMonth() + 1).padStart(2, '0');
+  const day = String(expiryDate.getDate()).padStart(2, '0');
+  
+  expiryField.value = `${year}-${month}-${day}`;
 }
 
 function lockTechnicianModalFields() {
@@ -1607,9 +1662,21 @@ function onCertTypeChange() {
 }
 
 /* ── File handling ── */
+const MAX_FILE_SIZE_MB = 200; // 200 MB limit
+let uploadProgressInterval = null;
+
 function handleFileSelect(input) {
   const file = input.files[0];
   if (!file) return;
+  
+  // Check file size (5 MB limit)
+  const fileSizeMB = file.size / (1024 * 1024);
+  if (fileSizeMB > MAX_FILE_SIZE_MB) {
+    showToast('error', 'File Too Large', `File size must be less than ${MAX_FILE_SIZE_MB} MB. Your file is ${fileSizeMB.toFixed(2)} MB.`);
+    input.value = '';
+    return;
+  }
+  
   const icons = { pdf:'📄', jpg:'🖼️', jpeg:'🖼️', png:'🖼️', webp:'🖼️' };
   const ext = file.name.split('.').pop().toLowerCase();
   selectedFile = file;
@@ -1635,6 +1702,52 @@ zone.addEventListener('drop', e => {
   const file = e.dataTransfer.files[0];
   if (file) { const dt = new DataTransfer(); dt.items.add(file); document.getElementById('certFileInput').files = dt.files; handleFileSelect(document.getElementById('certFileInput')); }
 });
+
+/* ── Upload progress toast with bar ── */
+function showUploadProgressToast(progress, message) {
+  let toast = document.getElementById('uploadProgressToast');
+  if (!toast) {
+    // Create the toast element if it doesn't exist
+    toast = document.createElement('div');
+    toast.id = 'uploadProgressToast';
+    toast.className = 'sap-toast sap-toast--info';
+    toast.style.cssText = 'position: fixed; bottom: 24px; right: 24px; z-index: 9999; min-width: 300px; max-width: 400px;';
+    toast.innerHTML = `
+      <div style="display: flex; align-items: flex-start; gap: 12px;">
+        <div style="flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--sap-brand); color: #fff; display: flex; align-items: center; justify-content: center;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width: 16px; height: 16px;"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: 13px; font-weight: 700; color: var(--sap-text-primary);" id="uploadProgressTitle">Uploading...</div>
+          <div style="margin-top: 8px; height: 6px; background: #e8eaed; border-radius: 3px; overflow: hidden;">
+            <div id="uploadProgressBar" style="height: 100%; background: var(--sap-brand); width: 0%; transition: width 0.3s ease;"></div>
+          </div>
+          <div style="margin-top: 4px; font-size: 11px; color: var(--sap-text-secondary);" id="uploadProgressMessage">Preparing upload...</div>
+        </div>
+        <button onclick="this.closest('.sap-toast').remove()" style="background: none; border: none; color: var(--sap-text-secondary); cursor: pointer; padding: 0; flex-shrink: 0;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width: 16px; height: 16px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    `;
+    document.body.appendChild(toast);
+  }
+  
+  const progressBar = document.getElementById('uploadProgressBar');
+  const progressMessage = document.getElementById('uploadProgressMessage');
+  
+  if (progressBar) progressBar.style.width = progress + '%';
+  if (progressMessage) progressMessage.textContent = message;
+  
+  toast.style.display = 'block';
+}
+
+function hideUploadProgressToast() {
+  const toast = document.getElementById('uploadProgressToast');
+  if (toast) {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }
+}
 
 /* ── Save ── */
 async function saveCert() {
@@ -1712,6 +1825,19 @@ async function saveCert() {
   /* ── Step 2: Upload file with structured R2 key (only if a new file was selected) ── */
   if (selectedFile) {
     if (saveBtn) { const _lbl4 = document.getElementById('saveBtnLabel'); if (_lbl4) _lbl4.textContent = 'Uploading file…'; }
+    
+    // Show upload progress toast
+    showUploadProgressToast(0, 'Starting upload...');
+    
+    // Simulate progress updates (since XHR progress isn't available with fetch)
+    let simulatedProgress = 0;
+    uploadProgressInterval = setInterval(() => {
+      if (simulatedProgress < 90) {
+        simulatedProgress += Math.random() * 15;
+        showUploadProgressToast(Math.min(simulatedProgress, 90), 'Uploading file...');
+      }
+    }, 200);
+    
     try {
       // Build structured metadata for the R2 key
       // Key pattern: clients/{CLIENT_ID}/jobs/{JOB_NUMBER}/{JOB_NUMBER}_{CERT_NUMBER}_{originalname}.{ext}
@@ -1734,19 +1860,27 @@ async function saveCert() {
       const ud  = await uploadRes.json();
       const udd = ud.data || ud;
 
+      // Clear progress interval
+      clearInterval(uploadProgressInterval);
+      
       if (!ud.success) {
+        hideUploadProgressToast();
         // Cert record is already saved — warn but don't block
         showToast('warning','File Upload Failed',
           'Certificate saved but file could not be uploaded: ' + (udd.error || 'Unknown error') +
           '. Edit the certificate to try again.');
       } else {
         // Step 3: PATCH the cert record with the structured file_url + file_name
+        showUploadProgressToast(100, 'Finalizing...');
         await apiFetch('/api/certificates/' + certUUID, {
           method: 'PATCH',
           body: JSON.stringify({ file_name: udd.file_name, file_url: udd.file_url }),
         });
+        setTimeout(() => hideUploadProgressToast(), 500);
       }
     } catch(e) {
+      clearInterval(uploadProgressInterval);
+      hideUploadProgressToast();
       showToast('warning','File Upload Error',
         'Certificate saved but file upload failed. Edit the certificate to re-attach the file.');
     }
@@ -2687,16 +2821,30 @@ async function loadJobDropdown(selectedJobNumber) {
   try {
     const res = await apiFetch('/api/jobs?limit=200');
     const raw = await res.json();
-    const rows = ((raw.data || raw).jobs || []).filter(j => ['active', 'reopened', 'technician_done'].includes(j.status));
+    // Filter jobs assigned to the current technician (if technician role)
+    let rows = ((raw.data || raw).jobs || []).filter(j => ['active', 'reopened', 'technician_done'].includes(j.status));
+    
+    // If technician, filter to only their assigned jobs
+    if (session?.role === 'technician' && session?.username) {
+      rows = rows.filter(j => j.assigned_to === session.username);
+    }
+    
     sel.innerHTML = '<option value="">Select active job…</option>' + rows.map(j => {
       const label = `${j.job_number} — ${j.client_id} (${j.status})`;
       return `<option value="${j.job_number}">${label}</option>`;
     }).join('');
+    
     const desired = selectedJobNumber || document.getElementById('f_jobNumber')?.value || '';
-    if (desired) sel.value = desired;
-    if (session?.role === 'technician' && sel.options.length > 1) {
-      if (!sel.value) sel.selectedIndex = 1;
+    
+    // Auto-select if only one job is available
+    if (rows.length === 1) {
+      sel.selectedIndex = 1; // Select the first (and only) job option
       onJobSelectChange(sel.value);
+    } else if (desired) {
+      sel.value = desired;
+    }
+    
+    if (session?.role === 'technician') {
       sel.disabled = false;
     } else {
       sel.disabled = false;
