@@ -1525,7 +1525,8 @@ function openUploadModal() {
   if (document.getElementById('saveBtnLabel')) document.getElementById('saveBtnLabel').textContent = 'Upload Certificate';
   if (document.getElementById('techUploadNote')) document.getElementById('techUploadNote').style.display = (role === 'technician' || role === 'inspector') ? 'block' : 'none';
 
-  if (customerId) {
+  const isScopedUser = role === 'technician' || role === 'inspector' || role === 'user';
+  if (isScopedUser && customerId) {
     if (document.getElementById('f_client')) document.getElementById('f_client').value = customerId;
     if (document.getElementById('f_client_wrap')) document.getElementById('f_client_wrap').style.display = 'none';
   } else {
@@ -2895,16 +2896,18 @@ function applyAssetNarrowing() {
   // Last-resort fallback: if assignments could not be resolved, show all to avoid empty modal.
   if (!narrowed.length && isInspector) narrowed = allAssets;
   sel.innerHTML = '<option value="">Select asset…</option>' +
-    narrowed.map(a => `<option value="${a.asset_number || a.id}">${a.asset_number || a.id} — ${a.name}</option>`).join('');
+    narrowed.map(a => `<option value="${a.id || a.asset_number}">${a.asset_number || a.id} — ${a.name}</option>`).join('');
   if (currentValue && Array.from(sel.options).some(o => o.value === currentValue)) sel.value = currentValue;
 }
 
 function findModalAssetById(assetId) {
   const key = String(assetId || '').trim();
   if (!key) return null;
-  return (ALL_ASSETS_FOR_MODAL || []).find(a =>
-    String(a.asset_number || a.id || '').trim() === key
-  ) || null;
+  return (ALL_ASSETS_FOR_MODAL || []).find(a => {
+    const byNumber = String(a.asset_number || '').trim();
+    const byId = String(a.id || '').trim();
+    return key === byNumber || key === byId;
+  }) || null;
 }
 
 async function syncClientAndLocationFromAsset(assetId) {
