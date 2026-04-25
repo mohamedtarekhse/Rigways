@@ -3108,6 +3108,7 @@ async function onAssetChangeForJob(assetId) {
 async function loadCerts() {
   try {
     const certRes = await apiFetch('/api/certificates?limit=200').then(r => r.json());
+    const assetRes = await apiFetch('/api/assets?limit=500').then(r => r.json());
     const cd = certRes.data  || certRes;
     const ad = assetRes.data || assetRes;
     const assetMap = {};
