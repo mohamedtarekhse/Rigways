@@ -2774,13 +2774,30 @@ async function loadAssetDropdown() {
 function getInspectorAssignedAssetIds() {
   // For inspectors, get asset IDs from their assigned jobs
   if (!session || session.role !== 'technician') return null;
-  const inspectorName = (session.name || '').trim();
-  if (!inspectorName) return null;
+  const inspectorName = String(session.name || '').trim();
+  const inspectorUserId = (session.userId || '').trim();
+  if (!inspectorName && !inspectorUserId) return null;
+  const normalize = (v) => String(v || '').trim().toLowerCase();
+  const asArray = (v) => {
+    if (Array.isArray(v)) return v;
+    if (typeof v === 'string') {
+      const s = v.trim();
+      if (!s) return [];
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed)) return parsed;
+      } catch(_) {}
+      return s.split(',').map(x => x.trim()).filter(Boolean);
+    }
+    return [];
+  };
   
-  const assignedJobs = ALL_JOBS_FOR_CERT_MODAL.filter(j => 
-    (j.inspector_ids || []).includes(inspectorName) || 
-    (j.inspector_name && j.inspector_name === inspectorName)
-  );
+  const assignedJobs = ALL_JOBS_FOR_CERT_MODAL.filter(j => {
+    const ids = asArray(j.inspector_ids).map(normalize);
+    const byId = inspectorUserId && ids.includes(normalize(inspectorUserId));
+    const byName = inspectorName && (ids.includes(normalize(inspectorName)) || normalize(j.inspector_name) === normalize(inspectorName));
+    return byId || byName;
+  });
   
   // Extract unique asset IDs from job notes or related data
   const assetIds = new Set();
@@ -2791,8 +2808,16 @@ function getInspectorAssignedAssetIds() {
       if (match) assetIds.add(match[0]);
     }
     // If job has direct asset reference
-    if (j.asset_id) assetIds.add(j.asset_id);
-    if (j.asset_number) assetIds.add(j.asset_number);
+    if (j.asset_id) {
+      const v = String(j.asset_id).trim();
+      assetIds.add(v);
+      assetIds.add(v.toLowerCase());
+    }
+    if (j.asset_number) {
+      const v = String(j.asset_number).trim();
+      assetIds.add(v);
+      assetIds.add(v.toLowerCase());
+    }
   });
   
   return assetIds.size > 0 ? assetIds : null;
@@ -2809,21 +2834,48 @@ function applyAssetNarrowing() {
   const inspectorAssetIds = getInspectorAssignedAssetIds();
   const isInspector = session && session.role === 'technician';
   
-  const narrowed = (ALL_ASSETS_FOR_MODAL || []).filter(a => {
+  const normalize = (v) => String(v || '').trim().toLowerCase();
+  const allAssets = (ALL_ASSETS_FOR_MODAL || []);
+  let narrowed = allAssets.filter(a => {
     // For Admins: show all assets matching client/location (no job filtering)
     // For Inspectors: additionally filter by assigned jobs
     const assetClient = String(a.client_id || a.client || '');
     const assetFl = String(a.functional_location || a.location || '');
-    const assetId = String(a.asset_number || a.id || '');
+    const assetNumber = String(a.asset_number || '').trim();
+    const assetUuid = String(a.id || '').trim();
     
     // Filter by Client
     if (selectedClient && assetClient !== selectedClient) return false;
     // Filter by Functional Location
     if (selectedFl && assetFl !== selectedFl) return false;
     // For inspectors, also filter by assigned jobs
-    if (isInspector && inspectorAssetIds && !inspectorAssetIds.has(assetId)) return false;
+    if (
+      isInspector &&
+      inspectorAssetIds &&
+      !inspectorAssetIds.has(assetNumber) &&
+      !inspectorAssetIds.has(assetUuid) &&
+      !inspectorAssetIds.has(normalize(assetNumber)) &&
+      !inspectorAssetIds.has(normalize(assetUuid))
+    ) return false;
     return true;
   });
+
+  // Resilient fallback: if strict filters produce no rows, keep technicians unblocked.
+  // First fallback to assigned assets regardless of client/location mismatches.
+  if (!narrowed.length && isInspector && inspectorAssetIds) {
+    narrowed = allAssets.filter(a => {
+      const assetNumber = String(a.asset_number || '').trim();
+      const assetUuid = String(a.id || '').trim();
+      return (
+        inspectorAssetIds.has(assetNumber) ||
+        inspectorAssetIds.has(assetUuid) ||
+        inspectorAssetIds.has(normalize(assetNumber)) ||
+        inspectorAssetIds.has(normalize(assetUuid))
+      );
+    });
+  }
+  // Last-resort fallback: if assignments could not be resolved, show all to avoid empty modal.
+  if (!narrowed.length && isInspector) narrowed = allAssets;
   sel.innerHTML = '<option value="">Select asset…</option>' +
     narrowed.map(a => `<option value="${a.asset_number || a.id}">${a.asset_number || a.id} — ${a.name}</option>`).join('');
   if (currentValue && Array.from(sel.options).some(o => o.value === currentValue)) sel.value = currentValue;
