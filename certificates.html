@@ -1510,37 +1510,44 @@ function restoreCertDraft(){ if(!window.SapDraft) return; const d=SapDraft.load(
 function clearCertDraft(){ if(!window.SapDraft) return; const id=document.getElementById('editCertId')?.value||''; SapDraft.clear('certs:add'); if(id) SapDraft.clear(`certs:edit:${id}`); }
 function bindCertDraft(){ const f=document.getElementById('certForm'); if(!f||f.dataset.draftBound==='1') return; f.addEventListener('input',saveCertDraft); f.addEventListener('change',saveCertDraft); f.dataset.draftBound='1'; }
 function openUploadModal() {
-  document.getElementById('editCertId').value = '';
-  document.getElementById('certForm').reset();
+  const role = String(session?.role || '').toLowerCase();
+  const customerId = String(session?.customerId || '').trim();
+  const modal = document.getElementById('certModal');
+  const form = document.getElementById('certForm');
+  if (document.getElementById('editCertId')) document.getElementById('editCertId').value = '';
+  if (form) form.reset();
   clearFile();
-  document.getElementById('uploadPreview').style.display = 'none';
-  document.getElementById('existingFileNote').style.display = 'none';
-  document.getElementById('liftingSubtypeWrap').style.display = 'none';
-  document.getElementById('relatedStandardWrap').style.display = 'none';
-  document.getElementById('modalTitle').textContent = 'Upload Certificate';
-  document.getElementById('saveBtnLabel').textContent = 'Upload Certificate';
-  document.getElementById('techUploadNote').style.display = session.role === 'technician' ? 'block' : 'none';
+  if (document.getElementById('uploadPreview')) document.getElementById('uploadPreview').style.display = 'none';
+  if (document.getElementById('existingFileNote')) document.getElementById('existingFileNote').style.display = 'none';
+  if (document.getElementById('liftingSubtypeWrap')) document.getElementById('liftingSubtypeWrap').style.display = 'none';
+  if (document.getElementById('relatedStandardWrap')) document.getElementById('relatedStandardWrap').style.display = 'none';
+  if (document.getElementById('modalTitle')) document.getElementById('modalTitle').textContent = 'Upload Certificate';
+  if (document.getElementById('saveBtnLabel')) document.getElementById('saveBtnLabel').textContent = 'Upload Certificate';
+  if (document.getElementById('techUploadNote')) document.getElementById('techUploadNote').style.display = (role === 'technician' || role === 'inspector') ? 'block' : 'none';
 
-  if (session.customerId) {
-    document.getElementById('f_client').value = session.customerId;
-    document.getElementById('f_client_wrap').style.display = 'none';
+  if (customerId) {
+    if (document.getElementById('f_client')) document.getElementById('f_client').value = customerId;
+    if (document.getElementById('f_client_wrap')) document.getElementById('f_client_wrap').style.display = 'none';
   } else {
-    document.getElementById('f_client_wrap').style.display = '';
-    document.getElementById('f_client_wrap').style.flexDirection = 'column';
+    if (document.getElementById('f_client_wrap')) {
+      document.getElementById('f_client_wrap').style.display = '';
+      document.getElementById('f_client_wrap').style.flexDirection = 'column';
+    }
   }
 
   /* Set today as default issue date */
-  document.getElementById('f_issueDate').value = new Date().toISOString().split('T')[0];
-  document.getElementById('f_validityPeriod').value = '';
-  document.getElementById('f_expiryDate').value = '';
-  document.getElementById('f_functionalLocation').value = '';
-  bindCertDraft(); restoreCertDraft(); document.getElementById('certModal').classList.add('open');
+  if (document.getElementById('f_issueDate')) document.getElementById('f_issueDate').value = new Date().toISOString().split('T')[0];
+  if (document.getElementById('f_validityPeriod')) document.getElementById('f_validityPeriod').value = '';
+  if (document.getElementById('f_expiryDate')) document.getElementById('f_expiryDate').value = '';
+  if (document.getElementById('f_functionalLocation')) document.getElementById('f_functionalLocation').value = '';
+  bindCertDraft(); restoreCertDraft();
+  if (modal) modal.classList.add('open');
   // Load all dropdowns from API
   loadAssetDropdown();
   loadInspectorDropdown();
   loadClientDropdown();
   loadJobDropdown();
-  if (session.role === 'technician') lockTechnicianModalFields();
+  if (role === 'technician' || role === 'inspector') lockTechnicianModalFields();
 }
 
 function openEditModal(id) {
