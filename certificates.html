@@ -665,12 +665,27 @@
           <!-- Job Number -->
           <div class="sap-field">
             <label class="sap-label">Job Number <span class="required">*</span></label>
-            <input type="text" id="f_jobNumber" list="jobNumberList" class="sap-input" placeholder="Type new job number or pick an open job"/>
+            <input type="text" id="f_jobNumber" list="jobNumberList" class="sap-input" placeholder="Type new job number or pick an open job" onchange="onJobNumberChangeForClientFiltering()"/>
             <datalist id="jobNumberList"></datalist>
           </div>
           <div class="sap-field">
             <label class="sap-label">Job Source</label>
             <div style="font-size:12px;color:var(--sap-text-secondary);padding-top:9px;" id="jobSourceHint">Admin can type/search/select open jobs.</div>
+          </div>
+
+          <!-- Linked Client -->
+          <div class="sap-field" id="f_client_wrap">
+            <label class="sap-label">Linked Client <span class="required">*</span></label>
+            <select id="f_client" class="sap-select" onchange="onClientChangeForAssetNarrowing()">
+              <option value="">Select client…</option>
+            </select>
+          </div>
+
+          <!-- Linked Asset -->
+          <div class="sap-field">
+            <label class="sap-label">Linked Asset ID <span class="required">*</span></label>
+            <input type="text" id="f_assetId" list="assetNumberList" class="sap-input" placeholder="Search asset by typing..." onchange="onAssetChangeForJob(this.value)"/>
+            <datalist id="assetNumberList"></datalist>
           </div>
 
           <!-- Cert Name -->
@@ -748,37 +763,6 @@
             <div style="font-size:11px;color:var(--sap-text-secondary);margin-top:4px;">
               Auto-calculated from Issue Date + Validity Period.
             </div>
-          </div>
-
-          <!-- Linked Asset -->
-          <div class="sap-field">
-            <label class="sap-label">Linked Asset ID</label>
-            <select id="f_assetId" class="sap-select" onchange="onAssetChangeForJob(this.value)">
-              <option value="">Select asset…</option>
-              <option value="AST-0001">AST-0001 – Server Rack #01</option>
-              <option value="AST-0002">AST-0002 – HVAC Unit #01</option>
-              <option value="AST-0003">AST-0003 – Generator #01</option>
-              <option value="AST-0004">AST-0004 – Forklift #03</option>
-              <option value="AST-0005">AST-0005 – Fire Panel #01</option>
-              <option value="AST-0006">AST-0006 – Pump Station #2</option>
-              <option value="AST-0007">AST-0007 – UPS System #01</option>
-              <option value="AST-0008">AST-0008 – Crane #01</option>
-            </select>
-          </div>
-
-          <!-- Client -->
-          <div class="sap-field" id="f_client_wrap">
-            <label class="sap-label">Linked Client <span class="required">*</span></label>
-            <select id="f_client" class="sap-select" onchange="onClientChangeForAssetNarrowing()">
-              <option value="">Select client…</option>
-            </select>
-          </div>
-
-          <div class="sap-field" id="f_functionalLocation_wrap">
-            <label class="sap-label">Functional Location <span class="required">*</span></label>
-            <select id="f_functionalLocation" class="sap-select" onchange="onFunctionalLocationChangeForAssetNarrowing()">
-              <option value="">Select functional location…</option>
-            </select>
           </div>
 
         </div><!-- /grid -->
@@ -1526,7 +1510,6 @@ function openUploadModal() {
   document.getElementById('f_issueDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('f_validityPeriod').value = '';
   document.getElementById('f_expiryDate').value = '';
-  document.getElementById('f_functionalLocation').value = '';
   bindCertDraft(); restoreCertDraft(); document.getElementById('certModal').classList.add('open');
   // Load all dropdowns from API
   loadAssetDropdown();
@@ -1570,7 +1553,6 @@ function openEditModal(id) {
   document.getElementById('f_expiryDate').value     = c.expiryDate;
   document.getElementById('f_assetId').value        = c.assetUuid || '';
   document.getElementById('f_client').value         = c.client;
-  document.getElementById('f_functionalLocation').value = c.functionalLocation || '';
 
   clearFile();
   if (c.fileName) {
@@ -1594,7 +1576,6 @@ function openEditModal(id) {
   });
   loadInspectorDropdown(_inspVal);
   loadClientDropdown(_clientVal);
-  loadFunctionalLocationDropdown(_clientVal, c.functionalLocation || '');
   loadJobDropdown(c.jobNumber || '');
   onValidityPeriodChange();
   if (session.role === 'technician') lockTechnicianModalFields();
@@ -1758,14 +1739,13 @@ async function saveCert() {
   const validityPeriod = document.getElementById('f_validityPeriod')?.value || '';
   const expiryDate     = document.getElementById('f_expiryDate')?.value || '';
   const client         = document.getElementById('f_client')?.value || session?.customerId || '';
-  const functionalLocation = document.getElementById('f_functionalLocation')?.value || '';
   const assetId        = document.getElementById('f_assetId')?.value || '';
   const editId         = document.getElementById('editCertId')?.value || '';
   const isTechnician   = session?.role === 'technician';
   const effectiveIssuedBy = isTechnician ? (session?.name || '').trim() : issuedBy;
   const effectiveClient   = isTechnician ? (session?.customerId || '').trim() : client;
 
-  if (!name || !certType || !effectiveIssuedBy || !issueDate || !validityPeriod || !expiryDate || !functionalLocation) {
+  if (!name || !certType || !effectiveIssuedBy || !issueDate || !validityPeriod || !expiryDate || !assetId) {
     showToast('error','Required Fields','Please fill all required fields.'); return;
   }
   if (isTechnician && !effectiveClient) {
@@ -2758,36 +2738,89 @@ async function loadAssetDropdown() {
 }
 
 function applyAssetNarrowing() {
-  const sel = document.getElementById('f_assetId');
-  if (!sel) return;
+  const assetInput = document.getElementById('f_assetId');
+  const assetDatalist = document.getElementById('assetNumberList');
+  if (!assetInput || !assetDatalist) return;
+  
+  const selectedJobNumber = (document.getElementById('f_jobNumber')?.value || '').trim();
   const selectedClient = (document.getElementById('f_client')?.value || '').trim();
-  const selectedFl = (document.getElementById('f_functionalLocation')?.value || '').trim();
-  const currentValue = sel.value;
-  const narrowed = (ALL_ASSETS_FOR_MODAL || []).filter(a => {
+  const currentInputValue = assetInput.value;
+  
+  let narrowed = (ALL_ASSETS_FOR_MODAL || []).filter(a => {
     if (selectedClient && String(a.client_id || '') !== selectedClient) return false;
-    if (selectedFl && String(a.functional_location || '') !== selectedFl) return false;
     return true;
   });
-  sel.innerHTML = '<option value="">Select asset…</option>' +
-    narrowed.map(a => `<option value="${a.asset_number || a.id}">${a.asset_number || a.id} — ${a.name}</option>`).join('');
-  if (currentValue && Array.from(sel.options).some(o => o.value === currentValue)) sel.value = currentValue;
+  
+  // If job number is selected, filter assets by jobs that match this job number
+  if (selectedJobNumber) {
+    // Filter to assets that have certificates with this job number
+    const assetIdsWithJob = new Set(
+      (CERTS || [])
+        .filter(c => String(c.jobNumber || '') === selectedJobNumber)
+        .map(c => c.assetUuid || c.assetId)
+    );
+    if (assetIdsWithJob.size > 0) {
+      narrowed = narrowed.filter(a => assetIdsWithJob.has(a.asset_number || a.id));
+    }
+  }
+  
+  // Update datalist options for search/autocomplete
+  assetDatalist.innerHTML = narrowed.map(a => 
+    `<option value="${a.asset_number || a.id}">${a.asset_number || a.id} — ${a.name}</option>`
+  ).join('');
+  
+  // Keep current input value if it matches an option
+  if (currentInputValue) {
+    const isValid = Array.from(assetDatalist.options).some(o => o.value === currentInputValue);
+    if (!isValid) {
+      // User typed something not in filtered list - keep it but don't auto-clear
+    }
+  }
 }
 
-function onClientChangeForAssetNarrowing() {
-  const flSel = document.getElementById('f_functionalLocation');
-  const assetSel = document.getElementById('f_assetId');
-  if (flSel) flSel.value = '';
-  if (assetSel) assetSel.value = '';
-  loadFunctionalLocationDropdown(document.getElementById('f_client')?.value || '', '');
+function onJobNumberChangeForClientFiltering() {
+  const clientSel = document.getElementById('f_client');
+  const assetInput = document.getElementById('f_assetId');
+  if (clientSel) clientSel.value = '';
+  if (assetInput) assetInput.value = '';
+  
+  // Filter clients based on job number
+  filterClientsByJobNumber();
   applyAssetNarrowing();
-  onAssetChangeForJob(assetSel?.value || '');
+  onAssetChangeForJob(assetInput?.value || '');
 }
 
-function onFunctionalLocationChangeForAssetNarrowing() {
-  const assetSel = document.getElementById('f_assetId');
-  if (assetSel) assetSel.value = '';
-  applyAssetNarrowing();
-  onAssetChangeForJob(assetSel?.value || '');
+function filterClientsByJobNumber() {
+  const jobNumber = (document.getElementById('f_jobNumber')?.value || '').trim();
+  const clientSel = document.getElementById('f_client');
+  if (!clientSel) return;
+  
+  if (!jobNumber) {
+    // Reload all clients if no job number selected
+    loadClientDropdown();
+    return;
+  }
+  
+  // Find unique client IDs associated with this job number from existing certificates
+  const clientIdsForJob = new Set(
+    (CERTS || [])
+      .filter(c => String(c.jobNumber || '') === jobNumber)
+      .map(c => c.client || c.clientId)
+  );
+  
+  // Get all available clients and filter
+  const allOptions = Array.from(clientSel.options).map(o => ({ value: o.value, text: o.text }));
+  
+  if (clientIdsForJob.size > 0) {
+    clientSel.innerHTML = '<option value="">Select client…</option>' +
+      allOptions
+        .filter(opt => opt.value && clientIdsForJob.has(opt.value))
+        .map(opt => `<option value="${opt.value}">${opt.text}</option>`)
+        .join('');
+  } else {
+    // If no certs found for this job, show all clients
+    loadClientDropdown();
+  }
 }
 
 async function loadInspectorDropdown(selectedValue) {
@@ -2833,7 +2866,6 @@ async function loadClientDropdown(selectedValue) {
       }
       modalSel.disabled = true;
     }
-    await loadFunctionalLocationDropdown(cid, '');
     applyAssetNarrowing();
     return;
   }
@@ -2865,7 +2897,6 @@ async function loadClientDropdown(selectedValue) {
       modalSel.innerHTML = '<option value="">Select client…</option>' + options;
       if (selectedValue) modalSel.value = selectedValue;
     }
-    await loadFunctionalLocationDropdown(modalSel?.value || '', '');
     applyAssetNarrowing();
   } catch(e) { console.warn('Could not load clients:', e); }
 }
