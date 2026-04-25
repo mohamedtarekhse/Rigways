@@ -124,7 +124,7 @@ export async function handleCertificates(request, env, path) {
     }
 
     // Verify asset exists
-    const { data: aRows } = await db.from('assets', { filters: { 'id.eq': body.asset_id }, select:'id,client_id', limit:1 });
+    const { data: aRows } = await db.from('assets', { filters: { 'id.eq': body.asset_id }, select:'id,client_id,functional_location', limit:1 });
     const asset = Array.isArray(aRows) ? aRows[0] : aRows;
     if (!asset) return notFound('Asset', env);
     if (session.role === 'technician' && session.customerId) {
@@ -136,6 +136,7 @@ export async function handleCertificates(request, env, path) {
       name:            body.name,
       cert_type:       body.cert_type,
       asset_id:        body.asset_id,
+      functional_location: asset.functional_location || null,
       client_id:       body.client_id || asset.client_id || null,
       inspector_id:    body.inspector_id || null,
       issued_by:       body.issued_by,
