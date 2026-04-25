@@ -453,7 +453,12 @@
       <span style="font-size:15px; font-weight:700; color:var(--sap-text-primary);">Certificates</span>
       <span style="font-size:12px; color:var(--sap-text-secondary);" id="pageSubtitle">All certificates across clients</span>
     </div>
-    <div id="headerActions"></div>
+    <div id="headerActions">
+      <button class="btn btn-primary" onclick="openUploadModal()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
+        <span>Upload Certificate</span>
+      </button>
+    </div>
   </div>
 
   <!-- Table card -->
@@ -3131,15 +3136,17 @@ document.addEventListener('DOMContentLoaded', () => {
   if (pageSizeSelect) pageSizeSelect.value = String(PAGE_SIZE);
   session = getSession();
   if (!session) return;
-  const role = session.role;
+  const role = String(session.role || '').toLowerCase();
+  session.role = role;
   const lang = 'en';
   applyLang(lang);
 
   /* Shell */
-  const initials = session.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  const safeName = String(session.name || 'User').trim() || 'User';
+  const initials = safeName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   document.getElementById('shellAvatar').textContent = initials;
-  document.getElementById('menuUserName').textContent = session.name;
-  const rl = {admin:'Administrator',manager:'Manager',technician:'Technician',user:'Regular User'};
+  document.getElementById('menuUserName').textContent = safeName;
+  const rl = {admin:'Administrator',manager:'Manager',technician:'Technician',inspector:'Technician',user:'Regular User'};
   document.getElementById('menuUserRole').textContent = rl[role]||role;
 
   if (role !== 'admin') {
@@ -3163,7 +3170,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* Header actions */
   const ha = document.getElementById('headerActions');
-  if (role === 'admin' || role === 'manager' || role === 'technician') {
+  if (role === 'admin' || role === 'manager' || role === 'technician' || role === 'inspector') {
     ha.innerHTML = `<button class="btn btn-primary" onclick="openUploadModal()">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
       <span>Upload Certificate</span>
