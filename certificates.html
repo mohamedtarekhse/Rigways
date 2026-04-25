@@ -453,12 +453,7 @@
       <span style="font-size:15px; font-weight:700; color:var(--sap-text-primary);">Certificates</span>
       <span style="font-size:12px; color:var(--sap-text-secondary);" id="pageSubtitle">All certificates across clients</span>
     </div>
-    <div id="headerActions">
-      <button id="uploadCertBtnStatic" type="button" class="btn btn-primary js-open-upload-modal" onclick="openUploadModal()">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
-        <span>Upload Certificate</span>
-      </button>
-    </div>
+    <div id="headerActions"></div>
   </div>
 
   <!-- Table card -->
@@ -667,39 +662,6 @@
         <input type="hidden" id="editUploadTime"/>
 
         <div class="sap-form-grid sap-form-grid--2col">
-          <!-- ═══════════ HIERARCHICAL SELECTION: Client → Functional Location → Asset ═══════════ -->
-          <!-- Client -->
-          <div class="sap-field" id="f_client_wrap">
-            <label class="sap-label">Linked Client <span class="required">*</span></label>
-            <select id="f_client" class="sap-select" onchange="onClientChangeForAssetNarrowing()">
-              <option value="">Select client…</option>
-            </select>
-          </div>
-
-          <!-- Functional Location -->
-          <div class="sap-field" id="f_functionalLocation_wrap">
-            <label class="sap-label">Functional Location <span class="required">*</span></label>
-            <select id="f_functionalLocation" class="sap-select" onchange="onFunctionalLocationChangeForAssetNarrowing()">
-              <option value="">Select functional location…</option>
-            </select>
-          </div>
-
-          <!-- Linked Asset -->
-          <div class="sap-field">
-            <label class="sap-label">Linked Asset ID</label>
-            <select id="f_assetId" class="sap-select" onchange="onAssetChangeForJob(this.value)">
-              <option value="">Select asset…</option>
-              <option value="AST-0001">AST-0001 – Server Rack #01</option>
-              <option value="AST-0002">AST-0002 – HVAC Unit #01</option>
-              <option value="AST-0003">AST-0003 – Generator #01</option>
-              <option value="AST-0004">AST-0004 – Forklift #03</option>
-              <option value="AST-0005">AST-0005 – Fire Panel #01</option>
-              <option value="AST-0006">AST-0006 – Pump Station #2</option>
-              <option value="AST-0007">AST-0007 – UPS System #01</option>
-              <option value="AST-0008">AST-0008 – Crane #01</option>
-            </select>
-          </div>
-
           <!-- Job Number -->
           <div class="sap-field">
             <label class="sap-label">Job Number <span class="required">*</span></label>
@@ -786,6 +748,37 @@
             <div style="font-size:11px;color:var(--sap-text-secondary);margin-top:4px;">
               Auto-calculated from Issue Date + Validity Period.
             </div>
+          </div>
+
+          <!-- Linked Asset -->
+          <div class="sap-field">
+            <label class="sap-label">Linked Asset ID</label>
+            <select id="f_assetId" class="sap-select" onchange="onAssetChangeForJob(this.value)">
+              <option value="">Select asset…</option>
+              <option value="AST-0001">AST-0001 – Server Rack #01</option>
+              <option value="AST-0002">AST-0002 – HVAC Unit #01</option>
+              <option value="AST-0003">AST-0003 – Generator #01</option>
+              <option value="AST-0004">AST-0004 – Forklift #03</option>
+              <option value="AST-0005">AST-0005 – Fire Panel #01</option>
+              <option value="AST-0006">AST-0006 – Pump Station #2</option>
+              <option value="AST-0007">AST-0007 – UPS System #01</option>
+              <option value="AST-0008">AST-0008 – Crane #01</option>
+            </select>
+          </div>
+
+          <!-- Client -->
+          <div class="sap-field" id="f_client_wrap">
+            <label class="sap-label">Linked Client <span class="required">*</span></label>
+            <select id="f_client" class="sap-select" onchange="onClientChangeForAssetNarrowing()">
+              <option value="">Select client…</option>
+            </select>
+          </div>
+
+          <div class="sap-field" id="f_functionalLocation_wrap">
+            <label class="sap-label">Functional Location <span class="required">*</span></label>
+            <select id="f_functionalLocation" class="sap-select" onchange="onFunctionalLocationChangeForAssetNarrowing()">
+              <option value="">Select functional location…</option>
+            </select>
           </div>
 
         </div><!-- /grid -->
@@ -1510,48 +1503,37 @@ function restoreCertDraft(){ if(!window.SapDraft) return; const d=SapDraft.load(
 function clearCertDraft(){ if(!window.SapDraft) return; const id=document.getElementById('editCertId')?.value||''; SapDraft.clear('certs:add'); if(id) SapDraft.clear(`certs:edit:${id}`); }
 function bindCertDraft(){ const f=document.getElementById('certForm'); if(!f||f.dataset.draftBound==='1') return; f.addEventListener('input',saveCertDraft); f.addEventListener('change',saveCertDraft); f.dataset.draftBound='1'; }
 function openUploadModal() {
-  const role = String(session?.role || '').toLowerCase();
-  const customerId = String(session?.customerId || '').trim();
-  const modal = document.getElementById('certModal');
-  const form = document.getElementById('certForm');
-  if (modal) {
-    if (window.SapModal && typeof window.SapModal.open === 'function') window.SapModal.open('certModal');
-    else modal.classList.add('open');
-  }
-  if (document.getElementById('editCertId')) document.getElementById('editCertId').value = '';
-  if (form) form.reset();
+  document.getElementById('editCertId').value = '';
+  document.getElementById('certForm').reset();
   clearFile();
-  if (document.getElementById('uploadPreview')) document.getElementById('uploadPreview').style.display = 'none';
-  if (document.getElementById('existingFileNote')) document.getElementById('existingFileNote').style.display = 'none';
-  if (document.getElementById('liftingSubtypeWrap')) document.getElementById('liftingSubtypeWrap').style.display = 'none';
-  if (document.getElementById('relatedStandardWrap')) document.getElementById('relatedStandardWrap').style.display = 'none';
-  if (document.getElementById('modalTitle')) document.getElementById('modalTitle').textContent = 'Upload Certificate';
-  if (document.getElementById('saveBtnLabel')) document.getElementById('saveBtnLabel').textContent = 'Upload Certificate';
-  if (document.getElementById('techUploadNote')) document.getElementById('techUploadNote').style.display = (role === 'technician' || role === 'inspector') ? 'block' : 'none';
+  document.getElementById('uploadPreview').style.display = 'none';
+  document.getElementById('existingFileNote').style.display = 'none';
+  document.getElementById('liftingSubtypeWrap').style.display = 'none';
+  document.getElementById('relatedStandardWrap').style.display = 'none';
+  document.getElementById('modalTitle').textContent = 'Upload Certificate';
+  document.getElementById('saveBtnLabel').textContent = 'Upload Certificate';
+  document.getElementById('techUploadNote').style.display = session.role === 'technician' ? 'block' : 'none';
 
-  const isScopedUser = role === 'technician' || role === 'inspector' || role === 'user';
-  if (isScopedUser && customerId) {
-    if (document.getElementById('f_client')) document.getElementById('f_client').value = customerId;
-    if (document.getElementById('f_client_wrap')) document.getElementById('f_client_wrap').style.display = 'none';
+  if (session.customerId) {
+    document.getElementById('f_client').value = session.customerId;
+    document.getElementById('f_client_wrap').style.display = 'none';
   } else {
-    if (document.getElementById('f_client_wrap')) {
-      document.getElementById('f_client_wrap').style.display = '';
-      document.getElementById('f_client_wrap').style.flexDirection = 'column';
-    }
+    document.getElementById('f_client_wrap').style.display = '';
+    document.getElementById('f_client_wrap').style.flexDirection = 'column';
   }
 
   /* Set today as default issue date */
-  if (document.getElementById('f_issueDate')) document.getElementById('f_issueDate').value = new Date().toISOString().split('T')[0];
-  if (document.getElementById('f_validityPeriod')) document.getElementById('f_validityPeriod').value = '';
-  if (document.getElementById('f_expiryDate')) document.getElementById('f_expiryDate').value = '';
-  if (document.getElementById('f_functionalLocation')) document.getElementById('f_functionalLocation').value = '';
-  bindCertDraft(); restoreCertDraft();
+  document.getElementById('f_issueDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('f_validityPeriod').value = '';
+  document.getElementById('f_expiryDate').value = '';
+  document.getElementById('f_functionalLocation').value = '';
+  bindCertDraft(); restoreCertDraft(); document.getElementById('certModal').classList.add('open');
   // Load all dropdowns from API
   loadAssetDropdown();
   loadInspectorDropdown();
   loadClientDropdown();
   loadJobDropdown();
-  if (role === 'technician' || role === 'inspector') lockTechnicianModalFields();
+  if (session.role === 'technician') lockTechnicianModalFields();
 }
 
 function openEditModal(id) {
@@ -1783,7 +1765,7 @@ async function saveCert() {
   const effectiveIssuedBy = isTechnician ? (session?.name || '').trim() : issuedBy;
   const effectiveClient   = isTechnician ? (session?.customerId || '').trim() : client;
 
-  if (!name || !certType || !effectiveIssuedBy || !issueDate || !validityPeriod || !expiryDate || !assetId) {
+  if (!name || !certType || !effectiveIssuedBy || !issueDate || !validityPeriod || !expiryDate || !functionalLocation) {
     showToast('error','Required Fields','Please fill all required fields.'); return;
   }
   if (isTechnician && !effectiveClient) {
@@ -2764,9 +2746,6 @@ function showToast(type, title, msg) {
    INIT
 ═══════════════════════════════════════════════════════ */
 
-let ALL_JOBS_FOR_CERT_MODAL = [];
-let ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL = [];
-
 async function loadAssetDropdown() {
   const sel = document.getElementById('f_assetId');
   if (!sel) return;
@@ -2774,70 +2753,8 @@ async function loadAssetDropdown() {
     const res    = await apiFetch('/api/assets?limit=500');
     const data   = await res.json();
     ALL_ASSETS_FOR_MODAL = (data.data?.assets || data.data || []);
-    
-    // Load jobs for inspector-based filtering
-    try {
-      const jobsRes = await apiFetch('/api/jobs?limit=500');
-      const jobsData = await jobsRes.json();
-      ALL_JOBS_FOR_CERT_MODAL = ((jobsData.data || jobsData).jobs || []);
-    } catch(e) {
-      ALL_JOBS_FOR_CERT_MODAL = [];
-    }
-    
     applyAssetNarrowing();
   } catch(e) { sel.innerHTML = '<option value="">Could not load assets</option>'; }
-}
-
-function getInspectorAssignedAssetIds() {
-  // For inspectors, get asset IDs from their assigned jobs
-  if (!session || session.role !== 'technician') return null;
-  const inspectorName = String(session.name || '').trim();
-  const inspectorUserId = (session.userId || '').trim();
-  if (!inspectorName && !inspectorUserId) return null;
-  const normalize = (v) => String(v || '').trim().toLowerCase();
-  const asArray = (v) => {
-    if (Array.isArray(v)) return v;
-    if (typeof v === 'string') {
-      const s = v.trim();
-      if (!s) return [];
-      try {
-        const parsed = JSON.parse(s);
-        if (Array.isArray(parsed)) return parsed;
-      } catch(_) {}
-      return s.split(',').map(x => x.trim()).filter(Boolean);
-    }
-    return [];
-  };
-  
-  const assignedJobs = ALL_JOBS_FOR_CERT_MODAL.filter(j => {
-    const ids = asArray(j.inspector_ids).map(normalize);
-    const byId = inspectorUserId && ids.includes(normalize(inspectorUserId));
-    const byName = inspectorName && (ids.includes(normalize(inspectorName)) || normalize(j.inspector_name) === normalize(inspectorName));
-    return byId || byName;
-  });
-  
-  // Extract unique asset IDs from job notes or related data
-  const assetIds = new Set();
-  assignedJobs.forEach(j => {
-    // Try to extract asset ID from job notes or other fields
-    if (j.notes) {
-      const match = j.notes.match(/AST-\d+/i);
-      if (match) assetIds.add(match[0]);
-    }
-    // If job has direct asset reference
-    if (j.asset_id) {
-      const v = String(j.asset_id).trim();
-      assetIds.add(v);
-      assetIds.add(v.toLowerCase());
-    }
-    if (j.asset_number) {
-      const v = String(j.asset_number).trim();
-      assetIds.add(v);
-      assetIds.add(v.toLowerCase());
-    }
-  });
-  
-  return assetIds.size > 0 ? assetIds : null;
 }
 
 function applyAssetNarrowing() {
@@ -2846,99 +2763,22 @@ function applyAssetNarrowing() {
   const selectedClient = (document.getElementById('f_client')?.value || '').trim();
   const selectedFl = (document.getElementById('f_functionalLocation')?.value || '').trim();
   const currentValue = sel.value;
-  
-  // Get inspector-assigned asset IDs if technician
-  const inspectorAssetIds = getInspectorAssignedAssetIds();
-  const isInspector = session && session.role === 'technician';
-  
-  const normalize = (v) => String(v || '').trim().toLowerCase();
-  const selectedFlAliases = new Set([normalize(selectedFl)]);
-  const selectedFlRow = (ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL || []).find(fl =>
-    String(fl.fl_id || '').trim() === selectedFl
-  );
-  if (selectedFlRow?.name) selectedFlAliases.add(normalize(selectedFlRow.name));
-  const allAssets = (ALL_ASSETS_FOR_MODAL || []);
-  let narrowed = allAssets.filter(a => {
-    // For Admins: show all assets matching client/location (no job filtering)
-    // For Inspectors: additionally filter by assigned jobs
-    const assetClient = String(a.client_id || a.client || '');
-    const assetFl = normalize(a.functional_location || a.location || '');
-    const assetNumber = String(a.asset_number || '').trim();
-    const assetUuid = String(a.id || '').trim();
-    
-    // Filter by Client
-    if (selectedClient && assetClient !== selectedClient) return false;
-    // Filter by Functional Location
-    if (selectedFl && !selectedFlAliases.has(assetFl)) return false;
-    // For inspectors, also filter by assigned jobs
-    if (
-      isInspector &&
-      inspectorAssetIds &&
-      !inspectorAssetIds.has(assetNumber) &&
-      !inspectorAssetIds.has(assetUuid) &&
-      !inspectorAssetIds.has(normalize(assetNumber)) &&
-      !inspectorAssetIds.has(normalize(assetUuid))
-    ) return false;
+  const narrowed = (ALL_ASSETS_FOR_MODAL || []).filter(a => {
+    if (selectedClient && String(a.client_id || '') !== selectedClient) return false;
+    if (selectedFl && String(a.functional_location || '') !== selectedFl) return false;
     return true;
   });
-
-  // Resilient fallback: if strict filters produce no rows, keep technicians unblocked.
-  // First fallback to assigned assets regardless of client/location mismatches.
-  if (!narrowed.length && isInspector && inspectorAssetIds) {
-    narrowed = allAssets.filter(a => {
-      const assetNumber = String(a.asset_number || '').trim();
-      const assetUuid = String(a.id || '').trim();
-      return (
-        inspectorAssetIds.has(assetNumber) ||
-        inspectorAssetIds.has(assetUuid) ||
-        inspectorAssetIds.has(normalize(assetNumber)) ||
-        inspectorAssetIds.has(normalize(assetUuid))
-      );
-    });
-  }
-  // Last-resort fallback: if assignments could not be resolved, show all to avoid empty modal.
-  if (!narrowed.length && isInspector) narrowed = allAssets;
   sel.innerHTML = '<option value="">Select asset…</option>' +
-    narrowed.map(a => `<option value="${a.id || a.asset_number}">${a.asset_number || a.id} — ${a.name}</option>`).join('');
+    narrowed.map(a => `<option value="${a.asset_number || a.id}">${a.asset_number || a.id} — ${a.name}</option>`).join('');
   if (currentValue && Array.from(sel.options).some(o => o.value === currentValue)) sel.value = currentValue;
 }
 
-function findModalAssetById(assetId) {
-  const key = String(assetId || '').trim();
-  if (!key) return null;
-  return (ALL_ASSETS_FOR_MODAL || []).find(a => {
-    const byNumber = String(a.asset_number || '').trim();
-    const byId = String(a.id || '').trim();
-    return key === byNumber || key === byId;
-  }) || null;
-}
-
-async function syncClientAndLocationFromAsset(assetId) {
-  const picked = findModalAssetById(assetId);
-  if (!picked) return;
-
-  const clientSel = document.getElementById('f_client');
-  const flSel = document.getElementById('f_functionalLocation');
-  const nextClient = String(picked.client_id || '').trim();
-  const nextFl = String(picked.functional_location || '').trim();
-  if (!clientSel || !flSel) return;
-
-  if (clientSel.value !== nextClient) clientSel.value = nextClient;
-  await loadFunctionalLocationDropdown(nextClient, nextFl);
-  applyAssetNarrowing();
-
-  const assetSel = document.getElementById('f_assetId');
-  if (assetSel && Array.from(assetSel.options).some(o => o.value === String(assetId || ''))) {
-    assetSel.value = String(assetId || '');
-  }
-}
-
-async function onClientChangeForAssetNarrowing() {
+function onClientChangeForAssetNarrowing() {
   const flSel = document.getElementById('f_functionalLocation');
   const assetSel = document.getElementById('f_assetId');
   if (flSel) flSel.value = '';
   if (assetSel) assetSel.value = '';
-  await loadFunctionalLocationDropdown(document.getElementById('f_client')?.value || '', '');
+  loadFunctionalLocationDropdown(document.getElementById('f_client')?.value || '', '');
   applyAssetNarrowing();
   onAssetChangeForJob(assetSel?.value || '');
 }
@@ -2976,36 +2816,6 @@ async function loadInspectorDropdown(selectedValue) {
         return `<option value="${name}"${sel2}>${name}${i.title ? ' — ' + i.title : ''}</option>`;
       }).join('');
   } catch(e) { /* keep existing hardcoded options as fallback */ }
-}
-
-async function loadFunctionalLocationDropdown(clientId, selectedValue) {
-  const sel = document.getElementById('f_functionalLocation');
-  if (!sel) return;
-  const cid = String(clientId || '').trim();
-  try {
-    const query = cid
-      ? '/api/functional-locations?status=active&client_id=' + encodeURIComponent(cid) + '&limit=500'
-      : '/api/functional-locations?status=active&limit=500';
-    const res = await apiFetch(query);
-    const raw = await res.json();
-    const rows = (raw.data?.functional_locations || raw.data || [])
-      .filter(fl => fl.status !== 'inactive')
-      .filter(fl => !cid || String(fl.client_id || '') === cid);
-    ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL = rows;
-
-    sel.innerHTML = '<option value="">Select functional location…</option>' +
-      rows.map(fl => `<option value="${fl.fl_id}">${fl.fl_id} — ${fl.name}</option>`).join('');
-
-    if (selectedValue && Array.from(sel.options).some(o => o.value === selectedValue)) {
-      sel.value = selectedValue;
-    } else {
-      sel.value = '';
-    }
-  } catch (e) {
-    ALL_FUNCTIONAL_LOCATIONS_FOR_MODAL = [];
-    sel.innerHTML = '<option value="">Could not load locations</option>';
-    sel.value = '';
-  }
 }
 
 async function loadClientDropdown(selectedValue) {
@@ -3089,7 +2899,6 @@ async function loadJobDropdown(selectedJobNumber) {
 }
 
 async function onAssetChangeForJob(assetId) {
-  await syncClientAndLocationFromAsset(assetId);
   if (session?.role === 'admin') return;
   const input = document.getElementById('f_jobNumber');
   if (!input) return;
@@ -3108,7 +2917,6 @@ async function onAssetChangeForJob(assetId) {
 async function loadCerts() {
   try {
     const certRes = await apiFetch('/api/certificates?limit=200').then(r => r.json());
-    const assetRes = await apiFetch('/api/assets?limit=500').then(r => r.json());
     const cd = certRes.data  || certRes;
     const ad = assetRes.data || assetRes;
     const assetMap = {};
@@ -3150,17 +2958,15 @@ document.addEventListener('DOMContentLoaded', () => {
   if (pageSizeSelect) pageSizeSelect.value = String(PAGE_SIZE);
   session = getSession();
   if (!session) return;
-  const role = String(session.role || '').toLowerCase();
-  session.role = role;
+  const role = session.role;
   const lang = 'en';
   applyLang(lang);
 
   /* Shell */
-  const safeName = String(session.name || 'User').trim() || 'User';
-  const initials = safeName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  const initials = session.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   document.getElementById('shellAvatar').textContent = initials;
-  document.getElementById('menuUserName').textContent = safeName;
-  const rl = {admin:'Administrator',manager:'Manager',technician:'Technician',inspector:'Technician',user:'Regular User'};
+  document.getElementById('menuUserName').textContent = session.name;
+  const rl = {admin:'Administrator',manager:'Manager',technician:'Technician',user:'Regular User'};
   document.getElementById('menuUserRole').textContent = rl[role]||role;
 
   if (role !== 'admin') {
@@ -3184,8 +2990,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* Header actions */
   const ha = document.getElementById('headerActions');
-  if (role === 'admin' || role === 'manager' || role === 'technician' || role === 'inspector') {
-    ha.innerHTML = `<button type="button" class="btn btn-primary js-open-upload-modal" onclick="openUploadModal()">
+  if (role === 'admin' || role === 'manager' || role === 'technician') {
+    ha.innerHTML = `<button class="btn btn-primary" onclick="openUploadModal()">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
       <span>Upload Certificate</span>
     </button>`;
@@ -3198,16 +3004,6 @@ document.addEventListener('DOMContentLoaded', () => {
   } else {
     ha.innerHTML = `<span class="sap-badge sap-badge--neutral" style="font-size:12px;padding:6px 12px;">Read-Only View</span>`;
   }
-
-  // Defensive binding in case inline onclick is blocked/overridden.
-  document.querySelectorAll('.js-open-upload-modal').forEach(btn => {
-    if (btn.dataset.boundUploadModal === '1') return;
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      openUploadModal();
-    });
-    btn.dataset.boundUploadModal = '1';
-  });
 
   loadCerts(); // also calls syncCerts() inside
   const _deferClientLoad = () => loadClientDropdown().catch(() => {});
