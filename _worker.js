@@ -379,7 +379,26 @@ async function handleAuth(request, env, path) {
 
 
 
-const SAFE = 'id,username,name,name_ar,role,customer_id,is_active,created_at,last_login_at';
+const SAFE = 'id,username,name,name_ar,role,customer_id,functional_location,is_active,created_at,last_login_at';
+
+async function validateFunctionalLocation(db, functionalLocation, customerId) {
+  const fl = String(functionalLocation || '').trim().toUpperCase();
+  if (!fl) return { ok: true, value: null };
+
+  const { data } = await db.from('functional_locations', {
+    filters: { 'fl_id.eq': fl },
+    select: 'id,fl_id,client_id,status',
+    limit: 1
+  });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return { ok: false, error: 'Functional location not found' };
+  if (row.status !== 'active') return { ok: false, error: 'Functional location must be active' };
+  const cid = String(customerId || '').trim();
+  if (cid && row.client_id && row.client_id !== cid) {
+    return { ok: false, error: 'Functional location must belong to the same client' };
+  }
+  return { ok: true, value: row.fl_id };
+}
 
 async function handleUsers(request, env, path) {
   const session = await getSession(request, env);
@@ -423,8 +442,11 @@ async function handleUsers(request, env, path) {
       name: { required: true, type: 'string', minLength: 2, maxLength: 100 },
       role: { required: true, type: 'string', enum: ['user', 'technician', 'manager', 'admin'] },
       customer_id: { required: false, type: 'string' },
+      functional_location: { required: false, type: 'string' },
     });
     if (!valid) return badReq(errors.join('; '), 'VALIDATION', env);
+    const flCheck = await validateFunctionalLocation(db, body.functional_location, body.customer_id);
+    if (!flCheck.ok) return badReq(flCheck.error, 'VALIDATION', env);
     const { data: dup } = await db.from('users', { filters: { 'username.ilike': body.username }, select: 'id', limit: 1 });
     if (Array.isArray(dup) && dup.length) return conflict('Username already exists', env);
     const { data, error } = await db.insert('users', {
@@ -433,6 +455,7 @@ async function handleUsers(request, env, path) {
       name_ar: body.name_ar || null,
       role: body.role,
       customer_id: body.customer_id || null,
+      functional_location: flCheck.value,
       password_hash: await hashPassword(body.password),
       is_active: true,
     });
@@ -446,7 +469,21 @@ async function handleUsers(request, env, path) {
   if (uid && method === 'PATCH') {
     if (!requireRole(session, ['admin'])) return forbidden(env);
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
-    const update = compact(pick(body, ['name', 'name_ar', 'role', 'customer_id', 'is_active']));
+    const { data: existingRows } = await db.from('users', { filters: { 'id.eq': uid }, select: 'id,customer_id,functional_location', limit: 1 });
+    const existing = Array.isArray(existingRows) ? existingRows[0] : existingRows;
+    if (!existing) return notFound('User', env);
+    const update = compact(pick(body, ['name', 'name_ar', 'role', 'customer_id', 'functional_location', 'is_active']));
+    if (Object.prototype.hasOwnProperty.call(body, 'functional_location') || Object.prototype.hasOwnProperty.call(body, 'customer_id')) {
+      const nextCustomerId = Object.prototype.hasOwnProperty.call(update, 'customer_id')
+        ? update.customer_id
+        : existing.customer_id;
+      const nextFunctionalLocation = Object.prototype.hasOwnProperty.call(update, 'functional_location')
+        ? update.functional_location
+        : existing.functional_location;
+      const flCheck = await validateFunctionalLocation(db, nextFunctionalLocation, nextCustomerId);
+      if (!flCheck.ok) return badReq(flCheck.error, 'VALIDATION', env);
+      update.functional_location = flCheck.value;
+    }
     if (body.password) update.password_hash = await hashPassword(body.password);
     update.updated_at = new Date().toISOString();
     const { data, error } = await db.update('users', update, { filters: { 'id.eq': uid } });

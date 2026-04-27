@@ -609,6 +609,7 @@
       <div class="sap-pagination__info" id="paginationInfo">Showing 1–25 of 114</div>
       <div class="sap-pagination__controls" id="paginationControls"></div>
       <div class="sap-pagination__size">
+        <span id="paginationPageInfo" style="font-size:12px;color:var(--sap-text-secondary);white-space:nowrap;">Page 1 of 1</span>
         <label for="pageSizeSelect" style="font-size:12px;color:var(--sap-text-secondary);">Rows:</label>
         <select id="pageSizeSelect" class="sap-select" style="height:30px;padding:2px 8px;" onchange="setPageSize(this.value)">
           <option value="25">25</option>
@@ -1286,6 +1287,8 @@ function applyClientColVisibility() {
 function renderPagination(total) {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const ctrl = document.getElementById('paginationControls');
+  const pageInfo = document.getElementById('paginationPageInfo');
+  if (pageInfo) pageInfo.textContent = `Page ${totalPages ? currentPage : 0} of ${totalPages}`;
   let html = `<button class="sap-page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
   for (let i=1; i<=totalPages; i++) {
     if (totalPages > 7 && Math.abs(i-currentPage) > 2 && i!==1 && i!==totalPages) {

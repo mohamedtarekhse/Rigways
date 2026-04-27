@@ -1,13 +1,226 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="refresh" content="0; url=assets.html" />
-  <title>Dashboard Removed</title>
-  <script>window.location.replace('assets.html');</script>
+  <title>Admin Dashboard - User Management</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="app.js"></script>
 </head>
 <body>
-  <p>Dashboard module removed. Redirecting to Assets… <a href="assets.html">Go now</a></p>
+  <header class="sap-header">
+    <div class="sap-header__left">
+      <button class="sap-header__collapse-btn" id="collapseBtn" title="Toggle Sidebar">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="sap-header__brand">Rigways ACM</div>
+    </div>
+    <div class="sap-header__right">
+      <button class="sap-header__icon-btn" id="shellAvatar" title="User menu">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21a8 8 0 10-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <nav class="sap-navbar" id="navbar">
+    <div class="sap-navbar__inner">
+      <a href="assets.html" class="sap-nav-item"><i data-feather="box"></i><span>Assets</span></a>
+      <a href="certificates.html" class="sap-nav-item"><i data-feather="award"></i><span>Certificates</span></a>
+      <a href="jobs.html" class="sap-nav-item"><i data-feather="briefcase"></i><span>Jobs</span></a>
+      <a href="files.html" class="sap-nav-item"><i data-feather="folder"></i><span>Files</span></a>
+      <a href="notifications.html" class="sap-nav-item"><i data-feather="bell"></i><span>Notifications</span></a>
+      <div class="sap-navbar__divider"></div>
+      <a href="dashboard.html" class="sap-nav-item sap-nav-item--admin active"><i data-feather="settings"></i><span>Admin Dashboard</span></a>
+      <a href="clients.html" class="sap-nav-item sap-nav-item--admin"><i data-feather="users"></i><span>Clients</span></a>
+    </div>
+  </nav>
+
+  <main class="sap-main">
+    <div class="sap-page-head mb-md">
+      <h1>Admin Dashboard</h1>
+      <div class="sap-page-sub">Create users, map users to Client + Functional Location, and disable login access.</div>
+    </div>
+
+    <div class="sap-card mb-md">
+      <div class="sap-card__head"><div class="sap-card__title">Add / Edit User</div></div>
+      <div class="sap-card__body">
+        <form id="userForm" class="sap-form-grid sap-form-grid--3col">
+          <input type="hidden" id="u_id" />
+          <div class="sap-field"><label class="sap-label">Username *</label><input id="u_username" class="sap-input" required /></div>
+          <div class="sap-field"><label class="sap-label">Name *</label><input id="u_name" class="sap-input" required /></div>
+          <div class="sap-field"><label class="sap-label">Password <span id="pwdHint">*</span></label><input id="u_password" type="password" class="sap-input" minlength="8" /></div>
+          <div class="sap-field"><label class="sap-label">Role *</label>
+            <select id="u_role" class="sap-select" required>
+              <option value="user">User</option>
+              <option value="technician">Technician</option>
+              <option value="manager">Manager</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div class="sap-field"><label class="sap-label">Client</label><select id="u_client" class="sap-select"></select></div>
+          <div class="sap-field"><label class="sap-label">Functional Location</label><select id="u_fl" class="sap-select"><option value="">Unassigned</option></select></div>
+          <div class="sap-field"><label class="sap-label">Active</label><select id="u_active" class="sap-select"><option value="true">Active</option><option value="false">Disabled</option></select></div>
+        </form>
+        <div class="mt-md" style="display:flex;gap:8px;">
+          <button class="btn btn-primary" id="saveUserBtn" onclick="saveUser()">Save User</button>
+          <button class="btn btn-ghost" onclick="resetUserForm()">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sap-card">
+      <div class="sap-card__head" style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="sap-card__title">Users</div>
+        <button class="btn btn-ghost btn-sm" onclick="loadUsers()">Refresh</button>
+      </div>
+      <div class="sap-card__body" style="padding:0;">
+        <div class="sap-table-wrapper">
+          <table class="sap-table">
+            <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Client</th><th>Functional Location</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="usersBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+<script>
+let USERS = [];
+let CLIENTS = [];
+let FLS = [];
+
+function h(v){return String(v||'').replace(/[&<>'"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[m]));}
+
+async function loadClients(){
+  const res = await apiFetch('/api/clients?limit=500');
+  const raw = await res.json();
+  CLIENTS = (raw.data?.clients || raw.data || []);
+  const sel = document.getElementById('u_client');
+  sel.innerHTML = '<option value="">Unassigned</option>' + CLIENTS.map(c=>`<option value="${c.client_id}">${h(c.name)} (${c.client_id})</option>`).join('');
+}
+
+async function loadFunctionalLocations(){
+  const res = await apiFetch('/api/functional-locations?limit=500');
+  const raw = await res.json();
+  FLS = (raw.data?.functional_locations || raw.data || []);
+  fillFunctionalLocationOptions();
+}
+
+function fillFunctionalLocationOptions(){
+  const clientId = document.getElementById('u_client').value;
+  const sel = document.getElementById('u_fl');
+  const list = clientId ? FLS.filter(fl => String(fl.client_id||'') === String(clientId)) : FLS;
+  sel.innerHTML = '<option value="">Unassigned</option>' + list.map(fl=>`<option value="${fl.fl_id}">${h(fl.fl_id)} — ${h(fl.name||'')}</option>`).join('');
+}
+
+async function loadUsers(){
+  const res = await apiFetch('/api/users?limit=500');
+  const raw = await res.json();
+  USERS = (raw.data?.users || raw.data || []);
+  renderUsers();
+}
+
+function renderUsers(){
+  const body = document.getElementById('usersBody');
+  body.innerHTML = USERS.map(u => {
+    const active = !!u.is_active;
+    return `<tr>
+      <td>${h(u.username)}</td>
+      <td>${h(u.name)}</td>
+      <td>${h(u.role)}</td>
+      <td>${h(u.customer_id||'—')}</td>
+      <td>${h(u.functional_location||'—')}</td>
+      <td><span class="sap-badge ${active?'sap-badge--success':'sap-badge--danger'}">${active?'Active':'Disabled'}</span></td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="editUser('${u.id}')">Edit</button>
+        ${active ? `<button class="btn btn-danger btn-sm" onclick="disableUser('${u.id}')">Disable</button>` : `<button class="btn btn-success btn-sm" onclick="enableUser('${u.id}')">Enable</button>`}
+      </td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--sap-text-secondary);">No users found</td></tr>';
+}
+
+function resetUserForm(){
+  document.getElementById('u_id').value = '';
+  document.getElementById('u_username').value = '';
+  document.getElementById('u_name').value = '';
+  document.getElementById('u_password').value = '';
+  document.getElementById('u_role').value = 'user';
+  document.getElementById('u_client').value = '';
+  fillFunctionalLocationOptions();
+  document.getElementById('u_fl').value = '';
+  document.getElementById('u_active').value = 'true';
+  document.getElementById('u_username').disabled = false;
+  document.getElementById('pwdHint').textContent = '*';
+}
+
+function editUser(id){
+  const u = USERS.find(x=>x.id===id); if(!u) return;
+  document.getElementById('u_id').value = u.id;
+  document.getElementById('u_username').value = u.username || '';
+  document.getElementById('u_username').disabled = true;
+  document.getElementById('u_name').value = u.name || '';
+  document.getElementById('u_password').value = '';
+  document.getElementById('u_role').value = u.role || 'user';
+  document.getElementById('u_client').value = u.customer_id || '';
+  fillFunctionalLocationOptions();
+  document.getElementById('u_fl').value = u.functional_location || '';
+  document.getElementById('u_active').value = String(!!u.is_active);
+  document.getElementById('pwdHint').textContent = '(optional)';
+}
+
+async function saveUser(){
+  const id = document.getElementById('u_id').value;
+  const payload = {
+    name: document.getElementById('u_name').value.trim(),
+    role: document.getElementById('u_role').value,
+    customer_id: document.getElementById('u_client').value || null,
+    functional_location: document.getElementById('u_fl').value || null,
+    is_active: document.getElementById('u_active').value === 'true',
+  };
+  const pwd = document.getElementById('u_password').value;
+  if (pwd) payload.password = pwd;
+
+  if (!id) {
+    payload.username = document.getElementById('u_username').value.trim();
+    payload.password = pwd;
+    if (!payload.username || !payload.name || !payload.password) return SapToast.error('Validation','Username, name and password are required.');
+  }
+
+  const url = id ? `/api/users/${id}` : '/api/users';
+  const method = id ? 'PATCH' : 'POST';
+  const res = await apiFetch(url, { method, body: JSON.stringify(payload) });
+  const data = await res.json();
+  if (!data.success) return SapToast.error('Save Failed', (data.data||data).error || 'Could not save user');
+  SapToast.success('Saved', id ? 'User updated.' : 'User created.');
+  resetUserForm();
+  await loadUsers();
+}
+
+async function disableUser(id){
+  if (!confirm('Disable this user? They will not be able to log in.')) return;
+  const res = await apiFetch(`/api/users/${id}`, { method:'DELETE' });
+  const data = await res.json();
+  if (!data.success) return SapToast.error('Disable Failed', (data.data||data).error || 'Could not disable user');
+  SapToast.success('Disabled', 'User login access was disabled.');
+  await loadUsers();
+}
+
+async function enableUser(id){
+  const res = await apiFetch(`/api/users/${id}`, { method:'PATCH', body: JSON.stringify({ is_active:true }) });
+  const data = await res.json();
+  if (!data.success) return SapToast.error('Enable Failed', (data.data||data).error || 'Could not enable user');
+  SapToast.success('Enabled', 'User login access restored.');
+  await loadUsers();
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const s = SapSession.guard(['admin']);
+  if (!s) return;
+  document.getElementById('u_client').addEventListener('change', fillFunctionalLocationOptions);
+  await Promise.all([loadClients(), loadFunctionalLocations()]);
+  await loadUsers();
+  resetUserForm();
+});
+</script>
 </body>
 </html>
