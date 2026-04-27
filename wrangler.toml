@@ -38,4 +38,4 @@ bucket_name = "rigways-certs"
 # ── OpenRouter AI API Key ──
 # IMPORTANT: For production, use: wrangler secret put OPENROUTER_API_KEY
 # Only use this var for local development. Never commit real keys to Git!
-OPENROUTER_API_KEY = "sk-or-v1-REPLACE_WITH_YOUR_ACTUAL_KEY"
+OPENROUTER_API_KEY = "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"
