@@ -31,9 +31,12 @@ export async function handleInspectors(request, env, path) {
   const idM    = path.match(/^\/inspectors\/([^/]+)$/);
   const iid    = idM?.[1];
 
+  // Storage check helper: B2 (primary) or R2 (fallback)
+  const isStorageReady = () => !!(env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) || !!env.CERT_BUCKET;
+
   if (path === '/inspectors/upload-file' && method === 'POST') {
     if (!requireRole(session, ['admin'])) return forbidden(env);
-    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured','NO_BUCKET',env);
+    if (!isStorageReady()) return badReq('Storage not configured. Set B2_* variables (primary) or CERT_BUCKET (R2 fallback).','NO_BUCKET',env);
     let formData;
     try { formData = await request.formData(); } catch { return badReq('Invalid form data','BAD_FORM_DATA',env); }
     const file = formData.get('file');
@@ -48,17 +51,45 @@ export async function handleInspectors(request, env, path) {
     const finalName = `${safeLabel}.${ext}`;
     const key = `inspectors/${category}/${Date.now()}_${crypto.randomUUID().slice(0,8)}_${finalName}`;
     try {
-      await env.CERT_BUCKET.put(key, await file.arrayBuffer(), {
-        httpMetadata: { contentType: file.type },
-        customMetadata: { originalName: file.name, uploadedBy: session.sub, category },
-      });
+      // Use B2 if configured, otherwise R2
+      if (env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) {
+        // Inline B2 upload (same logic as _worker.js storage helpers)
+        const basic = btoa(`${env.B2_KEY_ID}:${env.B2_APP_KEY}`);
+        const authRes = await fetch('https://api.backblazeb2.com/b2api/v2/b2_authorize_account', { headers: { Authorization: `Basic ${basic}` } });
+        if (!authRes.ok) throw new Error('B2 auth failed');
+        const auth = await authRes.json();
+        const uploadUrlRes = await fetch(`${auth.apiUrl}/b2api/v2/b2_get_upload_url`, {
+          method: 'POST',
+          headers: { Authorization: auth.authorizationToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bucketId: env.B2_BUCKET_ID }),
+        });
+        if (!uploadUrlRes.ok) throw new Error('B2 upload URL failed');
+        const uploadUrl = await uploadUrlRes.json();
+        const encodedName = encodeURIComponent(key);
+        const uploadRes = await fetch(uploadUrl.uploadUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: uploadUrl.authorizationToken,
+            'X-Bz-File-Name': encodedName,
+            'Content-Type': file.type,
+            'X-Bz-Content-Sha1': 'do_not_verify',
+          },
+          body: await file.arrayBuffer(),
+        });
+        if (!uploadRes.ok) throw new Error('B2 upload failed');
+      } else {
+        await env.CERT_BUCKET.put(key, await file.arrayBuffer(), {
+          httpMetadata: { contentType: file.type },
+          customMetadata: { originalName: file.name, uploadedBy: session.sub, category },
+        });
+      }
     } catch { return badReq('File upload failed','UPLOAD_FAILED',env); }
     return ok({ file_name: finalName, file_url: key }, env);
   }
 
   if (path === '/inspectors/upload-cv' && method === 'POST') {
     if (!requireRole(session, ['admin'])) return forbidden(env);
-    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured','NO_BUCKET',env);
+    if (!isStorageReady()) return badReq('Storage not configured. Set B2_* variables (primary) or CERT_BUCKET (R2 fallback).','NO_BUCKET',env);
     let formData;
     try { formData = await request.formData(); } catch { return badReq('Invalid form data','BAD_FORM_DATA',env); }
     const file = formData.get('file');
@@ -69,10 +100,36 @@ export async function handleInspectors(request, env, path) {
     const safeName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9-_]+/g, '_').slice(0, 80) || 'cv';
     const key = `inspectors/cv/${Date.now()}_${crypto.randomUUID().slice(0,8)}_${safeName}.${ext}`;
     try {
-      await env.CERT_BUCKET.put(key, await file.arrayBuffer(), {
-        httpMetadata: { contentType: file.type },
-        customMetadata: { originalName: file.name, uploadedBy: session.sub },
-      });
+      if (env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) {
+        const basic = btoa(`${env.B2_KEY_ID}:${env.B2_APP_KEY}`);
+        const authRes = await fetch('https://api.backblazeb2.com/b2api/v2/b2_authorize_account', { headers: { Authorization: `Basic ${basic}` } });
+        if (!authRes.ok) throw new Error('B2 auth failed');
+        const auth = await authRes.json();
+        const uploadUrlRes = await fetch(`${auth.apiUrl}/b2api/v2/b2_get_upload_url`, {
+          method: 'POST',
+          headers: { Authorization: auth.authorizationToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bucketId: env.B2_BUCKET_ID }),
+        });
+        if (!uploadUrlRes.ok) throw new Error('B2 upload URL failed');
+        const uploadUrl = await uploadUrlRes.json();
+        const encodedName = encodeURIComponent(key);
+        const uploadRes = await fetch(uploadUrl.uploadUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: uploadUrl.authorizationToken,
+            'X-Bz-File-Name': encodedName,
+            'Content-Type': file.type,
+            'X-Bz-Content-Sha1': 'do_not_verify',
+          },
+          body: await file.arrayBuffer(),
+        });
+        if (!uploadRes.ok) throw new Error('B2 upload failed');
+      } else {
+        await env.CERT_BUCKET.put(key, await file.arrayBuffer(), {
+          httpMetadata: { contentType: file.type },
+          customMetadata: { originalName: file.name, uploadedBy: session.sub },
+        });
+      }
     } catch { return badReq('CV upload failed','UPLOAD_FAILED',env); }
     return ok({ cv_file: file.name, cv_url: key }, env);
   }
@@ -85,8 +142,26 @@ export async function handleInspectors(request, env, path) {
       : { 'inspector_number.eq': fileId };
     const { data } = await db.from('inspectors', { filters: idFilter, select:'id', limit:1 });
     if (!(Array.isArray(data) ? data[0] : data)) return notFound('Inspector', env);
-    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured','NO_BUCKET',env);
-    const obj = await env.CERT_BUCKET.get(key);
+    if (!isStorageReady()) return badReq('Storage not configured','NO_BUCKET',env);
+    
+    let obj;
+    if (env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) {
+      const basic = btoa(`${env.B2_KEY_ID}:${env.B2_APP_KEY}`);
+      const authRes = await fetch('https://api.backblazeb2.com/b2api/v2/b2_authorize_account', { headers: { Authorization: `Basic ${basic}` } });
+      if (!authRes.ok) return badReq('B2 auth failed','STORAGE_ERROR',env);
+      const auth = await authRes.json();
+      const fileName = encodeURIComponent(key);
+      const dlUrl = `${auth.downloadUrl}/file/${encodeURIComponent(env.B2_BUCKET_NAME)}/${fileName}`;
+      const res = await fetch(dlUrl, { headers: { Authorization: auth.authorizationToken } });
+      if (res.status === 404) return notFound('File', env);
+      if (!res.ok) return badReq('B2 download failed','STORAGE_ERROR',env);
+      obj = {
+        body: res.body,
+        httpMetadata: { contentType: res.headers.get('content-type') || 'application/octet-stream' },
+      };
+    } else {
+      obj = await env.CERT_BUCKET.get(key);
+    }
     if (!obj) return notFound('File', env);
     const fileName = url.searchParams.get('name') || key.split('/').pop() || 'inspector-file';
     return new Response(obj.body, {
@@ -105,8 +180,26 @@ export async function handleInspectors(request, env, path) {
     const insp = Array.isArray(data) ? data[0] : data;
     if (!insp) return notFound('Inspector', env);
     if (!insp.cv_url) return notFound('CV file', env);
-    if (!env.CERT_BUCKET) return badReq('R2 bucket not configured','NO_BUCKET',env);
-    const obj = await env.CERT_BUCKET.get(insp.cv_url);
+    if (!isStorageReady()) return badReq('Storage not configured','NO_BUCKET',env);
+    
+    let obj;
+    if (env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) {
+      const basic = btoa(`${env.B2_KEY_ID}:${env.B2_APP_KEY}`);
+      const authRes = await fetch('https://api.backblazeb2.com/b2api/v2/b2_authorize_account', { headers: { Authorization: `Basic ${basic}` } });
+      if (!authRes.ok) return badReq('B2 auth failed','STORAGE_ERROR',env);
+      const auth = await authRes.json();
+      const fileName = encodeURIComponent(insp.cv_url);
+      const dlUrl = `${auth.downloadUrl}/file/${encodeURIComponent(env.B2_BUCKET_NAME)}/${fileName}`;
+      const res = await fetch(dlUrl, { headers: { Authorization: auth.authorizationToken } });
+      if (res.status === 404) return notFound('CV file', env);
+      if (!res.ok) return badReq('B2 download failed','STORAGE_ERROR',env);
+      obj = {
+        body: res.body,
+        httpMetadata: { contentType: res.headers.get('content-type') || 'application/octet-stream' },
+      };
+    } else {
+      obj = await env.CERT_BUCKET.get(insp.cv_url);
+    }
     if (!obj) return notFound('CV file', env);
     return new Response(obj.body, {
       headers: {

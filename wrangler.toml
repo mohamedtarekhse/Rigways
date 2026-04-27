@@ -26,11 +26,14 @@ VAPID_PRIVATE_KEY = "9IBAz3Ks3d_aBri4eT5D3FhogrDAKWgvetw_sI15nBc"
 VAPID_SUBJECT     = "mailto:mohamedtarekhse@gmail.com"
 CRON_WORKER_URL  = "https://rigways-cron.mohamedtarekhse.workers.dev"
 
-# ── R2 Bucket — certificate file storage ──
+# ── Backblaze B2 (PRIMARY) — certificate file storage ──
+# Configure these as secrets in Cloudflare Pages dashboard:
+#   wrangler secret put B2_KEY_ID
+#   wrangler secret put B2_APP_KEY
+#   wrangler secret put B2_BUCKET_ID
+#   wrangler secret put B2_BUCKET_NAME
+
+# ── R2 Bucket (FALLBACK) — only used if B2 is not configured ──
 [[r2_buckets]]
 binding     = "CERT_BUCKET"
 bucket_name = "rigways-certs"
-
-# ── Backblaze B2 (optional alternative to R2) ──
-# Configure as secrets/vars in Cloudflare (do NOT commit real keys):
-# B2_KEY_ID, B2_APP_KEY, B2_BUCKET_ID, B2_BUCKET_NAME
