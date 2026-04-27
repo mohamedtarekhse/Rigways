@@ -981,17 +981,17 @@ async function audit(db, session, table, id, action, before, after) {
 }
 
 // ── storage.js ──
-// Supports Cloudflare R2 (CERT_BUCKET) or Backblaze B2 (B2_* env vars).
+// Supports Backblaze B2 (B2_* env vars) as primary, or Cloudflare R2 (CERT_BUCKET) as fallback.
 
 let __b2AuthCache = null;
 
 function isStorageConfigured(env) {
-  return !!env.CERT_BUCKET || !!(env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME);
+  return !!(env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) || !!env.CERT_BUCKET;
 }
 
 function storageBackendLabel(env) {
-  if (env.CERT_BUCKET) return 'R2';
   if (env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) return 'B2';
+  if (env.CERT_BUCKET) return 'R2';
   return 'none';
 }
 
@@ -1018,6 +1018,35 @@ async function getB2Auth(env) {
 }
 
 async function putStorageObject(env, key, body, contentType = 'application/octet-stream', metadata = {}) {
+  if (env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) {
+    const auth = await getB2Auth(env);
+    const uploadUrlRes = await fetch(`${auth.apiUrl}/b2api/v2/b2_get_upload_url`, {
+      method: 'POST',
+      headers: {
+        Authorization: auth.authorizationToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ bucketId: env.B2_BUCKET_ID }),
+    });
+    if (!uploadUrlRes.ok) throw new Error(`B2 upload URL failed (${uploadUrlRes.status})`);
+    const uploadUrl = await uploadUrlRes.json();
+    const encodedName = encodeURIComponent(key);
+    const metaHeaders = Object.fromEntries(Object.entries(metadata || {}).map(([k, v]) => [`X-Bz-Info-${k}`, String(v ?? '')]));
+    const uploadRes = await fetch(uploadUrl.uploadUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: uploadUrl.authorizationToken,
+        'X-Bz-File-Name': encodedName,
+        'Content-Type': contentType,
+        'X-Bz-Content-Sha1': 'do_not_verify',
+        ...metaHeaders,
+      },
+      body,
+    });
+    if (!uploadRes.ok) throw new Error(`B2 upload failed (${uploadRes.status})`);
+    return;
+  }
+
   if (env.CERT_BUCKET) {
     await env.CERT_BUCKET.put(key, body, {
       httpMetadata: { contentType },
@@ -1026,34 +1055,27 @@ async function putStorageObject(env, key, body, contentType = 'application/octet
     return;
   }
 
-  const auth = await getB2Auth(env);
-  const uploadUrlRes = await fetch(`${auth.apiUrl}/b2api/v2/b2_get_upload_url`, {
-    method: 'POST',
-    headers: {
-      Authorization: auth.authorizationToken,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ bucketId: env.B2_BUCKET_ID }),
-  });
-  if (!uploadUrlRes.ok) throw new Error(`B2 upload URL failed (${uploadUrlRes.status})`);
-  const uploadUrl = await uploadUrlRes.json();
-  const encodedName = encodeURIComponent(key);
-  const metaHeaders = Object.fromEntries(Object.entries(metadata || {}).map(([k, v]) => [`X-Bz-Info-${k}`, String(v ?? '')]));
-  const uploadRes = await fetch(uploadUrl.uploadUrl, {
-    method: 'POST',
-    headers: {
-      Authorization: uploadUrl.authorizationToken,
-      'X-Bz-File-Name': encodedName,
-      'Content-Type': contentType,
-      'X-Bz-Content-Sha1': 'do_not_verify',
-      ...metaHeaders,
-    },
-    body,
-  });
-  if (!uploadRes.ok) throw new Error(`B2 upload failed (${uploadRes.status})`);
+  throw new Error('No storage backend configured');
 }
 
 async function getStorageObject(env, key) {
+  if (env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) {
+    const auth = await getB2Auth(env);
+    const fileName = encodeURIComponent(key);
+    const dlUrl = `${auth.downloadUrl}/file/${encodeURIComponent(env.B2_BUCKET_NAME)}/${fileName}`;
+    const res = await fetch(dlUrl, { headers: { Authorization: auth.authorizationToken } });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`B2 download failed (${res.status})`);
+    return {
+      body: res.body,
+      contentType: res.headers.get('content-type') || 'application/octet-stream',
+      uploadedAt: res.headers.get('x-bz-upload-timestamp')
+        ? new Date(Number(res.headers.get('x-bz-upload-timestamp'))).toISOString()
+        : null,
+      size: Number(res.headers.get('content-length') || '0') || null,
+    };
+  }
+
   if (env.CERT_BUCKET) {
     const obj = await env.CERT_BUCKET.get(key);
     if (!obj) return null;
@@ -1065,80 +1087,76 @@ async function getStorageObject(env, key) {
     };
   }
 
-  const auth = await getB2Auth(env);
-  const fileName = encodeURIComponent(key);
-  const dlUrl = `${auth.downloadUrl}/file/${encodeURIComponent(env.B2_BUCKET_NAME)}/${fileName}`;
-  const res = await fetch(dlUrl, { headers: { Authorization: auth.authorizationToken } });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`B2 download failed (${res.status})`);
-  return {
-    body: res.body,
-    contentType: res.headers.get('content-type') || 'application/octet-stream',
-    uploadedAt: res.headers.get('x-bz-upload-timestamp')
-      ? new Date(Number(res.headers.get('x-bz-upload-timestamp'))).toISOString()
-      : null,
-    size: Number(res.headers.get('content-length') || '0') || null,
-  };
+  throw new Error('No storage backend configured');
 }
 
 async function listStorageObjects(env, prefix = '', limit = 500) {
+  if (env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) {
+    const auth = await getB2Auth(env);
+    const res = await fetch(`${auth.apiUrl}/b2api/v2/b2_list_file_names`, {
+      method: 'POST',
+      headers: {
+        Authorization: auth.authorizationToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        bucketId: env.B2_BUCKET_ID,
+        prefix,
+        maxFileCount: limit,
+      }),
+    });
+    if (!res.ok) throw new Error(`B2 list failed (${res.status})`);
+    const data = await res.json();
+    return {
+      objects: (data.files || []).map(f => ({
+        key: f.fileName,
+        size: f.size,
+        uploaded: f.uploadTimestamp ? new Date(f.uploadTimestamp).toISOString() : null,
+      })),
+      truncated: !!data.nextFileName,
+    };
+  }
+
   if (env.CERT_BUCKET) return env.CERT_BUCKET.list({ prefix, limit });
 
-  const auth = await getB2Auth(env);
-  const res = await fetch(`${auth.apiUrl}/b2api/v2/b2_list_file_names`, {
-    method: 'POST',
-    headers: {
-      Authorization: auth.authorizationToken,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      bucketId: env.B2_BUCKET_ID,
-      prefix,
-      maxFileCount: limit,
-    }),
-  });
-  if (!res.ok) throw new Error(`B2 list failed (${res.status})`);
-  const data = await res.json();
-  return {
-    objects: (data.files || []).map(f => ({
-      key: f.fileName,
-      size: f.size,
-      uploaded: f.uploadTimestamp ? new Date(f.uploadTimestamp).toISOString() : null,
-    })),
-    truncated: !!data.nextFileName,
-  };
+  throw new Error('No storage backend configured');
 }
 
 async function deleteStorageObject(env, key) {
+  if (env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) {
+    const auth = await getB2Auth(env);
+    const listRes = await fetch(`${auth.apiUrl}/b2api/v2/b2_list_file_names`, {
+      method: 'POST',
+      headers: {
+        Authorization: auth.authorizationToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        bucketId: env.B2_BUCKET_ID,
+        startFileName: key,
+        maxFileCount: 1,
+      }),
+    });
+    if (!listRes.ok) throw new Error(`B2 find object failed (${listRes.status})`);
+    const listData = await listRes.json();
+    const found = (listData.files || [])[0];
+    if (!found || found.fileName !== key) return;
+
+    const delRes = await fetch(`${auth.apiUrl}/b2api/v2/b2_delete_file_version`, {
+      method: 'POST',
+      headers: {
+        Authorization: auth.authorizationToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fileName: found.fileName, fileId: found.fileId }),
+    });
+    if (!delRes.ok) throw new Error(`B2 delete failed (${delRes.status})`);
+    return;
+  }
+
   if (env.CERT_BUCKET) return env.CERT_BUCKET.delete(key);
 
-  const auth = await getB2Auth(env);
-  const listRes = await fetch(`${auth.apiUrl}/b2api/v2/b2_list_file_names`, {
-    method: 'POST',
-    headers: {
-      Authorization: auth.authorizationToken,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      bucketId: env.B2_BUCKET_ID,
-      startFileName: key,
-      maxFileCount: 1,
-    }),
-  });
-  if (!listRes.ok) throw new Error(`B2 find object failed (${listRes.status})`);
-  const listData = await listRes.json();
-  const found = (listData.files || [])[0];
-  if (!found || found.fileName !== key) return;
-
-  const delRes = await fetch(`${auth.apiUrl}/b2api/v2/b2_delete_file_version`, {
-    method: 'POST',
-    headers: {
-      Authorization: auth.authorizationToken,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ fileName: found.fileName, fileId: found.fileId }),
-  });
-  if (!delRes.ok) throw new Error(`B2 delete failed (${delRes.status})`);
+  throw new Error('No storage backend configured');
 }
 
 // ── certificates.js ──
@@ -1161,7 +1179,7 @@ async function handleCertUpload(request, env, path) {
   // ── POST /api/certificates/upload ──
   if (path === '/certificates/upload' && request.method === 'POST') {
     if (!isStorageConfigured(env)) {
-      return json({ success: false, error: 'Storage is not configured. Configure CERT_BUCKET (R2) or B2_* variables.', code: 'NO_BUCKET' }, 500, env);
+      return json({ success: false, error: 'Storage is not configured. Configure B2_* variables (primary) or CERT_BUCKET (R2 fallback).', code: 'NO_BUCKET' }, 500, env);
     }
 
     let formData;
@@ -1310,8 +1328,8 @@ async function handleCertificates(request, env, path) {
       VAPID_PRIVATE_KEY: !!env.VAPID_PRIVATE_KEY,
       VAPID_PUBLIC_KEY: !!env.VAPID_PUBLIC_KEY,
       CRON_SECRET: !!env.CRON_SECRET,
-      CERT_BUCKET: !!env.CERT_BUCKET,
-      B2_BUCKET: !!(env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME)
+      B2_BUCKET: !!(env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME),
+      CERT_BUCKET: !!env.CERT_BUCKET
     };
 
     // Crypto Self-Test
@@ -3176,8 +3194,8 @@ export default {
           VAPID_PRIVATE_KEY: !!env.VAPID_PRIVATE_KEY,
           VAPID_PUBLIC_KEY: !!env.VAPID_PUBLIC_KEY,
           CRON_SECRET: !!env.CRON_SECRET,
-          CERT_BUCKET: !!env.CERT_BUCKET,
-      B2_BUCKET: !!(env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME)
+          B2_BUCKET: !!(env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME),
+          CERT_BUCKET: !!env.CERT_BUCKET
         };
         
         let cryptoTest = { ok: false };
