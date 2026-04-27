@@ -59,6 +59,7 @@ const SAP_CONFIG = {
     { id:'jobs',          href:'jobs.html',          iconKey:'chart',  en:'Jobs',          ar:'الوظائف',      roles:['admin','manager','technician'] },
     { id:'files',         href:'files.html',         iconKey:'asset',  en:'Files',         ar:'الملفات',      roles:['admin'] },
     { id:'notifications', href:'notifications.html', iconKey:'notif',  en:'Notifications', ar:'الإشعارات',    roles:['admin','manager','technician','user'] },
+    { id:'dashboard',     href:'dashboard.html',     iconKey:'users',  en:'Admin Dashboard',ar:'لوحة المشرف',  roles:['admin'] },
     { id:'clients',       href:'clients.html',       iconKey:'users',  en:'Clients',       ar:'العملاء',      roles:['admin'] },
   ],
 };
@@ -1016,6 +1017,21 @@ function ensureFilesNavForRole(role) {
   });
 }
 
+function ensureDashboardNavForRole(role) {
+  if (role !== 'admin') return;
+  document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
+    if (inner.querySelector('a[href="dashboard.html"]')) return;
+    const a = document.createElement('a');
+    a.href = 'dashboard.html';
+    a.className = 'sap-nav-item sap-nav-item--admin';
+    if (location.pathname.endsWith('/dashboard.html')) a.classList.add('active');
+    a.innerHTML = '<svg fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" viewBox=\"0 0 24 24\"><path d=\"M3 3h7v7H3z\"/><path d=\"M14 3h7v7h-7z\"/><path d=\"M14 14h7v7h-7z\"/><path d=\"M3 14h7v7H3z\"/></svg><span>Admin Dashboard</span>';
+    const clients = inner.querySelector('a[href="clients.html"]');
+    if (clients) inner.insertBefore(a, clients);
+    else inner.appendChild(a);
+  });
+}
+
 
 
 function applyPageBodyClass() {
@@ -1086,6 +1102,7 @@ function applyPlanBMobileLayout() {
     SapSidebar.init();
     ensureJobsNavForRole(session.role);
     ensureFilesNavForRole(session.role);
+    ensureDashboardNavForRole(session.role);
 
     /* ── Role visibility ── */
     SapRoles.applyVisibility(session.role);
