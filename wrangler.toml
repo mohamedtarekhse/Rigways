@@ -35,3 +35,8 @@ bucket_name = "rigways-certs"
 # ── Backblaze B2 (optional alternative to R2) ──
 # Configure as secrets/vars in Cloudflare (do NOT commit real keys):
 # B2_KEY_ID, B2_APP_KEY, B2_BUCKET_ID, B2_BUCKET_NAME
+
+# ── OpenRouter AI API Key ──
+# IMPORTANT: For production, use: wrangler secret put OPENROUTER_API_KEY
+# Only use this var for local development. Never commit real keys to Git!
+OPENROUTER_API_KEY = "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"
