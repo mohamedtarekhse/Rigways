@@ -239,6 +239,7 @@
       width: 14px; height: 14px; accent-color: var(--sap-brand); cursor: pointer; flex-shrink: 0;
     }
     .col-dropdown__item--locked { opacity: .45; cursor: not-allowed; }
+    .sap-card--toolbar-dropdown { overflow: visible; }
 
     /* ── PDF print styles ── */
     @media print {
@@ -506,7 +507,7 @@
   </div>
 
   <!-- Table card -->
-  <div class="sap-card">
+  <div class="sap-card sap-card--toolbar-dropdown">
     <!-- Single compact toolbar: checkbox · status pills · filters · search · actions -->
     <div class="sap-toolbar" style="gap:6px; flex-wrap:wrap; padding:6px 12px; border-bottom:1px solid var(--sap-table-border);">
 
