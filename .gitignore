@@ -1,88 +1,54 @@
 ```
+# Compiled and build artifacts
+*.pyc
+__pycache__/
+*.o
+*.obj
+*.class
+*.exe
+*.dll
+*.so
+*.a
+*.out
+
 # Dependencies
 node_modules/
+venv/
+.venv/
+.env
+.env.local
+.env.*
 
 # Logs and temp files
 *.log
 *.tmp
-
-# Environment
-.env
-.env.local
-.env.*
+*.swp
+*.swo
 
 # Editors
 .vscode/
 .idea/
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.py~
-*.py.class
-.Python
-venv/
-.venv/
-env/
-ENV/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
+# Coverage
+coverage/
+htmlcov/
 .coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-.DS_Store
-Thumbs.db
 
-# Build results
+# Distribution / packaging
 dist/
 build/
+*.tar.gz
+*.whl
 *.egg
 *.egg-info/
-.eggs/
-eggs/
-parts/
-var/
-sdist/
-develop-eggs/
-.installed.cfg
-lib/
-lib64/
-pypy-*
-target/
+
+# OS generated files
+.DS_Store
+Thumbs.db
 
 # Testing
 .pytest_cache/
 .mypy_cache/
-.hypothesis/
-
-# Compression
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
+.nyc_output/
+coverage/
 ```
