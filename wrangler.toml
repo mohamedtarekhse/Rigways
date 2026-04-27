@@ -26,11 +26,6 @@ VAPID_PRIVATE_KEY = "9IBAz3Ks3d_aBri4eT5D3FhogrDAKWgvetw_sI15nBc"
 VAPID_SUBJECT     = "mailto:mohamedtarekhse@gmail.com"
 CRON_WORKER_URL  = "https://rigways-cron.mohamedtarekhse.workers.dev"
 
-# ── OpenRouter AI API Key ──
-# IMPORTANT: For production, use: wrangler secret put OPENROUTER_API_KEY
-# Only use this var for local development. Never commit real keys to Git!
-OPENROUTER_API_KEY = "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"
-
 # ── R2 Bucket — certificate file storage ──
 [[r2_buckets]]
 binding     = "CERT_BUCKET"
