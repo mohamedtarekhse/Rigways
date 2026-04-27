@@ -66,19 +66,29 @@ export async function handleInspectors(request, env, path) {
         if (!uploadUrlRes.ok) throw new Error('B2 upload URL failed');
         const uploadUrl = await uploadUrlRes.json();
         const encodedName = encodeURIComponent(key);
+        
+        // Compute SHA1 hash for B2 (required) - read buffer once, use for both hash and upload
+        const fileBuffer = await file.arrayBuffer();
+        const hashBuffer = await crypto.subtle.digest('SHA-1', fileBuffer);
+        const sha1Hash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        
         const uploadRes = await fetch(uploadUrl.uploadUrl, {
           method: 'POST',
           headers: {
             Authorization: uploadUrl.authorizationToken,
             'X-Bz-File-Name': encodedName,
             'Content-Type': file.type,
-            'X-Bz-Content-Sha1': 'do_not_verify',
+            'X-Bz-Content-Sha1': sha1Hash,
           },
-          body: await file.arrayBuffer(),
+          body: fileBuffer,
         });
-        if (!uploadRes.ok) throw new Error('B2 upload failed');
+        if (!uploadRes.ok) {
+          const errText = await uploadRes.text().catch(() => '');
+          throw new Error(`B2 upload failed (${uploadRes.status}): ${errText}`);
+        }
       } else {
-        await env.CERT_BUCKET.put(key, await file.arrayBuffer(), {
+        const fileBufferForR2 = await file.arrayBuffer();
+        await env.CERT_BUCKET.put(key, fileBufferForR2, {
           httpMetadata: { contentType: file.type },
           customMetadata: { originalName: file.name, uploadedBy: session.sub, category },
         });
@@ -113,19 +123,29 @@ export async function handleInspectors(request, env, path) {
         if (!uploadUrlRes.ok) throw new Error('B2 upload URL failed');
         const uploadUrl = await uploadUrlRes.json();
         const encodedName = encodeURIComponent(key);
+        
+        // Compute SHA1 hash for B2 (required) - read buffer once, use for both hash and upload
+        const fileBuffer = await file.arrayBuffer();
+        const hashBuffer = await crypto.subtle.digest('SHA-1', fileBuffer);
+        const sha1Hash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        
         const uploadRes = await fetch(uploadUrl.uploadUrl, {
           method: 'POST',
           headers: {
             Authorization: uploadUrl.authorizationToken,
             'X-Bz-File-Name': encodedName,
             'Content-Type': file.type,
-            'X-Bz-Content-Sha1': 'do_not_verify',
+            'X-Bz-Content-Sha1': sha1Hash,
           },
-          body: await file.arrayBuffer(),
+          body: fileBuffer,
         });
-        if (!uploadRes.ok) throw new Error('B2 upload failed');
+        if (!uploadRes.ok) {
+          const errText = await uploadRes.text().catch(() => '');
+          throw new Error(`B2 upload failed (${uploadRes.status}): ${errText}`);
+        }
       } else {
-        await env.CERT_BUCKET.put(key, await file.arrayBuffer(), {
+        const fileBufferForR2 = await file.arrayBuffer();
+        await env.CERT_BUCKET.put(key, fileBufferForR2, {
           httpMetadata: { contentType: file.type },
           customMetadata: { originalName: file.name, uploadedBy: session.sub },
         });

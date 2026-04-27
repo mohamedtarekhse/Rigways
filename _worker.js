@@ -1017,6 +1017,17 @@ async function getB2Auth(env) {
   return __b2AuthCache;
 }
 
+async function computeSha1(body) {
+  const buffer = await body.arrayBuffer();
+  return computeSha1FromBuffer(buffer);
+}
+
+async function computeSha1FromBuffer(buffer) {
+  const hashBuffer = await crypto.subtle.digest('SHA-1', buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 async function putStorageObject(env, key, body, contentType = 'application/octet-stream', metadata = {}) {
   if (env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) {
     const auth = await getB2Auth(env);
@@ -1028,22 +1039,33 @@ async function putStorageObject(env, key, body, contentType = 'application/octet
       },
       body: JSON.stringify({ bucketId: env.B2_BUCKET_ID }),
     });
-    if (!uploadUrlRes.ok) throw new Error(`B2 upload URL failed (${uploadUrlRes.status})`);
+    if (!uploadUrlRes.ok) {
+      const errText = await uploadUrlRes.text().catch(() => '');
+      throw new Error(`B2 get_upload_url failed (${uploadUrlRes.status}): ${errText}`);
+    }
     const uploadUrl = await uploadUrlRes.json();
     const encodedName = encodeURIComponent(key);
     const metaHeaders = Object.fromEntries(Object.entries(metadata || {}).map(([k, v]) => [`X-Bz-Info-${k}`, String(v ?? '')]));
+    
+    // Read body buffer once, then use for both SHA1 computation and upload
+    const bodyBuffer = await body.arrayBuffer();
+    const sha1Hash = await computeSha1FromBuffer(bodyBuffer);
+    
     const uploadRes = await fetch(uploadUrl.uploadUrl, {
       method: 'POST',
       headers: {
         Authorization: uploadUrl.authorizationToken,
         'X-Bz-File-Name': encodedName,
         'Content-Type': contentType,
-        'X-Bz-Content-Sha1': 'do_not_verify',
+        'X-Bz-Content-Sha1': sha1Hash,
         ...metaHeaders,
       },
-      body,
+      body: bodyBuffer,
     });
-    if (!uploadRes.ok) throw new Error(`B2 upload failed (${uploadRes.status})`);
+    if (!uploadRes.ok) {
+      const errText = await uploadRes.text().catch(() => '');
+      throw new Error(`B2 upload_file failed (${uploadRes.status}): ${errText}`);
+    }
     return;
   }
 
@@ -1232,7 +1254,7 @@ async function handleCertUpload(request, env, path) {
         clientId,
       });
     } catch (e) {
-      console.error('R2 upload error:', e);
+      console.error('B2/R2 upload error:', e);
       return json({ success: false, error: 'File upload failed: ' + e.message, code: 'UPLOAD_FAILED' }, 500, env);
     }
 
