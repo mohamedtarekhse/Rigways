@@ -609,6 +609,7 @@
       <div class="sap-pagination__info" id="paginationInfo">Showing 1–25 of 114</div>
       <div class="sap-pagination__controls" id="paginationControls"></div>
       <div class="sap-pagination__size">
+        <span id="paginationPageInfo" style="font-size:12px;color:var(--sap-text-secondary);white-space:nowrap;">Page 1 of 1</span>
         <label for="pageSizeSelect" style="font-size:12px;color:var(--sap-text-secondary);">Rows:</label>
         <select id="pageSizeSelect" class="sap-select" style="height:30px;padding:2px 8px;" onchange="setPageSize(this.value)">
           <option value="25">25</option>
@@ -1286,6 +1287,8 @@ function applyClientColVisibility() {
 function renderPagination(total) {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const ctrl = document.getElementById('paginationControls');
+  const pageInfo = document.getElementById('paginationPageInfo');
+  if (pageInfo) pageInfo.textContent = `Page ${totalPages ? currentPage : 0} of ${totalPages}`;
   let html = `<button class="sap-page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
   for (let i=1; i<=totalPages; i++) {
     if (totalPages > 7 && Math.abs(i-currentPage) > 2 && i!==1 && i!==totalPages) {
@@ -1663,13 +1666,12 @@ function onCertTypeChange() {
 
 /* ── File handling ── */
 const MAX_FILE_SIZE_MB = 200; // 200 MB limit
-let uploadProgressInterval = null;
 
 function handleFileSelect(input) {
   const file = input.files[0];
   if (!file) return;
   
-  // Check file size (5 MB limit)
+  // Check file size
   const fileSizeMB = file.size / (1024 * 1024);
   if (fileSizeMB > MAX_FILE_SIZE_MB) {
     showToast('error', 'File Too Large', `File size must be less than ${MAX_FILE_SIZE_MB} MB. Your file is ${fileSizeMB.toFixed(2)} MB.`);
@@ -1747,6 +1749,41 @@ function hideUploadProgressToast() {
     toast.style.opacity = '0';
     setTimeout(() => toast.remove(), 300);
   }
+}
+
+function formatUploadBytes(bytes) {
+  const n = Number(bytes || 0);
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function uploadCertificateFileWithProgress({ url, formData, token, onProgress }) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+
+    xhr.upload.onprogress = evt => {
+      if (!evt.lengthComputable) return;
+      const percent = Math.min(100, Math.round((evt.loaded / evt.total) * 100));
+      if (onProgress) onProgress(percent, evt.loaded, evt.total);
+    };
+
+    xhr.onload = () => {
+      let body = null;
+      try {
+        body = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+      } catch {
+        body = { success: false, error: 'Invalid upload response' };
+      }
+      resolve({ status: xhr.status, ok: xhr.status >= 200 && xhr.status < 300, body });
+    };
+    xhr.onerror = () => reject(new Error('Upload request failed'));
+    xhr.onabort = () => reject(new Error('Upload aborted'));
+    xhr.send(formData);
+  });
 }
 
 /* ── Save ── */
@@ -1829,15 +1866,6 @@ async function saveCert() {
     // Show upload progress toast
     showUploadProgressToast(0, 'Starting upload...');
     
-    // Simulate progress updates (since XHR progress isn't available with fetch)
-    let simulatedProgress = 0;
-    uploadProgressInterval = setInterval(() => {
-      if (simulatedProgress < 90) {
-        simulatedProgress += Math.random() * 15;
-        showUploadProgressToast(Math.min(simulatedProgress, 90), 'Uploading file...');
-      }
-    }, 200);
-    
     try {
       // Build structured metadata for the R2 key
       // Key pattern: clients/{CLIENT_ID}/jobs/{JOB_NUMBER}/{JOB_NUMBER}_{CERT_NUMBER}_{originalname}.{ext}
@@ -1852,16 +1880,16 @@ async function saveCert() {
       fd.append('client_id',   clientId);
 
       const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
-      const uploadRes = await fetch('/api/certificates/upload', {
-        method: 'POST',
-        headers: token ? { 'Authorization': 'Bearer ' + token } : {},
-        body: fd,
+      const uploadResult = await uploadCertificateFileWithProgress({
+        url: '/api/certificates/upload',
+        formData: fd,
+        token,
+        onProgress: (pct, loaded, total) => {
+          showUploadProgressToast(pct, `Uploading ${formatUploadBytes(loaded)} of ${formatUploadBytes(total)} (${pct}%)`);
+        },
       });
-      const ud  = await uploadRes.json();
+      const ud  = uploadResult.body || {};
       const udd = ud.data || ud;
-
-      // Clear progress interval
-      clearInterval(uploadProgressInterval);
       
       if (!ud.success) {
         hideUploadProgressToast();
@@ -1879,7 +1907,6 @@ async function saveCert() {
         setTimeout(() => hideUploadProgressToast(), 500);
       }
     } catch(e) {
-      clearInterval(uploadProgressInterval);
       hideUploadProgressToast();
       showToast('warning','File Upload Error',
         'Certificate saved but file upload failed. Edit the certificate to re-attach the file.');
