@@ -449,15 +449,54 @@
       <!-- Select-all checkbox -->
       <input type="checkbox" class="sap-checkbox" onchange="toggleSelectAll(this)" style="margin-right:4px;"/>
 
-      <!-- Status filter pills -->
-      <div class="filter-chips" id="statusChips" style="flex-shrink:0;">
-        <div class="filter-chip active" onclick="filterStatus('all',this)">All</div>
-        <div class="filter-chip" onclick="filterStatus('valid',this)">    <span class="filter-chip__dot" style="background:#188918"></span><span>Valid</span></div>
-        <div class="filter-chip" onclick="filterStatus('expiring',this)"> <span class="filter-chip__dot" style="background:#e76500"></span><span>Expiring</span></div>
-        <div class="filter-chip" onclick="filterStatus('expired',this)">  <span class="filter-chip__dot" style="background:#bb0000"></span><span>Expired</span></div>
-        <div class="filter-chip" onclick="filterStatus('pending',this)">  <span class="filter-chip__dot" style="background:#f57f17"></span><span>Pending</span></div>
-        <div class="filter-chip" onclick="filterStatus('rejected',this)"> <span class="filter-chip__dot" style="background:#bb0000"></span><span>Rejected</span></div>
+      <!-- Status filter dropdown -->
+      <div class="col-selector-wrap" id="statusFilterWrap" style="margin-right:4px;">
+        <button class="col-selector-btn" onclick="toggleStatusDropdown()" id="statusFilterBtn" style="height:28px;padding:0 10px;font-size:12px;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="12" y1="16" x2="14" y2="14"/></svg>
+          <span id="statusFilterLabel">All</span>
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="10" height="10" style="margin-left:4px;"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="col-dropdown" id="statusDropdown" style="min-width:180px;">
+          <div class="col-dropdown__header">
+            <span>STATUS FILTER</span>
+          </div>
+          <label class="col-dropdown__item">
+            <input type="checkbox" data-status="all" checked onchange="filterStatusFromDropdown(this)"/>
+            <span>All</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" data-status="valid" onchange="filterStatusFromDropdown(this)"/>
+            <span><span class="filter-chip__dot" style="background:#188918;display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;"></span>Valid</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" data-status="expiring" onchange="filterStatusFromDropdown(this)"/>
+            <span><span class="filter-chip__dot" style="background:#e76500;display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;"></span>Expiring</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" data-status="expired" onchange="filterStatusFromDropdown(this)"/>
+            <span><span class="filter-chip__dot" style="background:#bb0000;display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;"></span>Expired</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" data-status="pending" onchange="filterStatusFromDropdown(this)"/>
+            <span><span class="filter-chip__dot" style="background:#f57f17;display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;"></span>Pending</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" data-status="rejected" onchange="filterStatusFromDropdown(this)"/>
+            <span><span class="filter-chip__dot" style="background:#bb0000;display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;"></span>Rejected</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" data-status="justUploaded" onchange="filterStatusFromDropdown(this)"/>
+            <span><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="12" height="12" style="vertical-align:middle;margin-right:5px;"><polyline points="20 6 9 17 4 12"/></svg>Just Uploaded (24h)</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" data-status="noCertificate" onchange="filterStatusFromDropdown(this)"/>
+            <span><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="12" height="12" style="vertical-align:middle;margin-right:5px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>No Certificate</span>
+          </label>
+        </div>
       </div>
+
+      <!-- Date filter -->
+      <input type="date" id="uploadDateFilter" class="sap-input" style="height:28px;font-size:12px;max-width:150px;" onchange="applyFilters()" title="Filter by upload date"/>
 
       <!-- Divider -->
       <div style="width:1px;height:20px;background:var(--sap-table-border);flex-shrink:0;"></div>
@@ -543,17 +582,17 @@
       <!-- Divider -->
       <div style="width:1px;height:20px;background:var(--sap-table-border);flex-shrink:0;"></div>
 
-      <!-- Export CSV -->
-      <button class="btn btn-ghost btn-sm" onclick="exportCSV()" style="height:28px;">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-        <span>CSV</span>
-      </button>
-
-      <!-- Export PDF -->
-      <button class="btn btn-ghost btn-sm" onclick="exportPDF()" style="height:28px; color:#bb0000; border-color:#f5a0a0;">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-        <span>PDF</span>
-      </button>
+      <!-- Export Dropdown -->
+      <div class="btn-group">
+        <button class="btn btn-ghost btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="height:28px;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          <span>Export</span>
+        </button>
+        <ul class="dropdown-menu">
+          <li><a class="dropdown-item" href="#" onclick="exportCSV()">CSV</a></li>
+          <li><a class="dropdown-item" href="#" onclick="exportPDF()">PDF</a></li>
+        </ul>
+      </div>
     </div>
 
     <!-- Mass action bar — shown only when rows are selected -->
@@ -764,6 +803,13 @@
             </button>
           </div>
           <div id="existingFileNote" style="display:none;font-size:11px;color:var(--sap-text-secondary);margin-top:4px;"></div>
+        </div>
+
+        <!-- External Certificate Link -->
+        <div class="sap-field mt-md">
+          <label class="sap-label" for="certExternalLink">Certificate Link (External URL)</label>
+          <input type="url" id="certExternalLink" class="sap-input" placeholder="https://example.com/certificate.pdf" />
+          <div style="font-size:11px;color:var(--sap-text-secondary);margin-top:4px;">Optional: Add an external link to the certificate document</div>
         </div>
 
       </form>
@@ -1105,7 +1151,51 @@ function renderTable() {
   if (role === 'technician') data = data.filter(c => c.uploadedBy === 'Ali T.' || true); /* allow all for demo */
 
   /* Status filter */
-  if (activeStatusFilter !== 'all') data = data.filter(c => getCertStatus(c) === activeStatusFilter);
+  const dateFilterVal = document.getElementById('uploadDateFilter').value;
+  
+  if (activeStatusFilter === 'multiple' && window.activeMultipleStatuses) {
+    // Handle multiple status filters
+    data = data.filter(c => {
+      const status = getCertStatus(c);
+      if (window.activeMultipleStatuses.includes('justUploaded')) {
+        const uploadedAt = parseCertDateTime(c.createdAt || c.uploadedAt);
+        const now = new Date();
+        const isJustUploaded = uploadedAt && (now - uploadedAt) <= 24 * 60 * 60 * 1000;
+        if (isJustUploaded) return true;
+      }
+      if (window.activeMultipleStatuses.includes('noCertificate')) {
+        const hasNoFile = !c.fileName && !c.fileUrl;
+        if (hasNoFile) return true;
+      }
+      // Check standard statuses
+      if (window.activeMultipleStatuses.includes(status)) return true;
+      return false;
+    });
+  } else if (activeStatusFilter === 'justUploaded') {
+    // Filter by last 24 hours
+    const now = new Date();
+    data = data.filter(c => {
+      const uploadedAt = parseCertDateTime(c.createdAt || c.uploadedAt);
+      return uploadedAt && (now - uploadedAt) <= 24 * 60 * 60 * 1000;
+    });
+  } else if (activeStatusFilter === 'noCertificate') {
+    // Filter certificates without uploaded file
+    data = data.filter(c => !c.fileName && !c.fileUrl);
+  } else if (activeStatusFilter !== 'all') {
+    data = data.filter(c => getCertStatus(c) === activeStatusFilter);
+  }
+  
+  /* Date filter */
+  if (dateFilterVal) {
+    const filterDate = new Date(dateFilterVal);
+    filterDate.setHours(0, 0, 0, 0);
+    data = data.filter(c => {
+      const uploadedAt = parseCertDateTime(c.createdAt || c.uploadedAt);
+      if (!uploadedAt) return false;
+      uploadedAt.setHours(0, 0, 0, 0);
+      return uploadedAt.getTime() === filterDate.getTime();
+    });
+  }
 
   /* Type */
   if (typeF !== 'all') data = data.filter(c => c.certType === typeF);
@@ -1814,7 +1904,10 @@ async function saveCert() {
     showToast('error','Lifting Sub-type Required','Please select a lifting sub-type.'); return;
   }
   if (!editId && !selectedFile) {
-    showToast('error','File Required','Please upload the certificate file.'); return;
+    const externalLink = document.getElementById('certExternalLink')?.value?.trim() || '';
+    if (!externalLink) {
+      showToast('error','File or Link Required','Please upload the certificate file or provide an external link.'); return;
+    }
   }
   if (issueDate && expiryDate && new Date(expiryDate) <= new Date(issueDate)) {
     showToast('error','Invalid Date','Expiry date must be after issue date.'); return;
@@ -1824,6 +1917,7 @@ async function saveCert() {
   if (saveBtn) { saveBtn.disabled = true; const _lbl = document.getElementById('saveBtnLabel'); if (_lbl) _lbl.textContent = 'Saving…'; }
 
   /* ── Step 1: Save/update the cert record (without file fields) ── */
+  const externalLink = document.getElementById('certExternalLink')?.value?.trim() || '';
   const payload = {
     name,
     cert_type:   certType,
@@ -1834,6 +1928,7 @@ async function saveCert() {
     issue_date:  issueDate,
     expiry_date: expiryDate,
     notes:       selectedJobNum || jobNumber || null,
+    file_url:    externalLink || null,
   };
 
   let savedCert = null;
@@ -2228,7 +2323,14 @@ document.getElementById('certDeleteConfirmModal').addEventListener('click', func
 async function openCertLink(certId) {
   const cert = CERTS.find(x => x.certId === certId);
   if (!cert) { showToast('error','Not Found','Certificate not found.'); return; }
-  if (!cert.fileName && !cert.fileUrl) { showToast('info','No File','No file attached to this certificate.'); return; }
+  
+  // Check for external URL first
+  if (cert.fileUrl && cert.fileUrl.startsWith('http')) {
+    window.open(cert.fileUrl, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  
+  if (!cert.fileName) { showToast('info','No File','No file attached to this certificate.'); return; }
   // The worker now streams the file directly — open the API endpoint as a URL.
   // The Bearer token must be passed; we use a temporary anchor with the token as a query param
   // is NOT safe. Instead we open the URL: the Worker checks the Authorization header.
@@ -2483,9 +2585,65 @@ function toggleColDropdown() {
   document.getElementById('colDropdown').classList.toggle('open');
 }
 
+function toggleStatusDropdown() {
+  document.getElementById('statusDropdown').classList.toggle('open');
+}
+
 document.addEventListener('click', e => {
   if (!e.target.closest('#colSelectorWrap'))
     document.getElementById('colDropdown')?.classList.remove('open');
+  if (!e.target.closest('#statusFilterWrap'))
+    document.getElementById('statusDropdown')?.classList.remove('open');
+});
+
+function filterStatusFromDropdown(checkbox) {
+  const status = checkbox.getAttribute('data-status');
+  const allCheckbox = document.querySelector('#statusDropdown input[data-status="all"]');
+  
+  // Handle "All" checkbox
+  if (status === 'all') {
+    if (checkbox.checked) {
+      document.querySelectorAll('#statusDropdown input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+      });
+      checkbox.checked = true;
+      activeStatusFilter = 'all';
+    } else {
+      checkbox.checked = true; // Prevent unchecking "All" if it's the only one
+    }
+  } else {
+    // Uncheck "All" when any specific status is selected
+    allCheckbox.checked = false;
+    
+    // Get all checked statuses
+    const checkedStatuses = [...document.querySelectorAll('#statusDropdown input[type="checkbox"]:checked')]
+      .map(cb => cb.getAttribute('data-status'))
+      .filter(s => s !== 'all');
+    
+    if (checkedStatuses.length === 0) {
+      allCheckbox.checked = true;
+      activeStatusFilter = 'all';
+    } else if (checkedStatuses.includes('justUploaded') && checkedStatuses.length === 1) {
+      activeStatusFilter = 'justUploaded';
+    } else if (checkedStatuses.includes('noCertificate') && checkedStatuses.length === 1) {
+      activeStatusFilter = 'noCertificate';
+    } else if (checkedStatuses.length === 1) {
+      activeStatusFilter = checkedStatuses[0];
+    } else {
+      // Multiple filters: use special mode
+      activeStatusFilter = 'multiple';
+      window.activeMultipleStatuses = checkedStatuses;
+    }
+  }
+  
+  applyFilters();
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#colSelectorWrap'))
+    document.getElementById('colDropdown')?.classList.remove('open');
+  if (!e.target.closest('#statusFilterWrap'))
+    document.getElementById('statusDropdown')?.classList.remove('open');
 });
 
 function applyColVisibility() {
