@@ -1795,13 +1795,18 @@ async function handleFiles(request, env, path) {
     const nextVersion = ((existingRows || [])[0]?.version_no || 0) + 1;
     const key = `files/jobs/${jobNumber}/certificates/${certificateId}/v${nextVersion}_${Date.now()}_${base}.${ext}`;
 
-    await putStorageObject(env, key, await file.arrayBuffer(), file.type || 'application/octet-stream', {
-      originalName: file.name,
-      uploadedBy: session.sub,
-      certificateId,
-      jobNumber,
-      version: String(nextVersion),
-    });
+    try {
+      await putStorageObject(env, key, file, file.type || 'application/octet-stream', {
+        originalName: file.name,
+        uploadedBy: session.sub,
+        certificateId,
+        jobNumber,
+        version: String(nextVersion),
+      });
+    } catch (e) {
+      console.error('Certificate asset upload error:', e);
+      return json({ success: false, error: 'Asset upload failed: ' + e.message, code: 'UPLOAD_FAILED' }, 500, env);
+    }
 
     // Mark previous versions as non-current
     await db.update('certificate_files', { is_current: false }, { filters: { 'certificate_id.eq': certificateId } }).catch(() => {});
@@ -2254,13 +2259,14 @@ async function handleInspectors(request, env, path) {
     const finalName = `${safeLabel}.${ext}`;
     const key = `inspectors/${category}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${finalName}`;
     try {
-      await putStorageObject(env, key, await file.arrayBuffer(), file.type, {
+      await putStorageObject(env, key, file, file.type, {
         originalName: file.name,
         uploadedBy: session.sub,
         category,
       });
-    } catch {
-      return badReq('File upload failed', 'UPLOAD_FAILED', env);
+    } catch (e) {
+      console.error('Inspector file upload error:', e);
+      return badReq('File upload failed: ' + e.message, 'UPLOAD_FAILED', env);
     }
     return ok({ file_name: finalName, file_url: key }, env);
   }
@@ -2279,12 +2285,13 @@ async function handleInspectors(request, env, path) {
     const safeName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9-_]+/g, '_').slice(0, 80) || 'cv';
     const key = `inspectors/cv/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeName}.${ext}`;
     try {
-      await putStorageObject(env, key, await file.arrayBuffer(), file.type, {
+      await putStorageObject(env, key, file, file.type, {
         originalName: file.name,
         uploadedBy: session.sub,
       });
-    } catch {
-      return badReq('CV upload failed', 'UPLOAD_FAILED', env);
+    } catch (e) {
+      console.error('Inspector CV upload error:', e);
+      return badReq('CV upload failed: ' + e.message, 'UPLOAD_FAILED', env);
     }
     return ok({ cv_file: file.name, cv_url: key }, env);
   }
