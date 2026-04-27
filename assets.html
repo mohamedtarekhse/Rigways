@@ -513,11 +513,30 @@
       <!-- Select-all checkbox -->
       <input type="checkbox" class="sap-checkbox" id="selectAll" onchange="toggleSelectAll(this)" style="margin-right:4px;"/>
 
-      <!-- Status filter pills -->
-      <div class="filter-chips" id="statusChips" style="flex-shrink:0;">
-        <div class="filter-chip active" onclick="filterStatus('all',this)">All</div>
-        <div class="filter-chip" onclick="filterStatus('operation',this)"><span class="filter-chip__dot" style="background:#188918"></span><span>Operation</span></div>
-        <div class="filter-chip" onclick="filterStatus('stacked',this)"><span class="filter-chip__dot" style="background:#9ea3a8"></span><span>Stacked</span></div>
+      <!-- Status filter dropdown -->
+      <div class="col-selector-wrap" id="statusFilterWrap" style="margin-right:4px;">
+        <button class="col-selector-btn" onclick="toggleStatusDropdown()" id="statusFilterBtn" style="height:28px;padding:0 10px;font-size:12px;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="12" y1="16" x2="14" y2="14"/></svg>
+          <span id="statusFilterLabel">All</span>
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="10" height="10" style="margin-left:4px;"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="col-dropdown" id="statusDropdown" style="min-width:160px;">
+          <div class="col-dropdown__header">
+            <span>STATUS FILTER</span>
+          </div>
+          <label class="col-dropdown__item">
+            <input type="checkbox" data-status="all" checked onchange="filterStatusFromDropdown(this)"/>
+            <span>All</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" data-status="operation" onchange="filterStatusFromDropdown(this)"/>
+            <span><span class="filter-chip__dot" style="background:#188918;display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;"></span>Operation</span>
+          </label>
+          <label class="col-dropdown__item">
+            <input type="checkbox" data-status="stacked" onchange="filterStatusFromDropdown(this)"/>
+            <span><span class="filter-chip__dot" style="background:#9ea3a8;display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;"></span>Stacked</span>
+          </label>
+        </div>
       </div>
 
       <!-- Divider -->
@@ -606,17 +625,27 @@
       <!-- Divider -->
       <div style="width:1px;height:20px;background:var(--sap-table-border);flex-shrink:0;"></div>
 
-      <!-- Export CSV -->
-      <button class="btn btn-ghost btn-sm" onclick="exportCSV()" style="height:28px;">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-        <span>CSV</span>
-      </button>
-
-      <!-- Export PDF -->
-      <button class="btn btn-ghost btn-sm" onclick="exportPDF()" style="height:28px; color:#bb0000; border-color:#f5a0a0;">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-        <span>PDF</span>
-      </button>
+      <!-- Export dropdown -->
+      <div class="col-selector-wrap" id="exportWrap" style="margin-right:4px;">
+        <button class="col-selector-btn" onclick="toggleExportDropdown()" id="exportBtn" style="height:28px;padding:0 10px;font-size:12px;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          <span>Export</span>
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="10" height="10" style="margin-left:4px;"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="col-dropdown" id="exportDropdown" style="min-width:140px;">
+          <div class="col-dropdown__header">
+            <span>EXPORT FORMAT</span>
+          </div>
+          <label class="col-dropdown__item" onclick="exportCSV()">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <span>CSV</span>
+          </label>
+          <label class="col-dropdown__item" onclick="exportPDF()">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14" style="color:#bb0000;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <span style="color:#bb0000;">PDF</span>
+          </label>
+        </div>
+      </div>
 
       <!-- Import -->
       <button class="btn btn-ghost btn-sm" id="importBtn" onclick="openImportModal()" style="height:28px;">
@@ -811,6 +840,14 @@
                   <input type="text" id="inline_loc_name" class="sap-input" placeholder="e.g. Rig 15 or Workshop C"/>
                 </div>
                 <div class="sap-field">
+
+          <!-- Client (admin/manager only) -->
+          <div class="sap-field" id="f_client_wrap">
+            <label class="sap-label">Assigned Client <span class="required">*</span></label>
+            <select id="f_client" class="sap-select" required onchange="onAssetClientChange()">
+              <option value="">Select client…</option>
+            </select>
+          </div>
                   <label class="sap-label">Type <span class="required">*</span></label>
                   <select id="inline_loc_type" class="sap-select">
                     <option value="Rig">Rig</option>
@@ -831,14 +868,6 @@
                 </button>
               </div>
             </div>
-          </div>
-
-          <!-- Client (admin/manager only) -->
-          <div class="sap-field" id="f_client_wrap">
-            <label class="sap-label">Assigned Client <span class="required">*</span></label>
-            <select id="f_client" class="sap-select" required onchange="onAssetClientChange()">
-              <option value="">Select client…</option>
-            </select>
           </div>
 
           <!-- Notes -->
@@ -1768,10 +1797,54 @@ function setPageSize(size) {
 /* ═══════════════════════════════════════════════════════
    FILTERS
 ═══════════════════════════════════════════════════════ */
+
+function filterStatusFromDropdown(el) {
+  const checkboxes = document.querySelectorAll('#statusDropdown input[type="checkbox"]');
+  const allCb = Array.from(checkboxes).find(cb => cb.dataset.status === 'all');
+  
+  if (el.dataset.status === 'all') {
+    if (el.checked) {
+      checkboxes.forEach(cb => cb.checked = false);
+      el.checked = true;
+      activeStatusFilter = 'all';
+      document.getElementById('statusFilterLabel').textContent = 'All';
+    } else {
+      el.checked = true; /* keep All checked if trying to uncheck */
+    }
+  } else {
+    allCb.checked = false;
+    const checked = Array.from(checkboxes).filter(cb => cb.checked && cb.dataset.status !== 'all');
+    if (checked.length === 0) {
+      allCb.checked = true;
+      activeStatusFilter = 'all';
+      document.getElementById('statusFilterLabel').textContent = 'All';
+    } else if (checked.length === 1) {
+      activeStatusFilter = checked[0].dataset.status;
+      document.getElementById('statusFilterLabel').textContent = checked[0].nextElementSibling.textContent.trim();
+    } else {
+      activeStatusFilter = 'multiple';
+      document.getElementById('statusFilterLabel').textContent = checked.length + ' selected';
+    }
+  }
+  currentPage = 1; renderTable();
+}
+
+function toggleStatusDropdown() {
+  document.getElementById('statusDropdown').classList.toggle('open');
+}
+
+/* Close dropdowns when clicking outside */
+document.addEventListener('click', e => {
+  if (!e.target.closest('#statusFilterWrap'))
+    document.getElementById('statusDropdown')?.classList.remove('open');
+  if (!e.target.closest('#exportWrap'))
+    document.getElementById('exportDropdown')?.classList.remove('open');
+});
+
 function filterStatus(val, el) {
   activeStatusFilter = val;
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
+  if (el) el.classList.add('active');
   currentPage = 1; renderTable();
 }
 
@@ -2490,6 +2563,10 @@ const COL_KEYS = ['assetId','type','serial','location','status','client'];
 
 function toggleColDropdown() {
   document.getElementById('colDropdown').classList.toggle('open');
+}
+
+function toggleExportDropdown() {
+  document.getElementById('exportDropdown').classList.toggle('open');
 }
 
 /* Close dropdown when clicking outside */
