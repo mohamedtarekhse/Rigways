@@ -273,6 +273,7 @@
       z-index: 500; min-width: 210px; padding: 6px 0;
       display: none;
     }
+    #statusDropdown { left: 0; right: auto; }
     .col-dropdown.open { display: block; }
     .col-dropdown__header {
       display: flex; align-items: center; justify-content: space-between;
@@ -297,6 +298,7 @@
       width: 14px; height: 14px; accent-color: var(--sap-brand); cursor: pointer; flex-shrink: 0;
     }
     .col-dropdown__item--locked { opacity: .45; cursor: not-allowed; }
+    .sap-card--toolbar-dropdown { overflow: visible; }
 
     @media(max-width:900px) { .sap-drawer { width: 100%; } .hide-mobile { display: none !important; } }
 
@@ -442,7 +444,7 @@
   </div>
 
   <!-- Table card -->
-  <div class="sap-card">
+  <div class="sap-card sap-card--toolbar-dropdown">
     <!-- Single compact toolbar -->
     <div class="sap-toolbar" style="gap:6px; flex-wrap:wrap; padding:6px 12px; border-bottom:1px solid var(--sap-table-border);">
 
@@ -2599,11 +2601,17 @@ function toggleStatusDropdown() {
   document.getElementById('statusDropdown').classList.toggle('open');
 }
 
+function toggleCertExportDropdown() {
+  document.getElementById('exportDropdown')?.classList.toggle('open');
+}
+
 document.addEventListener('click', e => {
   if (!e.target.closest('#colSelectorWrap'))
     document.getElementById('colDropdown')?.classList.remove('open');
   if (!e.target.closest('#statusFilterWrap'))
     document.getElementById('statusDropdown')?.classList.remove('open');
+  if (!e.target.closest('#exportWrap'))
+    document.getElementById('exportDropdown')?.classList.remove('open');
 });
 
 function filterStatusFromDropdown(checkbox) {
@@ -2654,6 +2662,8 @@ document.addEventListener('click', e => {
     document.getElementById('colDropdown')?.classList.remove('open');
   if (!e.target.closest('#statusFilterWrap'))
     document.getElementById('statusDropdown')?.classList.remove('open');
+  if (!e.target.closest('#exportWrap'))
+    document.getElementById('exportDropdown')?.classList.remove('open');
 });
 
 function applyColVisibility() {
