@@ -6,19 +6,40 @@
   <title>Admin Dashboard - User Management</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="app.js"></script>
+  <style>
+    .rigways-shell-logo { height:22px; width:auto; filter:brightness(0) invert(1); }
+  </style>
 </head>
 <body>
-  <header class="sap-header">
-    <div class="sap-header__left">
-      <button class="sap-header__collapse-btn" id="collapseBtn" title="Toggle Sidebar">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  <header class="sap-shell">
+    <a href="assets.html" class="sap-shell__logo">
+      <svg class="rigways-shell-logo" height="22" aria-label="Rigways Group" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 190.81 25.51"><defs><style>.cls-1{fill:#231f20;}.cls-2{fill:#00aded;}.cls-3{fill:#2e3d54;}</style></defs><g><g><path class="cls-2" d="M74.28,0c0,.13-.08.18-.14.25-1.61,2.01-3.23,4.01-4.83,6.03-.14.17-.29.2-.48.2-18.2,0-36.39,0-54.59,0-1.71,0-3.08,1.43-2.97,3.11.09,1.42,1.26,2.6,2.67,2.71.28.02.56.03.84.03,7.99,0,15.99,0,23.98,0q.37,0,.37.38c0,4.16,0,8.31,0,12.47,0,.28-.08.33-.34.33-2.53-.01-5.06,0-7.59,0-.24,0-.32-.04-.31-.3.01-1.95,0-3.89.01-5.84,0-.24-.07-.29-.3-.29-3.64,0-7.28,0-10.92,0-.2,0-.35.06-.5.19-2.4,2.03-4.81,4.07-7.22,6.1-.11.09-.21.14-.35.14-3.83,0-7.65,0-11.48,0-.03,0-.05,0-.15-.02,3.1-2.56,6.17-5.09,9.23-7.62-2.24-.69-3.72-2.27-4.96-4.12-.69-1.03-1.15-2.15-1.37-3.37-.31-1.74-.1-3.43.65-5.03C4.85,2.55,7.07.88,10.06.2,10.72.05,11.4,0,12.08,0c20.65,0,41.3,0,61.95,0h.25Z"></path><path class="cls-3" d="M74.36,25.21c0,.25-.05.31-.3.31-5.81,0-11.62,0-17.43,0-3.24,0-6.25-.82-8.96-2.6-3.69-2.42-6-5.8-6.83-10.16-.15-.78-.2-1.56-.23-2.35,0-.17.02-.24.22-.24,2.77,0,5.55,0,8.32,0,.17,0,.22.05.23.22.04,1.02.2,2.02.6,2.97.87,2.07,2.29,3.63,4.3,4.66,1.38.71,2.84,1.01,4.38,1.01,2.43.01,4.87,0,7.31.01.26,0,.31-.08.3-.32-.02-.64-.02-1.28,0-1.92,0-.23-.06-.28-.28-.28-3.31,0-6.62,0-9.93,0-.17,0-.29-.04-.41-.18-1.71-2.02-3.42-4.03-5.13-6.04-.03-.03-.06-.07-.13-.16h.34c7.77,0,15.53,0,23.3,0,.26,0,.34.05.34.33-.01,4.92,0,9.84,0,14.75"></path></g></g></svg>
+      <span class="sap-shell__logo-badge">ACM</span>
+    </a>
+    <div class="sap-shell__divider"></div>
+    <span class="sap-shell__app-title">Asset Management</span>
+    <div class="sap-shell__spacer"></div>
+    <div class="sap-shell__actions">
+      <button class="sap-shell__btn" onclick="window.location.href='notifications.html'">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+        <span class="sap-shell__badge" id="notifBadge" style="display:none;"></span>
       </button>
-      <div class="sap-header__brand">Rigways ACM</div>
+      <div class="sap-shell__avatar" id="shellAvatar">AD</div>
     </div>
-    <div class="sap-header__right">
-      <button class="sap-header__icon-btn" id="shellAvatar" title="User menu">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21a8 8 0 10-16 0"/><circle cx="12" cy="7" r="4"/></svg>
-      </button>
+    <div class="sap-user-menu" id="userMenu">
+      <div class="sap-user-menu__header">
+        <div class="sap-user-menu__name" id="menuUserName">Admin</div>
+        <div class="sap-user-menu__role" id="menuUserRole">Administrator</div>
+      </div>
+      <div class="sap-user-menu__item" onclick="window.location.href='assets.html'">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        <span>Assets</span>
+      </div>
+      <div class="sap-user-menu__sep"></div>
+      <div class="sap-user-menu__item sap-user-menu__item--danger" data-action="logout">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        <span>Sign Out</span>
+      </div>
     </div>
   </header>
 
@@ -32,6 +53,8 @@
       <div class="sap-navbar__divider"></div>
       <a href="dashboard.html" class="sap-nav-item sap-nav-item--admin active"><i data-feather="settings"></i><span>Admin Dashboard</span></a>
       <a href="clients.html" class="sap-nav-item sap-nav-item--admin"><i data-feather="users"></i><span>Clients</span></a>
+      <a href="inspectors.html" class="sap-nav-item sap-nav-item--admin" id="inspectorsLink"><i data-feather="check-square"></i><span>Inspectors</span></a>
+      <a href="functional-locations.html" class="sap-nav-item sap-nav-item--admin" id="funcLocsLink"><i data-feather="map-pin"></i><span>Func. Locations</span></a>
     </div>
   </nav>
 
