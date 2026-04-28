@@ -247,7 +247,7 @@ const SapLang = (() => {
   function toggle() { apply(SAP_CONFIG.DEFAULT_LANG); }
 
   /**
-   * Quick translation helper: t('English text', 'نص عربي')
+   * Quick translation helper: English only (Arabic removed)
    */
   function t(en, ar) { return en; }
 

@@ -1236,6 +1236,13 @@ const CERTS_STORAGE_KEY = 'sap_certs_data';
 function fmtCertId(cert) {
   if (!cert || !cert.certId) return '—';
   const rawCert = cert.certId;
+  
+  // If certId already contains '/', it's in the new format YYYY-NNN/NNN
+  if (rawCert.includes('/')) {
+    return rawCert;
+  }
+  
+  // Legacy format handling (CERT-0012, JOB-2024-006)
   const certNum = rawCert.replace(/^CERT-0*/i, '') || rawCert;
   const padded  = certNum.padStart(3, '0');
   if (!cert.jobNumber) return rawCert;

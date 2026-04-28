@@ -2589,7 +2589,13 @@ const COL_KEYS = ['jobNumber','certId','fileLink','certType','issuedBy','expiry'
 function fmtCertId(cert) {
   if (!cert || !cert.certId) return '—';
   const rawCert = cert.certId;
-  // Extract numeric suffix from CERT-0012 → "012"
+  
+  // If certId already contains '/', it's in the new format YYYY-NNN/NNN
+  if (rawCert.includes('/')) {
+    return rawCert;
+  }
+  
+  // Legacy format handling (CERT-0012, JOB-2024-006)
   const certNum = rawCert.replace(/^CERT-0*/i, '') || rawCert;
   const padded  = certNum.padStart(3, '0');
   if (!cert.jobNumber) return rawCert;
