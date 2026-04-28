@@ -1037,7 +1037,72 @@ function sanitizeFilenameForB2(filename) {
     .slice(0, 200);                     // Limit length
 }
 
-async function putStorageObject(env, key, body, contentType = 'application/octet-stream', metadata = {}) {
+// Generate a unique filename by checking existing files and adding a number suffix if needed
+async function generateUniqueStorageKey(env, baseKey, maxAttempts = 100) {
+  const extMatch = baseKey.match(/\.[^.]+$/);
+  const ext = extMatch ? extMatch[0] : '';
+  const baseWithoutExt = extMatch ? baseKey.slice(0, -ext.length) : baseKey;
+  
+  // First attempt: use the base key as-is
+  let attemptKey = baseKey;
+  
+  // Check if file already exists
+  const existing = await checkStorageObjectExists(env, baseKey);
+  if (!existing) {
+    return baseKey;
+  }
+  
+  // File exists, try adding number suffix
+  for (let i = 1; i <= maxAttempts; i++) {
+    attemptKey = `${baseWithoutExt}-${i}${ext}`;
+    const exists = await checkStorageObjectExists(env, attemptKey);
+    if (!exists) {
+      return attemptKey;
+    }
+  }
+  
+  // If we reach here, all attempts failed - append timestamp as last resort
+  const timestamp = Date.now();
+  return `${baseWithoutExt}-${timestamp}${ext}`;
+}
+
+// Check if a storage object exists
+async function checkStorageObjectExists(env, key) {
+  if (env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) {
+    const auth = await getB2Auth(env);
+    const listRes = await fetch(`${auth.apiUrl}/b2api/v2/b2_list_file_names`, {
+      method: 'POST',
+      headers: {
+        Authorization: auth.authorizationToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        bucketId: env.B2_BUCKET_ID,
+        startFileName: key,
+        maxFileCount: 1,
+      }),
+    });
+    if (!listRes.ok) {
+      throw new Error(`B2 check existence failed (${listRes.status})`);
+    }
+    const listData = await listRes.json();
+    const found = (listData.files || [])[0];
+    return found && found.fileName === key;
+  }
+  
+  if (env.CERT_BUCKET) {
+    const obj = await env.CERT_BUCKET.get(key);
+    return obj !== null;
+  }
+  
+  throw new Error('No storage backend configured');
+}
+
+async function putStorageObject(env, baseKey, body, contentType = 'application/octet-stream', metadata = {}) {
+  // Generate unique key if file already exists
+  const sanitizedBaseKey = sanitizeFilenameForB2(baseKey);
+  const finalKey = await generateUniqueStorageKey(env, sanitizedBaseKey);
+  
   if (env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) {
     const auth = await getB2Auth(env);
     const uploadUrlRes = await fetch(`${auth.apiUrl}/b2api/v2/b2_get_upload_url`, {
@@ -1053,8 +1118,7 @@ async function putStorageObject(env, key, body, contentType = 'application/octet
       throw new Error(`B2 get_upload_url failed (${uploadUrlRes.status}): ${errText}`);
     }
     const uploadUrl = await uploadUrlRes.json();
-    const sanitizedKey = sanitizeFilenameForB2(key);
-    const encodedName = encodeURIComponent(sanitizedKey);
+    const encodedName = encodeURIComponent(finalKey);
     const metaHeaders = Object.fromEntries(Object.entries(metadata || {}).map(([k, v]) => [`X-Bz-Info-${k}`, String(v ?? '')]));
     
     // Read body buffer once, then use for both SHA1 computation and upload
@@ -1076,15 +1140,15 @@ async function putStorageObject(env, key, body, contentType = 'application/octet
       const errText = await uploadRes.text().catch(() => '');
       throw new Error(`B2 upload_file failed (${uploadRes.status}): ${errText}`);
     }
-    return;
+    return finalKey;
   }
 
   if (env.CERT_BUCKET) {
-    await env.CERT_BUCKET.put(key, body, {
+    await env.CERT_BUCKET.put(finalKey, body, {
       httpMetadata: { contentType },
       customMetadata: metadata,
     });
-    return;
+    return finalKey;
   }
 
   throw new Error('No storage backend configured');
@@ -1253,11 +1317,11 @@ async function handleCertUpload(request, env, path) {
       .slice(0, 60);
     const safeJobNumber = jobNumber.replace(/[^a-z0-9-]/gi, '-');
     const safeCertNumber = certNumber.replace(/[^a-z0-9-]/gi, '-');
-    const key = `clients/${clientId}/jobs/${safeJobNumber}/${safeJobNumber}_${safeCertNumber}_${safeOriginal}.${ext}`;
+    const baseKey = `clients/${clientId}/jobs/${safeJobNumber}/${safeJobNumber}_${safeCertNumber}_${safeOriginal}.${ext}`;
     const fileBuffer = await file.arrayBuffer();
 
     try {
-      await putStorageObject(env, key, fileBuffer, file.type, {
+      const finalKey = await putStorageObject(env, baseKey, fileBuffer, file.type, {
         originalName: file.name,
         uploadedBy: session.sub,
         username: session.username,
@@ -1270,7 +1334,7 @@ async function handleCertUpload(request, env, path) {
       return json({ success: false, error: 'File upload failed: ' + e.message, code: 'UPLOAD_FAILED' }, 500, env);
     }
 
-    return ok({ key, file_name: `${jobNumber}_${certNumber}_${safeOriginal}.${ext}`, file_url: key }, env);
+    return ok({ key: finalKey, file_name: `${jobNumber}_${certNumber}_${safeOriginal}.${ext}`, file_url: finalKey }, env);
   }
 
   // ── GET /api/certificates/file/:certId — get signed URL ──
@@ -1806,11 +1870,11 @@ async function handleFiles(request, env, path) {
     });
     const nextVersion = ((existingRows || [])[0]?.version_no || 0) + 1;
     const safeJobNumber = jobNumber.replace(/[^a-z0-9-]/gi, '-');
-    const key = `files/jobs/${safeJobNumber}/certificates/${certificateId}/v${nextVersion}_${Date.now()}_${base}.${ext}`;
+    const baseKey = `files/jobs/${safeJobNumber}/certificates/${certificateId}/v${nextVersion}_${Date.now()}_${base}.${ext}`;
 
     const fileBuffer = await file.arrayBuffer();
     try {
-      await putStorageObject(env, key, fileBuffer, file.type || 'application/octet-stream', {
+      const finalKey = await putStorageObject(env, baseKey, fileBuffer, file.type || 'application/octet-stream', {
         originalName: file.name,
         uploadedBy: session.sub,
         certificateId,
@@ -1833,7 +1897,7 @@ async function handleFiles(request, env, path) {
       file_name: file.name,
       file_size: file.size,
       mime_type: file.type || 'application/octet-stream',
-      r2_key: key,
+      r2_key: finalKey,
       version_no: nextVersion,
       is_current: true,
       status: 'active',
@@ -1852,7 +1916,7 @@ async function handleFiles(request, env, path) {
         body: JSON.stringify({
           event: 'file_uploaded',
           file_id: data?.id || null,
-          r2_key: key,
+          r2_key: finalKey,
           mime_type: payload.mime_type,
           size: payload.file_size,
           certificate_id: certificateId,
@@ -2272,10 +2336,10 @@ async function handleInspectors(request, env, path) {
     const safeLabel = labelRaw.replace(/[^a-zA-Z0-9-_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80) || 'file';
     const finalName = `${safeLabel}.${ext}`;
     const safeCategory = category.replace(/[^a-z0-9-]/gi, '-');
-    const key = `inspectors/${safeCategory}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${finalName}`;
+    const baseKey = `inspectors/${safeCategory}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${finalName}`;
     const fileBuffer = await file.arrayBuffer();
     try {
-      await putStorageObject(env, key, fileBuffer, file.type, {
+      const finalKey = await putStorageObject(env, baseKey, fileBuffer, file.type, {
         originalName: file.name,
         uploadedBy: session.sub,
         category,
@@ -2284,7 +2348,7 @@ async function handleInspectors(request, env, path) {
       console.error('Inspector file upload error:', e);
       return badReq('File upload failed: ' + e.message, 'UPLOAD_FAILED', env);
     }
-    return ok({ file_name: finalName, file_url: key }, env);
+    return ok({ file_name: finalName, file_url: finalKey }, env);
   }
 
   if (path === '/inspectors/upload-cv' && method === 'POST') {
@@ -2299,10 +2363,10 @@ async function handleInspectors(request, env, path) {
     if (file.size > 10 * 1024 * 1024) return badReq('File too large (max 10MB)', 'FILE_TOO_LARGE', env);
     const ext = (file.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
     const safeName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9-_]+/g, '_').slice(0, 80) || 'cv';
-    const key = `inspectors/cv/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeName}.${ext}`;
+    const baseKey = `inspectors/cv/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeName}.${ext}`;
     const fileBuffer = await file.arrayBuffer();
     try {
-      await putStorageObject(env, key, fileBuffer, file.type, {
+      const finalKey = await putStorageObject(env, baseKey, fileBuffer, file.type, {
         originalName: file.name,
         uploadedBy: session.sub,
       });
@@ -2310,7 +2374,7 @@ async function handleInspectors(request, env, path) {
       console.error('Inspector CV upload error:', e);
       return badReq('CV upload failed: ' + e.message, 'UPLOAD_FAILED', env);
     }
-    return ok({ cv_file: file.name, cv_url: key }, env);
+    return ok({ cv_file: file.name, cv_url: finalKey }, env);
   }
 
   if (fileId && method === 'GET') {
