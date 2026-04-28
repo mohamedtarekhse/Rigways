@@ -485,7 +485,14 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     const settingsBtn = document.getElementById('settingsBtn');
     if (settingsBtn) settingsBtn.style.display = 'none';
   }
-  if (session.role !== 'admin' && session.role !== 'manager') {
+  // Hide nav links for technician and user roles - they can only see Assets and Certificates
+  if (session.role === 'technician' || session.role === 'user') {
+    document.getElementById('adminClientsLink').style.display = 'none';
+    document.getElementById('inspectorsLink').style.display = 'none';
+    document.getElementById('funcLocsLink').style.display = 'none';
+    const notificationsLink = document.querySelector('a[href="notifications.html"]');
+    if (notificationsLink) notificationsLink.style.display = 'none';
+  } else if (session.role !== 'admin' && session.role !== 'manager') {
     document.getElementById('inspectorsLink').style.display = 'none';
     document.getElementById('funcLocsLink').style.display = 'none';
   } else if (session.role === 'manager') {
