@@ -133,11 +133,43 @@ export async function handleCertificates(request, env, path) {
       if (!aliases.includes(String(asset.client_id || ''))) return forbidden(env);
     }
 
-    // Verify job_id if provided
+    // Verify job_id is required for technicians and validate assignment
+    if (session.role === 'technician' && !body.job_id) {
+      return badReq('job_id is required for technician uploads', 'VALIDATION', env);
+    }
+
+    let job = null;
     if (body.job_id) {
-      const { data: jRows } = await db.from('jobs', { filters: { 'id.eq': body.job_id }, select:'id,job_number', limit:1 });
-      const job = Array.isArray(jRows) ? jRows[0] : jRows;
+      const { data: jRows } = await db.from('jobs', {
+        filters: { 'id.eq': body.job_id },
+        select:'id,job_number,client_id,functional_location',
+        limit:1,
+      });
+      job = Array.isArray(jRows) ? jRows[0] : jRows;
       if (!job) return notFound('Job', env);
+    }
+
+    if (session.role === 'technician') {
+      const { data: iRows } = await db.from('inspectors', {
+        filters: { 'user_id.eq': session.sub, 'status.eq': 'active' },
+        select: 'id',
+        limit: 1,
+      });
+      const inspector = Array.isArray(iRows) ? iRows[0] : iRows;
+      if (!inspector) return forbidden(env);
+
+      const { data: assignRows } = await db.from('job_inspectors', {
+        filters: { 'job_id.eq': body.job_id, 'inspector_id.eq': inspector.id },
+        select: 'id',
+        limit: 1,
+      });
+      const assignment = Array.isArray(assignRows) ? assignRows[0] : assignRows;
+      if (!assignment) return forbidden(env);
+
+      // Job and asset must belong to same client; functional location can be any FL under job client.
+      if (job && String(job.client_id || '') !== String(asset.client_id || '')) {
+        return badReq('Asset client must match the assigned job client', 'VALIDATION', env);
+      }
     }
 
     const { data, error } = await db.insert('certificates', {
