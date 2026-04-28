@@ -467,7 +467,8 @@ async function deleteJob(id){
 document.addEventListener('DOMContentLoaded', async ()=>{
   session = getSession();
   if(!session) return location.href='/';
-  if (!['admin','manager','technician'].includes(session.role)) return location.href='assets.html';
+  // Only admin and manager can access Jobs page - redirect technicians and users to Assets
+  if (!['admin','manager'].includes(session.role)) return location.href='assets.html';
   jobsReadOnly = session.role === 'technician';
   document.getElementById('menuUserName').textContent = session.name || '';
   document.getElementById('menuUserRole').textContent = session.role || '';
