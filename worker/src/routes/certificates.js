@@ -269,7 +269,7 @@ export async function handleCertificates(request, env, path) {
 
     await _recordCertificateHistory(db, existing, session, 'record_deleted');
     await db.delete('certificates', { filters: { 'id.eq': certId } });
-    return ok({ id: certId, deleted: true, deleted_scope: 'single' }, env);
+    return ok({ id: certId, deleted: true, certificate: existing, deleted_scope: 'single' }, env);
   }
 
   return badReq('Not found','NOT_FOUND',env);
