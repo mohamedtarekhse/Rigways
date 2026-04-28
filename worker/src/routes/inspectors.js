@@ -1,5 +1,6 @@
 // worker/src/routes/inspectors.js
 import { createSupabase }          from '../lib/supabase.js';
+import { hashPassword }            from '../lib/password.js';
 import { getSession, requireRole } from '../middleware/jwt.js';
 import { ok, created, badReq, unauth, forbidden, notFound, conflict, serverErr } from '../utils/response.js';
 import { validate, pick, compact } from '../utils/validate.js';
@@ -15,6 +16,87 @@ const TRAINING_TYPES = [
   'image/png',
   'image/webp',
 ];
+const DEFAULT_INSPECTOR_PASSWORD = '12345678';
+
+function sanitizeUsernameBase(value) {
+  const raw = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, '');
+  return raw.slice(0, 50);
+}
+
+function makeInspectorUsername(email, name, inspectorNumber) {
+  const emailBase = sanitizeUsernameBase(email);
+  if (emailBase) return emailBase;
+
+  const firstName = String(name || '').trim().split(/\s+/).filter(Boolean)[0] || '';
+  const firstNameBase = sanitizeUsernameBase(firstName);
+  if (firstNameBase) return firstNameBase;
+
+  return sanitizeUsernameBase(inspectorNumber || '') || `inspector_${Date.now()}`;
+}
+
+async function resolveUniqueUsername(db, preferred) {
+  let candidate = sanitizeUsernameBase(preferred) || `inspector_${Date.now()}`;
+  let i = 0;
+  while (i < 50) {
+    const suffix = i === 0 ? '' : `_${i + 1}`;
+    const tryUsername = `${candidate}${suffix}`.slice(0, 50);
+    const { data } = await db.from('users', {
+      filters: { 'username.ilike': tryUsername },
+      select: 'id',
+      limit: 1,
+    });
+    const hit = Array.isArray(data) ? data[0] : data;
+    if (!hit) return tryUsername;
+    i += 1;
+  }
+  return `${candidate.slice(0, 40)}_${crypto.randomUUID().slice(0, 8)}`;
+}
+
+async function ensureInspectorUser(db, inspector, isUpdate = false) {
+  const desiredUsername = makeInspectorUsername(inspector.email, inspector.name, inspector.inspector_number);
+  const baseName = String(inspector.name || '').trim() || 'Inspector';
+
+  if (inspector.user_id) {
+    const updateUser = {
+      name: baseName,
+      role: 'technician',
+      customer_id: null,
+      is_active: inspector.status !== 'inactive',
+      updated_at: new Date().toISOString(),
+    };
+    // Keep existing username unless it is empty somehow.
+    const { data: currentRows } = await db.from('users', {
+      filters: { 'id.eq': inspector.user_id },
+      select: 'id,username',
+      limit: 1,
+    });
+    const current = Array.isArray(currentRows) ? currentRows[0] : currentRows;
+    if (!current) return { ok: false, error: 'Linked inspector user not found' };
+    if (!current.username) {
+      updateUser.username = await resolveUniqueUsername(db, desiredUsername);
+    }
+    const { error } = await db.update('users', updateUser, { filters: { 'id.eq': inspector.user_id } });
+    if (error) return { ok: false, error: 'Failed to update linked user' };
+    return { ok: true, userId: inspector.user_id };
+  }
+
+  const username = await resolveUniqueUsername(db, desiredUsername);
+  const { data, error } = await db.insert('users', {
+    username,
+    password_hash: await hashPassword(DEFAULT_INSPECTOR_PASSWORD),
+    name: baseName,
+    role: 'technician',
+    customer_id: null,
+    is_active: inspector.status !== 'inactive',
+  });
+  if (error) return { ok: false, error: 'Failed to create linked user' };
+  const user = Array.isArray(data) ? data[0] : data;
+  if (!user?.id) return { ok: false, error: 'Linked user was not created' };
+  return { ok: true, userId: user.id, created: !isUpdate };
+}
 
 export async function handleInspectors(request, env, path) {
   const session = await getSession(request, env);
@@ -274,7 +356,17 @@ export async function handleInspectors(request, env, path) {
       training_certs:   JSON.stringify(Array.isArray(body.training_certs) ? body.training_certs : []),
     });
     if (error) return serverErr(env);
-    return created(Array.isArray(data) ? data[0] : data, env);
+    const inspector = Array.isArray(data) ? data[0] : data;
+
+    const userResult = await ensureInspectorUser(db, inspector);
+    if (!userResult.ok) return serverErr(env);
+
+    const { data: linkedRows, error: linkedErr } = await db.update('inspectors', {
+      user_id: userResult.userId,
+      updated_at: new Date().toISOString(),
+    }, { filters: { 'id.eq': inspector.id } });
+    if (linkedErr) return serverErr(env);
+    return created(Array.isArray(linkedRows) ? linkedRows[0] : linkedRows, env);
   }
 
   if (iid && method === 'PATCH') {
@@ -288,13 +380,32 @@ export async function handleInspectors(request, env, path) {
     if (error) return serverErr(env);
     const updated = Array.isArray(data) ? data[0] : data;
     if (!updated) return notFound('Inspector', env);
+
+    const userResult = await ensureInspectorUser(db, updated, true);
+    if (!userResult.ok) return serverErr(env);
+
+    if (updated.user_id !== userResult.userId) {
+      const { data: linkedRows, error: linkedErr } = await db.update('inspectors', {
+        user_id: userResult.userId,
+        updated_at: new Date().toISOString(),
+      }, { filters: { 'id.eq': iid } });
+      if (linkedErr) return serverErr(env);
+      return ok(Array.isArray(linkedRows) ? linkedRows[0] : linkedRows, env);
+    }
     return ok(updated, env);
   }
 
   if (iid && method === 'DELETE') {
     if (!requireRole(session, ['admin'])) return forbidden(env);
-    const { data: ex } = await db.from('inspectors', { filters: { 'id.eq': iid }, select:'id', limit:1 });
-    if (!(Array.isArray(ex) ? ex[0] : ex)) return notFound('Inspector', env);
+    const { data: ex } = await db.from('inspectors', { filters: { 'id.eq': iid }, select:'id,user_id', limit:1 });
+    const existing = Array.isArray(ex) ? ex[0] : ex;
+    if (!existing) return notFound('Inspector', env);
+    if (existing.user_id) {
+      await db.update('users', {
+        is_active: false,
+        updated_at: new Date().toISOString(),
+      }, { filters: { 'id.eq': existing.user_id } });
+    }
     await db.delete('inspectors', { filters: { 'id.eq': iid } });
     return ok({ id: iid, deleted: true }, env);
   }
