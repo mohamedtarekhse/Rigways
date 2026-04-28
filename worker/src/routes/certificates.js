@@ -142,7 +142,7 @@ export async function handleCertificates(request, env, path) {
     if (body.job_id) {
       const { data: jRows } = await db.from('jobs', {
         filters: { 'id.eq': body.job_id },
-        select:'id,job_number,client_id,functional_location',
+        select:'id,job_number,client_id,functional_location,status',
         limit:1,
       });
       job = Array.isArray(jRows) ? jRows[0] : jRows;
@@ -166,9 +166,21 @@ export async function handleCertificates(request, env, path) {
       const assignment = Array.isArray(assignRows) ? assignRows[0] : assignRows;
       if (!assignment) return forbidden(env);
 
-      // Job and asset must belong to same client; functional location can be any FL under job client.
+      if (!['active', 'reopened'].includes(String(job?.status || '').toLowerCase())) {
+        return badReq('Technician uploads are only allowed for active or reopened jobs', 'INVALID_STATE', env);
+      }
+
+      // Job and asset must belong to same client.
       if (job && String(job.client_id || '') !== String(asset.client_id || '')) {
         return badReq('Asset client must match the assigned job client', 'VALIDATION', env);
+      }
+
+      // Functional location must match job FL when job FL is present.
+      // If job has no FL, fallback is client-level permission (validated above).
+      const jobFL = String(job?.functional_location || '').trim();
+      const assetFL = String(asset?.functional_location || '').trim();
+      if (jobFL && jobFL !== assetFL) {
+        return badReq('Asset functional location must match the assigned job functional location', 'VALIDATION', env);
       }
     }
 

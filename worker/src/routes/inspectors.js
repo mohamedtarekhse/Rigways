@@ -55,7 +55,7 @@ async function resolveUniqueUsername(db, preferred) {
   return `${candidate.slice(0, 40)}_${crypto.randomUUID().slice(0, 8)}`;
 }
 
-async function ensureInspectorUser(db, inspector, isUpdate = false) {
+async function ensureInspectorUser(db, inspector) {
   const desiredUsername = makeInspectorUsername(inspector.email, inspector.name, inspector.inspector_number);
   const baseName = String(inspector.name || '').trim() || 'Inspector';
 
@@ -95,7 +95,7 @@ async function ensureInspectorUser(db, inspector, isUpdate = false) {
   if (error) return { ok: false, error: 'Failed to create linked user' };
   const user = Array.isArray(data) ? data[0] : data;
   if (!user?.id) return { ok: false, error: 'Linked user was not created' };
-  return { ok: true, userId: user.id, created: !isUpdate };
+  return { ok: true, userId: user.id };
 }
 
 export async function handleInspectors(request, env, path) {
@@ -381,7 +381,7 @@ export async function handleInspectors(request, env, path) {
     const updated = Array.isArray(data) ? data[0] : data;
     if (!updated) return notFound('Inspector', env);
 
-    const userResult = await ensureInspectorUser(db, updated, true);
+    const userResult = await ensureInspectorUser(db, updated);
     if (!userResult.ok) return serverErr(env);
 
     if (updated.user_id !== userResult.userId) {
