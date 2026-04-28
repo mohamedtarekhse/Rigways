@@ -1241,7 +1241,9 @@ async function handleCertUpload(request, env, path) {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
       .slice(0, 60);
-    const key = `clients/${clientId}/jobs/${jobNumber}/${jobNumber}_${certNumber}_${safeOriginal}.${ext}`;
+    const safeJobNumber = jobNumber.replace(/[^a-z0-9-]/gi, '-');
+    const safeCertNumber = certNumber.replace(/[^a-z0-9-]/gi, '-');
+    const key = `clients/${clientId}/jobs/${safeJobNumber}/${safeJobNumber}_${safeCertNumber}_${safeOriginal}.${ext}`;
     const fileBuffer = await file.arrayBuffer();
 
     try {
@@ -1793,7 +1795,8 @@ async function handleFiles(request, env, path) {
       order: 'version_no.desc',
     });
     const nextVersion = ((existingRows || [])[0]?.version_no || 0) + 1;
-    const key = `files/jobs/${jobNumber}/certificates/${certificateId}/v${nextVersion}_${Date.now()}_${base}.${ext}`;
+    const safeJobNumber = jobNumber.replace(/[^a-z0-9-]/gi, '-');
+    const key = `files/jobs/${safeJobNumber}/certificates/${certificateId}/v${nextVersion}_${Date.now()}_${base}.${ext}`;
 
     const fileBuffer = await file.arrayBuffer();
     try {
@@ -2258,7 +2261,8 @@ async function handleInspectors(request, env, path) {
     const labelRaw = (formData.get('label') || file.name.replace(/\.[^.]+$/, '') || 'file').toString();
     const safeLabel = labelRaw.replace(/[^a-zA-Z0-9-_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80) || 'file';
     const finalName = `${safeLabel}.${ext}`;
-    const key = `inspectors/${category}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${finalName}`;
+    const safeCategory = category.replace(/[^a-z0-9-]/gi, '-');
+    const key = `inspectors/${safeCategory}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${finalName}`;
     const fileBuffer = await file.arrayBuffer();
     try {
       await putStorageObject(env, key, fileBuffer, file.type, {
