@@ -77,7 +77,45 @@ export async function handleJobs(request, env, path) {
       order: 'created_at.desc' 
     });
     if (error) return serverErr(env);
-    return ok({ jobs: Array.isArray(data) ? data : [], limit, offset }, env);
+
+    const jobs = Array.isArray(data) ? data : [];
+    const jobIds = jobs.map(j => j.id).filter(Boolean);
+    if (jobIds.length === 0) return ok({ jobs, limit, offset }, env);
+
+    const { data: assignments } = await db.from('job_inspectors', {
+      filters: { 'job_id.in': jobIds },
+      select: 'job_id,inspector_id',
+    });
+
+    const inspectorIds = [...new Set((assignments || []).map(a => a.inspector_id).filter(Boolean))];
+    let inspectorNameMap = {};
+    if (inspectorIds.length > 0) {
+      const { data: inspectorRows } = await db.from('inspectors', {
+        filters: { 'id.in': inspectorIds },
+        select: 'id,name',
+      });
+      inspectorNameMap = (inspectorRows || []).reduce((acc, row) => {
+        acc[row.id] = row.name || '';
+        return acc;
+      }, {});
+    }
+
+    const byJob = (assignments || []).reduce((acc, row) => {
+      if (!acc[row.job_id]) acc[row.job_id] = [];
+      acc[row.job_id].push(row.inspector_id);
+      return acc;
+    }, {});
+
+    const enrichedJobs = jobs.map(job => {
+      const ids = byJob[job.id] || [];
+      return {
+        ...job,
+        inspector_ids: ids,
+        inspector_names: ids.map(id => inspectorNameMap[id]).filter(Boolean),
+      };
+    });
+
+    return ok({ jobs: enrichedJobs, limit, offset }, env);
   }
 
   /* GET ONE */
@@ -103,7 +141,7 @@ export async function handleJobs(request, env, path) {
         filters: { 'id.in': inspectorIds }, 
         select: 'id,inspector_number,name,title,status' 
       });
-      inspectors = Array.isArray(inspData) ? inspectData : [];
+      inspectors = Array.isArray(inspData) ? inspData : [];
     }
 
     // Fetch recent events
