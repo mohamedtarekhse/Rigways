@@ -3040,9 +3040,15 @@ async function loadJobDropdown(selectedJobNumber) {
     // Filter jobs assigned to the current technician (if technician role)
     let rows = ((raw.data || raw).jobs || []).filter(j => ['active', 'reopened', 'technician_done'].includes(j.status));
     
-    // If technician, filter to only their assigned jobs
-    if (session?.role === 'technician' && session?.username) {
-      rows = rows.filter(j => j.assigned_to === session.username);
+    // If technician, filter to jobs assigned to the matching inspector profile name.
+    // Fallback: if assignment metadata is unavailable, keep current rows to avoid blocking uploads.
+    if (session?.role === 'technician') {
+      const techName = (session?.name || '').trim().toLowerCase();
+      const assigned = rows.filter(j =>
+        Array.isArray(j.inspector_names) &&
+        j.inspector_names.some(n => String(n || '').trim().toLowerCase() === techName)
+      );
+      if (assigned.length > 0) rows = assigned;
     }
     
     sel.innerHTML = '<option value="">Select active job…</option>' + rows.map(j => {
