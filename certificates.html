@@ -966,6 +966,7 @@ let selectedFile = null;
 let deleteTargetId = null;
 let rejectTargetId = null;
 let JOBS_BY_NUMBER = {};
+let JOBS_BY_ID = {};
 
 /* ── Helpers ── */
 /* Session helpers */
@@ -1679,16 +1680,17 @@ function openEditModal(id) {
   if (session.role === 'technician') lockTechnicianModalFields();
 }
 
-function onJobSelectChange(jobNumber) {
-  if (!jobNumber) return;
+function onJobSelectChange(jobId) {
+  if (!jobId) return;
   const input = document.getElementById('f_jobNumber');
-  if (input) input.value = jobNumber;
+  const job = JOBS_BY_ID[jobId] || null;
+  if (input) input.value = job?.job_number || '';
   if (session?.role === 'technician') {
     loadClientDropdown();
     lockTechnicianModalFields();
   }
   // Load assets for the selected job
-  loadAssetsForJob(jobNumber);
+  loadAssetsForJob(job?.job_number || '');
 }
 
 function loadAssetsForJob(jobNumber) {
@@ -1735,8 +1737,8 @@ function lockTechnicianModalFields() {
   const clientSel = document.getElementById('f_client');
   const clientWrap = document.getElementById('f_client_wrap');
   if (clientSel) {
-    const selectedJobNum = (document.getElementById('f_jobSelect')?.value || '').trim();
-    const selectedJob = selectedJobNum ? JOBS_BY_NUMBER[selectedJobNum] : null;
+    const selectedJobId = (document.getElementById('f_jobSelect')?.value || '').trim();
+    const selectedJob = selectedJobId ? JOBS_BY_ID[selectedJobId] : null;
     const cid = String(selectedJob?.client_id || '').trim();
     const label = cid ? (CLIENTS_MAP[cid] ? `${CLIENTS_MAP[cid]} (${cid})` : cid) : 'Auto from selected job';
     clientSel.innerHTML = `<option value="${cid}">${label}</option>`;
@@ -1893,7 +1895,7 @@ function uploadCertificateFileWithProgress({ url, formData, token, onProgress })
 /* ── Save ── */
 async function saveCert() {
   const jobNumber      = document.getElementById('f_jobNumber')?.value?.trim() || '';
-  const selectedJobNum = document.getElementById('f_jobSelect')?.value?.trim() || '';
+  const selectedJobId  = document.getElementById('f_jobSelect')?.value?.trim() || '';
   const name           = document.getElementById('f_name')?.value?.trim() || '';
   const certType       = document.getElementById('f_certType')?.value || '';
   const liftingSubtype = certType === 'LIFTING' ? (document.getElementById('f_liftingSubtype')?.value || '') : '';
@@ -1905,13 +1907,13 @@ async function saveCert() {
   const editId         = document.getElementById('editCertId')?.value || '';
   const isTechnician   = session?.role === 'technician';
   const effectiveIssuedBy = isTechnician ? (session?.name || '').trim() : issuedBy;
-  const jobForUpload      = selectedJobNum ? JOBS_BY_NUMBER[selectedJobNum] : null;
+  const jobForUpload      = selectedJobId ? JOBS_BY_ID[selectedJobId] : null;
   const effectiveClient   = isTechnician ? String(jobForUpload?.client_id || '').trim() : client;
 
   if (!name || !certType || !effectiveIssuedBy || !issueDate || !expiryDate) {
     showToast('error','Required Fields','Please fill all required fields.'); return;
   }
-  if (isTechnician && !selectedJobNum) {
+  if (isTechnician && !selectedJobId) {
     showToast('error','Job Required','Please select an assigned active/reopened job.');
     return;
   }
@@ -1943,10 +1945,11 @@ async function saveCert() {
     lifting_subtype: liftingSubtype || null,
     asset_id:    assetId   || undefined,
     client_id:   effectiveClient || undefined,
+    job_id:      selectedJobId || undefined,
     issued_by:   effectiveIssuedBy,
     issue_date:  issueDate,
     expiry_date: expiryDate,
-    notes:       selectedJobNum || jobNumber || null,
+    notes:       (jobForUpload?.job_number || jobNumber || null),
     file_url:    externalLink || null,
   };
 
@@ -2990,8 +2993,8 @@ async function loadInspectorDropdown(selectedValue) {
 async function loadClientDropdown(selectedValue) {
   if (session?.role === 'technician') {
     const modalSel = document.getElementById('f_client');
-    const selectedJobNum = (document.getElementById('f_jobSelect')?.value || '').trim();
-    const selectedJob = selectedJobNum ? JOBS_BY_NUMBER[selectedJobNum] : null;
+    const selectedJobId = (document.getElementById('f_jobSelect')?.value || '').trim();
+    const selectedJob = selectedJobId ? JOBS_BY_ID[selectedJobId] : null;
     const cid = String(selectedJob?.client_id || '').trim();
     if (modalSel) {
       if (cid) {
@@ -3061,10 +3064,14 @@ async function loadJobDropdown(selectedJobNumber) {
       if (j?.job_number) acc[j.job_number] = j;
       return acc;
     }, {});
+    JOBS_BY_ID = rows.reduce((acc, j) => {
+      if (j?.id) acc[j.id] = j;
+      return acc;
+    }, {});
 
     sel.innerHTML = '<option value="">Select active job…</option>' + rows.map(j => {
       const label = `${j.job_number} — ${j.client_id} (${j.status})`;
-      return `<option value="${j.job_number}">${label}</option>`;
+      return `<option value="${j.id}">${label}</option>`;
     }).join('');
     
     const desired = selectedJobNumber || document.getElementById('f_jobNumber')?.value || '';
@@ -3074,7 +3081,11 @@ async function loadJobDropdown(selectedJobNumber) {
       sel.selectedIndex = 1; // Select the first (and only) job option
       onJobSelectChange(sel.value);
     } else if (desired) {
-      sel.value = desired;
+      const desiredByNumber = rows.find(j => j.job_number === desired);
+      if (desiredByNumber?.id) {
+        sel.value = desiredByNumber.id;
+        onJobSelectChange(sel.value);
+      }
     }
     
     if (session?.role === 'technician') {
