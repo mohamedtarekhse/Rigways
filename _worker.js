@@ -1568,7 +1568,32 @@ async function handleCertificates(request, env, path) {
         select: 'id',
         limit: 1,
       });
-      const inspector = Array.isArray(iRows) ? iRows[0] : iRows;
+      let inspector = Array.isArray(iRows) ? iRows[0] : iRows;
+
+      // Fallback for environments where inspector.user_id backfill has not completed:
+      // resolve assigned inspector by technician display name / username.
+      if (!inspector) {
+        const { data: assignedRows } = await db.from('job_inspectors', {
+          filters: { 'job_id.eq': body.job_id },
+          select: 'inspector_id',
+        });
+        const assignedIds = (Array.isArray(assignedRows) ? assignedRows : [])
+          .map(r => r.inspector_id)
+          .filter(Boolean);
+        if (assignedIds.length > 0) {
+          const { data: inspRows } = await db.from('inspectors', {
+            filters: { 'id.in': assignedIds, 'status.eq': 'active' },
+            select: 'id,name,email',
+          });
+          const techName = String(session.name || '').trim().toLowerCase();
+          const techUser = String(session.username || '').trim().toLowerCase();
+          const matched = (Array.isArray(inspRows) ? inspRows : []).find(r =>
+            String(r.name || '').trim().toLowerCase() === techName ||
+            String(r.email || '').trim().toLowerCase() === techUser
+          );
+          if (matched) inspector = { id: matched.id };
+        }
+      }
       if (!inspector) return forbidden(env);
 
       const { data: assignRows } = await db.from('job_inspectors', {
