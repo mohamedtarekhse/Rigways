@@ -965,6 +965,7 @@ let filteredData = [];
 let selectedFile = null;
 let deleteTargetId = null;
 let rejectTargetId = null;
+let JOBS_BY_NUMBER = {};
 
 /* ── Helpers ── */
 /* Session helpers */
@@ -1682,6 +1683,10 @@ function onJobSelectChange(jobNumber) {
   if (!jobNumber) return;
   const input = document.getElementById('f_jobNumber');
   if (input) input.value = jobNumber;
+  if (session?.role === 'technician') {
+    loadClientDropdown();
+    lockTechnicianModalFields();
+  }
   // Load assets for the selected job
   loadAssetsForJob(jobNumber);
 }
@@ -1730,20 +1735,14 @@ function lockTechnicianModalFields() {
   const clientSel = document.getElementById('f_client');
   const clientWrap = document.getElementById('f_client_wrap');
   if (clientSel) {
-    const cid = (session.customerId || '').trim();
-    if (cid) {
-      const label = CLIENTS_MAP[cid] ? `${CLIENTS_MAP[cid]} (${cid})` : cid;
-      clientSel.innerHTML = `<option value="${cid}">${label}</option>`;
-      clientSel.value = cid;
-      clientSel.disabled = true;
-      if (clientWrap) clientWrap.style.display = 'none';
-    } else {
-      clientSel.innerHTML = '<option value="">Technician account missing client mapping</option>';
-      clientSel.value = '';
-      clientSel.disabled = true;
-      if (clientWrap) clientWrap.style.display = '';
-      showToast('error', 'Client Mapping Missing', 'Technician account has no linked client. Contact administrator.');
-    }
+    const selectedJobNum = (document.getElementById('f_jobSelect')?.value || '').trim();
+    const selectedJob = selectedJobNum ? JOBS_BY_NUMBER[selectedJobNum] : null;
+    const cid = String(selectedJob?.client_id || '').trim();
+    const label = cid ? (CLIENTS_MAP[cid] ? `${CLIENTS_MAP[cid]} (${cid})` : cid) : 'Auto from selected job';
+    clientSel.innerHTML = `<option value="${cid}">${label}</option>`;
+    clientSel.value = cid;
+    clientSel.disabled = true;
+    if (clientWrap) clientWrap.style.display = 'none';
   }
 }
 
@@ -1906,13 +1905,18 @@ async function saveCert() {
   const editId         = document.getElementById('editCertId')?.value || '';
   const isTechnician   = session?.role === 'technician';
   const effectiveIssuedBy = isTechnician ? (session?.name || '').trim() : issuedBy;
-  const effectiveClient   = isTechnician ? (session?.customerId || '').trim() : client;
+  const jobForUpload      = selectedJobNum ? JOBS_BY_NUMBER[selectedJobNum] : null;
+  const effectiveClient   = isTechnician ? String(jobForUpload?.client_id || '').trim() : client;
 
   if (!name || !certType || !effectiveIssuedBy || !issueDate || !expiryDate) {
     showToast('error','Required Fields','Please fill all required fields.'); return;
   }
+  if (isTechnician && !selectedJobNum) {
+    showToast('error','Job Required','Please select an assigned active/reopened job.');
+    return;
+  }
   if (isTechnician && !effectiveClient) {
-    showToast('error','Client Mapping Missing','Your technician account is not linked to a client. Contact administrator.');
+    showToast('error','Job Client Missing','Selected job is missing client mapping. Contact administrator.');
     return;
   }
   if (certType === 'LIFTING' && !liftingSubtype) {
@@ -2986,14 +2990,16 @@ async function loadInspectorDropdown(selectedValue) {
 async function loadClientDropdown(selectedValue) {
   if (session?.role === 'technician') {
     const modalSel = document.getElementById('f_client');
-    const cid = (session.customerId || '').trim();
+    const selectedJobNum = (document.getElementById('f_jobSelect')?.value || '').trim();
+    const selectedJob = selectedJobNum ? JOBS_BY_NUMBER[selectedJobNum] : null;
+    const cid = String(selectedJob?.client_id || '').trim();
     if (modalSel) {
       if (cid) {
         const label = CLIENTS_MAP[cid] ? `${CLIENTS_MAP[cid]} (${cid})` : cid;
         modalSel.innerHTML = `<option value="${cid}">${label}</option>`;
         modalSel.value = cid;
       } else {
-        modalSel.innerHTML = '<option value="">Technician account missing client mapping</option>';
+        modalSel.innerHTML = '<option value="">Auto from selected job</option>';
         modalSel.value = '';
       }
       modalSel.disabled = true;
@@ -3051,6 +3057,11 @@ async function loadJobDropdown(selectedJobNumber) {
       if (assigned.length > 0) rows = assigned;
     }
     
+    JOBS_BY_NUMBER = rows.reduce((acc, j) => {
+      if (j?.job_number) acc[j.job_number] = j;
+      return acc;
+    }, {});
+
     sel.innerHTML = '<option value="">Select active job…</option>' + rows.map(j => {
       const label = `${j.job_number} — ${j.client_id} (${j.status})`;
       return `<option value="${j.job_number}">${label}</option>`;
