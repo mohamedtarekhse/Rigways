@@ -1119,7 +1119,7 @@ async function putStorageObject(env, baseKey, body, contentType = 'application/o
     }
     const uploadUrl = await uploadUrlRes.json();
     const encodedName = encodeURIComponent(finalKey);
-    const metaHeaders = Object.fromEntries(Object.entries(metadata || {}).map(([k, v]) => [`X-Bz-Info-${k}`, String(v ?? '')]));
+    const metaHeaders = Object.fromEntries(Object.entries(metadata || {}).map(([k, v]) => [`X-Bz-Info-${k}`, encodeURIComponent(String(v ?? ''))]));
     
     // Read body buffer once, then use for both SHA1 computation and upload
     const bodyBuffer = body instanceof ArrayBuffer ? body : await body.arrayBuffer();
