@@ -1028,6 +1028,15 @@ async function computeSha1FromBuffer(buffer) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// Sanitize filename for B2 storage: replace spaces with hyphens, remove/replace special chars
+function sanitizeFilenameForB2(filename) {
+  return filename
+    .replace(/[^a-zA-Z0-9._-]/g, '-')  // Replace any non-alphanumeric (except . _ -) with hyphen
+    .replace(/-+/g, '-')                // Collapse multiple hyphens
+    .replace(/^[-.]+|[-.]+$/g, '')      // Remove leading/trailing hyphens/dots
+    .slice(0, 200);                     // Limit length
+}
+
 async function putStorageObject(env, key, body, contentType = 'application/octet-stream', metadata = {}) {
   if (env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) {
     const auth = await getB2Auth(env);
@@ -1044,7 +1053,8 @@ async function putStorageObject(env, key, body, contentType = 'application/octet
       throw new Error(`B2 get_upload_url failed (${uploadUrlRes.status}): ${errText}`);
     }
     const uploadUrl = await uploadUrlRes.json();
-    const encodedName = encodeURIComponent(key);
+    const sanitizedKey = sanitizeFilenameForB2(key);
+    const encodedName = encodeURIComponent(sanitizedKey);
     const metaHeaders = Object.fromEntries(Object.entries(metadata || {}).map(([k, v]) => [`X-Bz-Info-${k}`, String(v ?? '')]));
     
     // Read body buffer once, then use for both SHA1 computation and upload
