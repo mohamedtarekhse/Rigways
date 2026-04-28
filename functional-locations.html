@@ -803,6 +803,10 @@ function showToast(type,title,msg){
 /* ── Init ── */
 document.addEventListener('DOMContentLoaded',()=>{
   session=getSession();if(!session)return;
+  
+  // Only admin and manager can access Functional Locations page - redirect technicians and users to Assets
+  if (!['admin','manager'].includes(session.role)) return location.href='assets.html';
+  
   const role=session.role;
 
   /* Role capabilities */

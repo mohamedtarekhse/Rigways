@@ -1250,6 +1250,9 @@ document.addEventListener('DOMContentLoaded', () => {
   session = getSession();
   if (!session) return;
 
+  // Only admin can access Clients page - redirect all others to Assets
+  if (session.role !== 'admin') return location.href='assets.html';
+
   const role = session.role;
   const lang = 'en';
   applyLang(lang);

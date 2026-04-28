@@ -1347,6 +1347,9 @@ document.addEventListener('DOMContentLoaded', () => {
   session = getSession();
   if (!session) return;
 
+  // Only admin and manager can access Notifications page - redirect technicians and users to Assets
+  if (!['admin','manager'].includes(session.role)) return location.href='assets.html';
+
   const role = session.role;
   const lang = 'en';
   applyLang(lang);

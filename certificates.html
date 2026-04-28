@@ -1342,6 +1342,9 @@ function renderTable() {
             ${(canDelete || techCanDelete) ? `<button class="btn btn-danger btn-icon" onclick="${canDelete ? `deleteAssetCertificates('${c.certId}')` : `openDeleteModal('${c.certId}')`}" title="${canDelete ? 'Delete all certificates for this asset' : 'Delete file attachment'}" style="width:26px;height:26px;">
               <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
             </button>` : ''}
+            ${canDelete ? `<button class="btn btn-ghost btn-icon" onclick="deleteCertificateRecord('${c.certId}')" title="Delete this certificate row" style="width:26px;height:26px;color:var(--sap-error);">
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>` : ''}
           </div>
         </div>
       </td>
@@ -2514,7 +2517,7 @@ async function deleteCertificateRecord(certId) {
     try {
       const res = await apiFetch('/api/certificates/' + (cert.id || certId), { method: 'DELETE' });
       const data = await res.json();
-      if (!data.success) {
+      if (!res.ok || !data.success) {
         showToast('error', 'Delete Failed', (data.data || data).error || 'Could not delete certificate row.');
         return;
       }
@@ -3141,17 +3144,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* Header actions */
   const ha = document.getElementById('headerActions');
-  if (role === 'admin' || role === 'manager' || role === 'technician') {
+  if (role === 'admin' || role === 'manager') {
     ha.innerHTML = `<button class="btn btn-primary" onclick="openUploadModal()">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
       <span>Upload Certificate</span>
     </button>`;
-    if (role === 'admin' || role === 'manager') {
-      ha.innerHTML += `<a href="notifications.html" class="btn btn-secondary">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>
-        <span>Expiry Alerts</span>
-      </a>`;
-    }
+    ha.innerHTML += `<a href="notifications.html" class="btn btn-secondary">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>
+      <span>Expiry Alerts</span>
+    </a>`;
+  } else if (role === 'technician') {
+    ha.innerHTML = `<button class="btn btn-primary" onclick="openUploadModal()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
+      <span>Upload Certificate</span>
+    </button>`;
   } else {
     ha.innerHTML = `<span class="sap-badge sap-badge--neutral" style="font-size:12px;padding:6px 12px;">Read-Only View</span>`;
   }

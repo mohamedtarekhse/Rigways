@@ -52,13 +52,13 @@ const SAP_CONFIG = {
     C004: { name:'Nile Ventures',    nameAr:'مشاريع النيل',       color:'#bb0000' },
   },
 
-  /* Navigation items (ordered) */
+  /* Navigation items (ordered) - Technicians and Users can only see Assets and Certificates */
   NAV: [
     { id:'assets',        href:'assets.html',        iconKey:'asset',  en:'Assets',        ar:'الأصول',       roles:['admin','manager','technician','user'] },
     { id:'certificates',  href:'certificates.html',  iconKey:'cert',   en:'Certificates',  ar:'الشهادات',     roles:['admin','manager','technician','user'] },
-    { id:'jobs',          href:'jobs.html',          iconKey:'chart',  en:'Jobs',          ar:'الوظائف',      roles:['admin','manager','technician'] },
+    { id:'jobs',          href:'jobs.html',          iconKey:'chart',  en:'Jobs',          ar:'الوظائف',      roles:['admin','manager'] },
     { id:'files',         href:'files.html',         iconKey:'asset',  en:'Files',         ar:'الملفات',      roles:['admin'] },
-    { id:'notifications', href:'notifications.html', iconKey:'notif',  en:'Notifications', ar:'الإشعارات',    roles:['admin','manager','technician','user'] },
+    { id:'notifications', href:'notifications.html', iconKey:'notif',  en:'Notifications', ar:'الإشعارات',    roles:['admin','manager'] },
     { id:'dashboard',     href:'dashboard.html',     iconKey:'users',  en:'Admin Dashboard',ar:'لوحة المشرف',  roles:['admin'] },
     { id:'clients',       href:'clients.html',       iconKey:'users',  en:'Clients',       ar:'العملاء',      roles:['admin'] },
   ],
