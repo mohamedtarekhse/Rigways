@@ -1119,7 +1119,7 @@ async function putStorageObject(env, baseKey, body, contentType = 'application/o
     }
     const uploadUrl = await uploadUrlRes.json();
     const encodedName = encodeURIComponent(finalKey);
-    const metaHeaders = Object.fromEntries(Object.entries(metadata || {}).map(([k, v]) => [`X-Bz-Info-${k}`, String(v ?? '')]));
+    const metaHeaders = Object.fromEntries(Object.entries(metadata || {}).map(([k, v]) => [`X-Bz-Info-${k}`, encodeURIComponent(String(v ?? ''))]));
     
     // Read body buffer once, then use for both SHA1 computation and upload
     const bodyBuffer = body instanceof ArrayBuffer ? body : await body.arrayBuffer();
@@ -1320,8 +1320,9 @@ async function handleCertUpload(request, env, path) {
     const baseKey = `clients/${clientId}/jobs/${safeJobNumber}/${safeJobNumber}_${safeCertNumber}_${safeOriginal}.${ext}`;
     const fileBuffer = await file.arrayBuffer();
 
+    let finalKey;
     try {
-      const finalKey = await putStorageObject(env, baseKey, fileBuffer, file.type, {
+      finalKey = await putStorageObject(env, baseKey, fileBuffer, file.type, {
         originalName: file.name,
         uploadedBy: session.sub,
         username: session.username,
@@ -1873,8 +1874,9 @@ async function handleFiles(request, env, path) {
     const baseKey = `files/jobs/${safeJobNumber}/certificates/${certificateId}/v${nextVersion}_${Date.now()}_${base}.${ext}`;
 
     const fileBuffer = await file.arrayBuffer();
+    let finalKey;
     try {
-      const finalKey = await putStorageObject(env, baseKey, fileBuffer, file.type || 'application/octet-stream', {
+      finalKey = await putStorageObject(env, baseKey, fileBuffer, file.type || 'application/octet-stream', {
         originalName: file.name,
         uploadedBy: session.sub,
         certificateId,
@@ -2338,8 +2340,9 @@ async function handleInspectors(request, env, path) {
     const safeCategory = category.replace(/[^a-z0-9-]/gi, '-');
     const baseKey = `inspectors/${safeCategory}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${finalName}`;
     const fileBuffer = await file.arrayBuffer();
+    let finalKey;
     try {
-      const finalKey = await putStorageObject(env, baseKey, fileBuffer, file.type, {
+      finalKey = await putStorageObject(env, baseKey, fileBuffer, file.type, {
         originalName: file.name,
         uploadedBy: session.sub,
         category,
@@ -2365,8 +2368,9 @@ async function handleInspectors(request, env, path) {
     const safeName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9-_]+/g, '_').slice(0, 80) || 'cv';
     const baseKey = `inspectors/cv/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeName}.${ext}`;
     const fileBuffer = await file.arrayBuffer();
+    let finalKey;
     try {
-      const finalKey = await putStorageObject(env, baseKey, fileBuffer, file.type, {
+      finalKey = await putStorageObject(env, baseKey, fileBuffer, file.type, {
         originalName: file.name,
         uploadedBy: session.sub,
       });
