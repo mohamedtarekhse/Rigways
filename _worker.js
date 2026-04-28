@@ -1531,6 +1531,7 @@ async function handleCertificates(request, env, path) {
       cert_type: { required: true, type: 'string', minLength: 2, maxLength: 100 },
       lifting_subtype: { required: false, type: 'string', maxLength: 100 },
       asset_id: { required: true, type: 'string' },
+      job_id: { required: false, type: 'string' },
       issued_by: { required: true, type: 'string', minLength: 2, maxLength: 200 },
       issue_date: { required: true, type: 'string', pattern: /^\d{4}-\d{2}-\d{2}$/ },
       expiry_date: { required: true, type: 'string', pattern: /^\d{4}-\d{2}-\d{2}$/ },
@@ -1541,13 +1542,57 @@ async function handleCertificates(request, env, path) {
     const assetFilter = /^AST-/i.test(body.asset_id || '')
       ? { 'asset_number.ilike': body.asset_id }
       : { 'id.eq': body.asset_id };
-    const { data: aRows } = await db.from('assets', { filters: assetFilter, select: 'id,asset_number,client_id', limit: 1 });
+    const { data: aRows } = await db.from('assets', { filters: assetFilter, select: 'id,asset_number,client_id,functional_location', limit: 1 });
     const asset = Array.isArray(aRows) ? aRows[0] : aRows;
     if (!asset) return notFound('Asset', env);
     // Always store UUID in asset_id FK column
     body.asset_id = asset.id;
-    if (session.role === 'technician' && session.customerId && asset.client_id !== session.customerId)
-      return forbidden(env);
+    if (session.role === 'technician' && !body.job_id) {
+      return badReq('job_id is required for technician uploads', 'VALIDATION', env);
+    }
+
+    let job = null;
+    if (body.job_id) {
+      const { data: jRows } = await db.from('jobs', {
+        filters: { 'id.eq': body.job_id },
+        select: 'id,job_number,client_id,functional_location,status',
+        limit: 1,
+      });
+      job = Array.isArray(jRows) ? jRows[0] : jRows;
+      if (!job) return notFound('Job', env);
+    }
+
+    if (session.role === 'technician') {
+      const { data: iRows } = await db.from('inspectors', {
+        filters: { 'user_id.eq': session.sub, 'status.eq': 'active' },
+        select: 'id',
+        limit: 1,
+      });
+      const inspector = Array.isArray(iRows) ? iRows[0] : iRows;
+      if (!inspector) return forbidden(env);
+
+      const { data: assignRows } = await db.from('job_inspectors', {
+        filters: { 'job_id.eq': body.job_id, 'inspector_id.eq': inspector.id },
+        select: 'id',
+        limit: 1,
+      });
+      const assignment = Array.isArray(assignRows) ? assignRows[0] : assignRows;
+      if (!assignment) return forbidden(env);
+
+      if (!['active', 'reopened'].includes(String(job?.status || '').toLowerCase())) {
+        return badReq('Technician uploads are only allowed for active or reopened jobs', 'INVALID_STATE', env);
+      }
+
+      if (job && String(job.client_id || '') !== String(asset.client_id || '')) {
+        return badReq('Asset client must match the assigned job client', 'VALIDATION', env);
+      }
+
+      const jobFL = String(job?.functional_location || '').trim();
+      const assetFL = String(asset?.functional_location || '').trim();
+      if (jobFL && jobFL !== assetFL) {
+        return badReq('Asset functional location must match the assigned job functional location', 'VALIDATION', env);
+      }
+    }
 
     const { data, error } = await db.insert('certificates', {
       name: body.name,
@@ -1556,6 +1601,7 @@ async function handleCertificates(request, env, path) {
       asset_id: body.asset_id,
       client_id: body.client_id || asset.client_id || null,
       inspector_id: body.inspector_id || null,
+      job_id: body.job_id || null,
       issued_by: body.issued_by,
       issue_date: body.issue_date,
       expiry_date: body.expiry_date,
