@@ -416,6 +416,10 @@
       <span>Notifications</span>
     </a>
     <div class="sap-navbar__divider" id="adminSection"></div>
+    <a href="dashboard.html" class="sap-nav-item sap-nav-item--admin" id="adminDashboardLink">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span>Admin Dashboard</span>
+    </a>
     <a href="clients.html" class="sap-nav-item sap-nav-item--admin" id="adminClientsLink">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
       <span>Clients</span>
@@ -3119,6 +3123,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (role !== 'admin') {
     document.getElementById('adminSection').style.display = 'none';
+    document.getElementById('adminDashboardLink').style.display = 'none';
     document.getElementById('adminClientsLink').style.display = 'none';
   }
   if (role !== 'admin' && role !== 'manager') {
