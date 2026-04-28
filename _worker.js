@@ -1795,8 +1795,9 @@ async function handleFiles(request, env, path) {
     const nextVersion = ((existingRows || [])[0]?.version_no || 0) + 1;
     const key = `files/jobs/${jobNumber}/certificates/${certificateId}/v${nextVersion}_${Date.now()}_${base}.${ext}`;
 
+    const fileBuffer = await file.arrayBuffer();
     try {
-      await putStorageObject(env, key, file, file.type || 'application/octet-stream', {
+      await putStorageObject(env, key, fileBuffer, file.type || 'application/octet-stream', {
         originalName: file.name,
         uploadedBy: session.sub,
         certificateId,
@@ -2258,8 +2259,9 @@ async function handleInspectors(request, env, path) {
     const safeLabel = labelRaw.replace(/[^a-zA-Z0-9-_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80) || 'file';
     const finalName = `${safeLabel}.${ext}`;
     const key = `inspectors/${category}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${finalName}`;
+    const fileBuffer = await file.arrayBuffer();
     try {
-      await putStorageObject(env, key, file, file.type, {
+      await putStorageObject(env, key, fileBuffer, file.type, {
         originalName: file.name,
         uploadedBy: session.sub,
         category,
@@ -2284,8 +2286,9 @@ async function handleInspectors(request, env, path) {
     const ext = (file.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
     const safeName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9-_]+/g, '_').slice(0, 80) || 'cv';
     const key = `inspectors/cv/${Date.now()}_${crypto.randomUUID().slice(0, 8)}_${safeName}.${ext}`;
+    const fileBuffer = await file.arrayBuffer();
     try {
-      await putStorageObject(env, key, file, file.type, {
+      await putStorageObject(env, key, fileBuffer, file.type, {
         originalName: file.name,
         uploadedBy: session.sub,
       });
