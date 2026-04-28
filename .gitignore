@@ -1,1 +1,18 @@
-Nothing should be ignored in this case, as the modified files are all source code and HTML files (.js and .html) without any build artifacts, dependencies, or temporary files present in the changes.
+```
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Original rules preserved
+*.log
+```

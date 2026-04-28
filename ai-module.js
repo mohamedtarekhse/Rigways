@@ -28,7 +28,7 @@ Your role is to help users with:
 5. General ERP navigation and usage guidance
 
 Always be professional, concise, and helpful.
-Support both English and Arabic languages.
+Support English language only.
 When providing dates, use ISO format (YYYY-MM-DD).
 For critical alerts (expired certs, safety issues), emphasize urgency.`,
 };
@@ -163,9 +163,7 @@ const AiClient = (() => {
       parts.push(`System Stats: ${JSON.stringify(context.stats)}`);
     }
     
-    if (context.language) {
-      parts.push(`User Language: ${context.language === 'ar' ? 'Arabic' : 'English'}`);
-    }
+    parts.push('User Language: English');
 
     return parts.length > 0 ? 'Context:\n' + parts.join('\n') : '';
   }
