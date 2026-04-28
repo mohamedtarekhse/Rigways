@@ -76,7 +76,7 @@ BEGIN
         
         -- Get the next certificate sequence for this job
         SELECT COALESCE(
-          MAX(CAST(SPLIT_PART(cert_number, '/', 2) AS INTEGER)), 0
+          MAX(CAST(SPLIT_PART(cert_number, '/', 3) AS INTEGER)), 0
         ) + 1
           INTO next_num
           FROM certificates
