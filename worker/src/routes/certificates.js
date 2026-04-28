@@ -117,6 +117,7 @@ export async function handleCertificates(request, env, path) {
       issue_date:  { required: true, type:'string', pattern:/^\d{4}-\d{2}-\d{2}$/ },
       expiry_date: { required: true, type:'string', pattern:/^\d{4}-\d{2}-\d{2}$/ },
       related_standard: { required: false, type:'string', maxLength:200 },
+      job_id:      { required: false, type:'string' },
     });
     if (!valid) return badReq(errors.join('; '),'VALIDATION',env);
     if (body.cert_type === 'TUBULAR' && !String(body.related_standard || '').trim()) {
@@ -132,6 +133,13 @@ export async function handleCertificates(request, env, path) {
       if (!aliases.includes(String(asset.client_id || ''))) return forbidden(env);
     }
 
+    // Verify job_id if provided
+    if (body.job_id) {
+      const { data: jRows } = await db.from('jobs', { filters: { 'id.eq': body.job_id }, select:'id,job_number', limit:1 });
+      const job = Array.isArray(jRows) ? jRows[0] : jRows;
+      if (!job) return notFound('Job', env);
+    }
+
     const { data, error } = await db.insert('certificates', {
       name:            body.name,
       cert_type:       body.cert_type,
@@ -139,6 +147,7 @@ export async function handleCertificates(request, env, path) {
       functional_location: asset.functional_location || null,
       client_id:       body.client_id || asset.client_id || null,
       inspector_id:    body.inspector_id || null,
+      job_id:          body.job_id || null,
       issued_by:       body.issued_by,
       issue_date:      body.issue_date,
       expiry_date:     body.expiry_date,

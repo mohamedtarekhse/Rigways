@@ -11,6 +11,7 @@ import { handleNotifications }      from './routes/notifications.js';
 import { handleReports }            from './routes/reports.js';
 import { handlePush }               from './routes/push.js';
 import { handleCheckExpiry }        from './routes/check-expiry.js';
+import { handleJobs }               from './routes/jobs.js';
 import { handleOptions, json }      from './utils/response.js';
 import { getSession, requireRole }  from './middleware/jwt.js';
 
@@ -39,6 +40,7 @@ export default {
       if (path.startsWith('/notifications'))        return await handleNotifications(request, env, path);
       if (path.startsWith('/reports'))              return await handleReports(request, env, path);
       if (path.startsWith('/push'))                 return await handlePush(request, env, path);
+      if (path.startsWith('/jobs'))                 return await handleJobs(request, env, path);
 
       // Cron check-expiry (admin-only manual trigger)
       if (path === '/cron/check-expiry' && request.method === 'GET') {
