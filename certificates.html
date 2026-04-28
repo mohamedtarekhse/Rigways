@@ -1291,9 +1291,9 @@ function renderTable() {
       '<div class="field"><label>Expiry Date</label><value>' + c.expiryDate + '</value></div>',
       '<div class="field"><label>Approval Status</label><value>' + c.approvalStatus + '</value></div>',
       '<div class="field"><label>Linked Asset</label><value>' + (c.assetId || '—') + '</value></div>',
-      '<div class="field"><label>File</label><value>' + c.fileName + '</value></div>',
+      '<div class="field"><label>Certificate Number</label><value>' + c.certId + '</value></div>',
       '<div class="placeholder"><div class="icon">📄</div>',
-      '<strong>' + h(c.fileName) + '</strong><br><br>',
+      '<strong>' + h(c.certId) + '</strong><br><br>',
       '<span style="font-size:13px;">Simulated certificate viewer.<br>In production this would render the actual uploaded PDF or image.</span>',
       '</div></div></body></html>'
     ].join('');
@@ -1362,7 +1362,7 @@ function renderTable() {
       <td data-col="fileLink">
         ${c.fileName ? `<button type="button" class="cert-file-link" onclick="openCertLink('${c.certId}')" title="Open certificate in new tab">
           <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          ${c.fileName}
+          ${c.certId}
           <svg width="9" height="9" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:.6;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         </button>` : `<span style="color:var(--sap-text-disabled);font-size:11px;">—</span>`}
       </td>
@@ -1652,7 +1652,7 @@ function openEditModal(id) {
   if (c.fileName) {
     document.getElementById('existingFileNote').style.display = 'block';
     document.getElementById('existingFileNote').textContent =
-      '📎 Current file: ' + c.fileName;
+      '📎 Current file: ' + c.certId;
   }
 
   document.getElementById('modalTitle').textContent = 'Edit Certificate';
@@ -2180,7 +2180,7 @@ function buildAssetCertHistory(assetId, currentCertId) {
         </div>
         <div class="hist-col-name">
           <div style="font-size:12px;font-weight:600;color:var(--sap-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${cert.name}">${cert.name}</div>
-          ${cert.fileName ? `<a href="#" onclick="event.preventDefault();openCertLink('${cert.certId}')" style="font-size:10px;color:var(--sap-brand);display:inline-flex;align-items:center;gap:2px;margin-top:2px;text-decoration:none;"><svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>${cert.fileName}</a>` : ''}
+          ${cert.fileName ? `<a href="#" onclick="event.preventDefault();openCertLink('${cert.certId}')" style="font-size:10px;color:var(--sap-brand);display:inline-flex;align-items:center;gap:2px;margin-top:2px;text-decoration:none;"><svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>${cert.certId}</a>` : ''}
           ${adminActions}
         </div>
         <div class="hist-col-type">${typeChip(cert)}</div>
@@ -2276,7 +2276,7 @@ function openDrawer(id) {
         <div class="sap-detail-field"><span class="sap-detail-field__label">Linked Asset ID</span><span class="sap-detail-field__value"><span class="asset-id-chip">${c.assetId||'—'}</span></span></div>
         <div class="sap-detail-field"><span class="sap-detail-field__label">Customer ID</span><span class="sap-detail-field__value"><span class="asset-id-chip">${c.client}</span> <span style="font-size:12px;color:var(--sap-text-secondary);">${CLIENTS_MAP[c.client]||''}</span></span></div>
         <div class="sap-detail-field"><span class="sap-detail-field__label">Uploaded By</span><span class="sap-detail-field__value">${c.uploadedBy}</span></div>
-        ${c.fileName ? `<div class="sap-detail-field span-full"><span class="sap-detail-field__label">File</span><span class="sap-detail-field__value"><span class="file-chip" onclick="previewFile('${c.certId}')">📄 ${c.fileName}</span></span></div>` : ''}
+        ${c.fileName ? `<div class="sap-detail-field span-full"><span class="sap-detail-field__label">File</span><span class="sap-detail-field__value"><span class="file-chip" onclick="previewFile('${c.certId}')">📄 ${c.certId}</span></span></div>` : ''}
         ${c.rejectionReason ? `<div class="sap-detail-field span-full"><span class="sap-detail-field__label" style="color:var(--sap-error);">Rejection Reason</span><span class="sap-detail-field__value" style="color:var(--sap-error);">${c.rejectionReason}</span></div>` : ''}
       </div>
     </div>
@@ -2365,8 +2365,10 @@ async function openCertLink(certId) {
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
     // For PDFs open inline; for others trigger download
+    // Use cert_number as the filename label (e.g., 2026-001/001.pdf)
     if (blob.type !== 'application/pdf') {
-      a.download = cert.fileName || 'certificate';
+      const ext = cert.fileName ? cert.fileName.split('.').pop() : 'pdf';
+      a.download = `${cert.certId}.${ext}`;
     }
     document.body.appendChild(a);
     a.click();
@@ -2428,7 +2430,7 @@ function openCertDeleteModal(id) {
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span class="cert-id-chip">${fmtCertId(c)}</span>
       ${getApprovalBadge(c.approvalStatus)}
-      ${c.fileName ? `<span style="font-size:11px;color:var(--sap-brand);">📎 ${h(c.fileName)}</span>` : '<span style="font-size:11px;color:var(--sap-text-disabled);">No file attached</span>'}
+      ${c.fileName ? `<span style="font-size:11px;color:var(--sap-brand);">📎 ${h(c.certId)}</span>` : '<span style="font-size:11px;color:var(--sap-text-disabled);">No file attached</span>'}
     </div>`;
 
   if (role === 'technician') {
@@ -2783,16 +2785,16 @@ function exportPDF() {
         if (url) {
           return `<a href="${url}" target="_blank" class="cert-link"
             style="display:inline-flex;align-items:center;gap:5px;color:#0070f2;font-weight:600;font-size:11px;text-decoration:none;background:#e8f3ff;border:1px solid #90caf9;border-radius:4px;padding:3px 8px;white-space:nowrap;"
-            title="Open ${c.fileName}">
+            title="Open ${c.certId}">
             <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            ${c.fileName}
+            ${c.certId}
             <svg width="9" height="9" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:.5;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           </a>`;
         }
         /* no data-URI yet (cert viewer not built) — still show a styled label */
         return `<span style="display:inline-flex;align-items:center;gap:4px;color:#6a6d70;font-size:11px;background:#f5f6f7;border:1px solid #e8eaed;border-radius:4px;padding:3px 8px;white-space:nowrap;">
           <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          ${c.fileName}
+          ${c.certId}
         </span>`;
       }
     },
