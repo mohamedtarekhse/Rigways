@@ -48,6 +48,8 @@ export async function handleCertificates(request, env, path) {
     const filters = { 'approval_status.eq':'approved', 'expiry_date.gte': today, 'expiry_date.lte': cutoff };
     if (['user','technician'].includes(session.role) && session.customerId)
       filters['client_id.eq'] = session.customerId;
+    if (['user','technician'].includes(session.role) && session.functional_location)
+      filters['functional_location.eq'] = session.functional_location;
     const { data, error } = await db.from('certificates', { select:'*', filters, order:'expiry_date.asc', limit:200 });
     if (error) return serverErr(env);
     return ok({ certificates: data || [], days }, env);
@@ -60,6 +62,8 @@ export async function handleCertificates(request, env, path) {
     const fBase  = {};
     if (['user','technician'].includes(session.role) && session.customerId)
       fBase['client_id.eq'] = session.customerId;
+    if (['user','technician'].includes(session.role) && session.functional_location)
+      fBase['functional_location.eq'] = session.functional_location;
 
     const [total, valid, expiring, expired, pending] = await Promise.all([
       db.count('certificates', { filters: { ...fBase } }),
@@ -83,6 +87,8 @@ export async function handleCertificates(request, env, path) {
     const filters = {};
     if (['user','technician'].includes(session.role) && session.customerId)
       filters['client_id.eq'] = session.customerId;
+    if (['user','technician'].includes(session.role) && session.functional_location)
+      filters['functional_location.eq'] = session.functional_location;
     if (url.searchParams.get('approval_status')) filters['approval_status.eq'] = url.searchParams.get('approval_status');
     if (url.searchParams.get('cert_type'))       filters['cert_type.eq']        = url.searchParams.get('cert_type');
     if (url.searchParams.get('asset_id'))        filters['asset_id.eq']         = url.searchParams.get('asset_id');
@@ -100,6 +106,8 @@ export async function handleCertificates(request, env, path) {
     const cert = Array.isArray(data) ? data[0] : data;
     if (!cert) return notFound('Certificate', env);
     if (['user','technician'].includes(session.role) && session.customerId && cert.client_id !== session.customerId)
+      return forbidden(env);
+    if (['user','technician'].includes(session.role) && session.functional_location && cert.functional_location !== session.functional_location)
       return forbidden(env);
     const [withNames] = await _withUserNames(db, [cert], 'uploaded_by');
     return ok(withNames || cert, env);

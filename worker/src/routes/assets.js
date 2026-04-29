@@ -111,6 +111,8 @@ export async function handleAssets(request, env, path) {
     const filters = {};
     if (['user','technician'].includes(session.role) && session.customerId)
       filters['client_id.eq'] = session.customerId;
+    if (['user','technician'].includes(session.role) && session.functional_location)
+      filters['functional_location.eq'] = session.functional_location;
 
     const [total, active, maintenance, inactive] = await Promise.all([
       db.count('assets', { filters }),
@@ -131,6 +133,7 @@ export async function handleAssets(request, env, path) {
     const filters = {};
     const isRestricted = ['user','technician'].includes(session.role);
     if (isRestricted && session.customerId) filters['client_id.eq'] = session.customerId;
+    if (isRestricted && session.functional_location) filters['functional_location.eq'] = session.functional_location;
     if (url.searchParams.get('status'))    filters['status.eq']    = url.searchParams.get('status');
     if (url.searchParams.get('type'))      filters['asset_type.eq']= url.searchParams.get('type');
     if (url.searchParams.get('client_id') && requireRole(session,['admin','manager']))
@@ -166,6 +169,9 @@ export async function handleAssets(request, env, path) {
     if (['user','technician'].includes(session.role) && session.customerId) {
       const aliases = await resolveClientAliases(db, session.customerId);
       if (!aliases.includes(String(asset.client_id || ''))) return forbidden(env);
+    }
+    if (['user','technician'].includes(session.role) && session.functional_location && asset.functional_location !== session.functional_location) {
+      return forbidden(env);
     }
     return ok(asset, env);
   }

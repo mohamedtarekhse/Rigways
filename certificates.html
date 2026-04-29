@@ -1160,6 +1160,11 @@ function renderTable() {
   } else if (clientF !== 'all') {
     data = data.filter(c => c.client === clientF);
   }
+  /* Scope by user's predefined functional location (if assigned) */
+  const userFL = String(session.functional_location || session.functionalLocation || '').trim();
+  if (userFL && role !== 'admin' && role !== 'manager') {
+    data = data.filter(c => String(c.functional_location || '').trim() === userFL);
+  }
 
   /* Technician sees only their own uploads */
   if (role === 'technician') data = data.filter(c => c.uploadedBy === 'Ali T.' || true); /* allow all for demo */
@@ -1234,8 +1239,11 @@ function renderTable() {
   filteredData = data;
 
   /* Sidebar badge — update expiry count */
-  const all = session.customerId && role !== 'admin' && role !== 'manager'
+  let all = session.customerId && role !== 'admin' && role !== 'manager'
     ? CERTS.filter(c => c.client === session.customerId) : CERTS;
+  if (userFL && role !== 'admin' && role !== 'manager') {
+    all = all.filter(c => String(c.functional_location || '').trim() === userFL);
+  }
   const expCount = all.filter(c=>getCertStatus(c)==='expiring'||getCertStatus(c)==='expired').length;
   const sidebarBadgeEl = document.getElementById('sidebarBadge');
   if (sidebarBadgeEl) sidebarBadgeEl.textContent = expCount;
@@ -2688,10 +2696,16 @@ document.addEventListener('click', e => {
 });
 
 function applyColVisibility() {
+  const isUserRole = session?.role === 'user';
+  const userOnlyCols = new Set(['assetId', 'certType', 'expiry', 'fileLink']);
   let visible = 0;
   COL_KEYS.forEach(key => {
     const cb   = document.getElementById('col_' + key);
-    const show = cb ? cb.checked : true;
+    let show = cb ? cb.checked : true;
+    if (isUserRole) {
+      show = userOnlyCols.has(key);
+      if (cb) cb.checked = show;
+    }
     if (show) visible++;
     const th = document.querySelector(`th[data-col="${key}"]`);
     if (th) th.style.display = show ? '' : 'none';
@@ -3179,6 +3193,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   if (role === 'admin' || role === 'manager') document.getElementById('clientFilter').style.display = 'inline-block';
   if (role !== 'user') document.getElementById('notifBadge').style.display = 'block';
+  if (role === 'user') {
+    const colSelectorWrap = document.getElementById('colSelectorWrap');
+    if (colSelectorWrap) colSelectorWrap.style.display = 'none';
+  }
 
   /* Subtitle */
   document.getElementById('pageSubtitle').textContent = session.customerId
