@@ -1401,6 +1401,243 @@
 
   /* ─── Open / Close (overrides existing openModal) ─── */
   window.openModal = function (certId) {
+    console.log('openModal called with', certId);
+    wizEditMode = !!certId;
+    wizEditId   = certId || null;
+    if (wizEditMode) {
+      document.getElementById('modalTitle').textContent = 'Edit Certificate';
+      $('#wizStepBar').style.display = 'none';
+    } else {
+      document.getElementById('modalTitle').textContent = 'Upload Certificate';
+      $('#wizStepBar').style.display = 'flex';
+      wizReset();
+      wizSetStep(1);
+    }
+    $('#certModal').classList.add('open');
+    const role = (window._wizRole || '').toLowerCase();
+    $('#wizTechNote').style.display = role === 'inspector' ? '' : 'none';
+    if (!wizAssetsList.length) wizLoadAssets();
+    wizLoadInspectors();
+  };
+
+  window.closeModal = function () { console.log('closeModal'); $('#certModal').classList.remove('open'); wizReset(); };
+
+  /* ─── Reset wizard state ─── */
+  function wizReset() {
+    wizStep = 1; wizFile = null; wizAsset = null; wizAutofill = {};
+    const ids = ['wizName','wizCertNum','wizIssueDate','wizExpiryDate','wizExtUrl'];
+    ids.forEach(id => { const el = $(id); if (el) { el.value = ''; el.classList.remove('wiz-autofilled'); } });
+    if ($('#wizCertType')) $('#wizCertType').value = '';
+    if ($('#wizPeriod')) $('#wizPeriod').value = '';
+    $('#wizFilePreview').classList.remove('visible');
+    $('#wizAutofillStrip').classList.remove('visible');
+    $('#wizAssetChip').classList.remove('visible');
+    $('#wizAssetAutoBlock').style.display = 'none';
+    $('#wizLiftingWrap').style.display = 'none';
+    $('#wizExpiryWarn').style.display = 'none';
+    $('#wizNotifNotice').style.display = 'none';
+    $('#wizExpiryHint').textContent = '';
+    $('#wizStdChips').innerHTML = '';
+    if ($('#wizAssetSearch')) $('#wizAssetSearch').value = '';
+    $('#wizAssetSearchArea').style.display = '';
+    $('#wizStepBar').style.display = 'flex';
+    $('#wizBtnSave').style.display = 'none';
+    $('#wizBtnNext').style.display = '';
+    $('#wizBtnNext').textContent = 'Next';
+    $('#wizBtnSave').textContent = 'Save Certificate';
+    wizRenderAssets(wizAssetsList);
+  }
+
+  /* ─── Step navigation ─── */
+  function wizSetStep(n) {
+    [1,2,3,4].forEach(i => {
+      $(`wizPane${i}`).classList.remove('wiz-pane--active');
+      const ws  = $(`ws${i}`);
+      const wsb = $(`wsb${i}`);
+      ws.classList.remove('wiz-step--active', 'wiz-step--done');
+      if (i < n) { ws.classList.add('wiz-step--done'); wsb.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" width="12" height="12"><polyline points="20 6 9 17 4 12"/></svg>'; }
+      else if (i === n) { ws.classList.add('wiz-step--active'); wsb.textContent = i; }
+      else { wsb.textContent = i; }
+      if (i < 4) $(`wsep${i}`).classList.toggle('wiz-sep--done', i < n);
+    });
+    $(`wizPane${n}`).classList.add('wiz-pane--active');
+    wizStep = n;
+    $('#wizStepLabel').textContent = `Step ${n} of 4`;
+    $('#wizBtnBack').style.display = n > 1 ? '' : 'none';
+    $('#wizBtnNext').style.display = n < 4 ? '' : 'none';
+    $('#wizBtnSave').style.display = n === 4 ? '' : 'none';
+    if (n === 4) wizBuildReview();
+    wizValidateStep();
+  }
+
+  window.wizNext = function () { if (wizStep===3) wizBuildReview(); wizSetStep(wizStep+1); };
+  window.wizBack = function () { wizSetStep(wizStep-1); };
+
+  /* ─── Validate current step → enable/disable Next ─── */
+  function wizValidateStep() {
+    const btn = $('#wizBtnNext');
+    let ok = false;
+    switch (wizStep) {
+      case 1:
+        ok = !!(wizFile || ($('#wizExtUrl') && $('#wizExtUrl').value.trim()));
+        break;
+      case 2:
+        ok = !!wizAsset;
+        break;
+      case 3:
+        const n  = $('#wizName').value.trim();
+        const cn = $('#wizCertNum').value.trim();
+        const ct = $('#wizCertType').value;
+        const ii = $('#wizIssueDate').value;
+        const ex = $('#wizExpiryDate').value;
+        const ip = $('#wizInspector').value;
+        const li = $('#wizLiftingWrap').style.display !== 'none' ? $('#wizLiftingSubtype').value : 'ok';
+        ok = !!(n && cn && ct && ii && ex && ip && li);
+        break;
+      case 4:
+        ok = true; break;
+    }
+    if (btn) btn.disabled = !ok;
+  }
+
+  /* ─── STEP 1: File handling ─── */
+  window.wizDrag = function (e, id, over) { e.preventDefault(); $(`${id}`).classList.toggle('drag-over', over); };
+  window.wizDropFile = function (e) { e.preventDefault(); $('#wizDrop').classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) wizProcessFile(f); };
+  window.wizFileSelect = function (inp) { if (inp.files[0]) wizProcessFile(inp.files[0]); };
+
+  function wizProcessFile(f) { console.log('File selected', f.name); wizFile = f; $('#wizFpName').textContent = f.name; $('#wizFpSize').textContent = fmtSize(f.size); $('#wizFilePreview').classList.add('visible'); wizParseFilename(f.name); wizValidateStep(); }
+  window.wizClearFile = function () { wizFile = null; $('#wizFilePreview').classList.remove('visible'); $('#wizAutofillStrip').classList.remove('visible'); $('#wizFileInput').value = ''; wizAutofill = {}; wizValidateStep(); };
+
+  function wizParseFilename(name) {
+    const base = name.replace(/\.[^.]+$/, '');
+    const hints = [];
+    wizAutofill = {};
+    const dateM = base.match(/(\d{4}[-_]\d{2}[-_]\d{2})/);
+    if (dateM) { const d = dateM[1].replace(/_/g, '-'); wizAutofill.issueDate = d; hints.push(`Issue date: <strong>${d}</strong>`); }
+    const stdM = base.match(/(API[-_]?\s*\d+[A-Z]?|ISO[-_]?\s*\d+)/i);
+    if (stdM) { wizAutofill.certType = stdM[0].replace(/_/g, ' ').replace(/\s+/, ' ').trim(); hints.push(`Standard: <strong>${wizAutofill.certType}</strong>`); }
+    const numM = base.match(/CERT[-_][\w\d-]+/i) || base.match(/([\w]+-\d{4,}[-\w]*)/);
+    if (numM) { wizAutofill.certNum = numM[0].toUpperCase(); hints.push(`Cert no.: <strong>${wizAutofill.certNum}</strong>`); }
+    if (hints.length) { $('#wizAutofillHints').innerHTML = hints.join(' &nbsp;·&nbsp; '); $('#wizAutofillStrip').classList.add('visible'); }
+  }
+  window.wizApplyAutofill = function () {
+    if (wizAutofill.issueDate) { $('#wizIssueDate').value = wizAutofill.issueDate; $('#wizIssueDate').classList.add('wiz-autofilled'); wizCalcExpiry(); }
+    if (wizAutofill.certNum) { $('#wizCertNum').value = wizAutofill.certNum; $('#wizCertNum').classList.add('wiz-autofilled'); }
+    $('#wizAutofillStrip').classList.remove('visible'); wizValidateStep();
+  };
+
+  /* ─── STEP 2: Asset handling (unchanged) */
+  /* ... (asset loading functions omitted for brevity) */
+
+  /* ─── STEP 3: Details handling (unchanged) */
+  /* ... */
+
+  /* ─── STEP 4: Review (unchanged) */
+  /* ... */
+
+  /* ─── Save function ─── */
+  window.wizSave = function () {
+    console.log('Saving certificate...');
+    const s = window.getSession ? getSession() : JSON.parse(sessionStorage.getItem('sap_session') || '{}');
+    const btn = $('#wizBtnSave');
+    btn.disabled = true; btn.innerHTML = '<svg class="spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Saving…';
+    const fd = new FormData();
+    if (wizFile) fd.append('file', wizFile); // corrected field name
+    const extUrl = $('#wizExtUrl')?.value.trim();
+    if (extUrl) fd.append('externalLink', extUrl);
+    fd.append('assetId', wizAsset?.id || '');
+    fd.append('name', $('#wizName').value.trim());
+    fd.append('certNumber', $('#wizCertNum').value.trim());
+    fd.append('certType', $('#wizCertType').value);
+    if ($('#wizLiftingWrap').style.display !== 'none') fd.append('liftingSubtype', $('#wizLiftingSubtype').value);
+    fd.append('issuedBy', $('#wizInspector').value);
+    fd.append('issueDate', $('#wizIssueDate').value);
+    fd.append('expiryDate', $('#wizExpiryDate').value);
+    fd.append('period', $('#wizPeriod').value);
+    fd.append('clientId', wizAsset?.clientId || '');
+    const jobVal = $('#wizJobSelect')?.value; if (jobVal) fd.append('jobId', jobVal);
+    const exp = $('#wizExpiryDate').value; if (exp && daysLeft(exp) < 90) fd.append('sendNotification', 'true');
+    const url = wizEditMode ? `/api/certificates/${wizEditId}` : '/api/certificates';
+    const method = wizEditMode ? 'PUT' : 'POST';
+    console.log('POSTing to', url, 'with payload', fd);
+    fetch(url, { method, headers: { Authorization: 'Bearer ' + (s?.token || '') }, body: fd })
+      .then(r => r.json())
+      .then(data => {
+        console.log('Save response', data);
+        btn.disabled = false; btn.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg> Save Certificate';
+        if (data.success || data.id || data.data) {
+          closeModal();
+          if (typeof showToast === 'function') showToast('success','Certificate saved', `${$('#wizCertNum').value} linked to ${wizAsset?.name || 'asset'}.`);
+          if (typeof loadCertificates === 'function') loadCertificates(); else if (typeof refreshTable === 'function') refreshTable(); else location.reload();
+        } else {
+          if (typeof showToast === 'function') showToast('error','Save failed', data.message || data.error || 'Unknown error.');
+        }
+      })
+      .catch(err => {
+        console.error('Save error', err);
+        btn.disabled = false; btn.innerHTML = 'Save Certificate';
+        if (typeof showToast === 'function') showToast('error','Network error', err.message);
+      });
+  };
+
+  window.wizValidateStep = wizValidateStep;
+
+  const spinStyle = document.createElement('style');
+  spinStyle.textContent = '@keyframes spin{to{transform:rotate(360deg)}} .spin{animation:spin .8s linear infinite;}';
+  document.head.appendChild(spinStyle);
+})();
+  'use strict';
+
+  /* ─── Config ─── */
+  const CERT_TYPE_STANDARDS = {
+    'CAT III':         ['API 8C', 'ISO 13535'],
+    'CAT IV':          ['API 8C', 'ISO 13535'],
+    'ORIGINAL COC':    ['API 8C', 'ISO 13535', 'API 16A'],
+    'LOAD TEST':       ['BS EN 12079', 'API 8C'],
+    'LIFTING':         ['BS EN 12079', 'API 2C'],
+    'NDT':             ['ASNT SNT-TC-1A', 'ISO 9712'],
+    'TUBULAR':         ['API 5CT', 'API 5DP'],
+  };
+
+  const ASSET_TYPE_STANDARDS = {
+    'Drilling Equipment':        ['API 7K', 'API 8C', 'ISO 13535'],
+    'Hoisting Equipment':        ['API 8C', 'ISO 13535', 'API 2C'],
+    'Well Control':              ['API 16A', 'API 16D', 'ISO 10423'],
+    'Mud System High Pressure':  ['API 7K', 'ISO 13533'],
+    'Mud System Low Pressure':   ['API 7K', 'ISO 13533'],
+    'Wirelines':                 ['API 9A', 'API 9B'],
+    'Structure':                 ['AWS D1.1', 'ISO 3834'],
+    'Tubular':                   ['API 5CT', 'API 5DP'],
+  };
+
+  const PERIOD_LABELS = {
+    '1':'Monthly (1 month)', '3':'Quarterly (3 months)',
+    '6':'Semi-Annually (6 months)', '12':'Annually (1 year)',
+    '60':'5 Years', '120':'10 Years',
+  };
+
+  /* ─── State ─── */
+  let wizStep       = 1;
+  let wizFile       = null;      // File object
+  let wizAsset      = null;      // { id, name, client, location, type, serial, standard }
+  let wizAutofill   = {};        // { certNum?, certType?, issueDate? }
+  let wizEditMode   = false;     // true when editing existing cert
+  let wizEditId     = null;
+  let wizAssetsList = [];        // populated from /api/assets
+
+  /* ─── DOM helpers ─── */
+  const $ = id => document.getElementById(id);
+  function fmt(iso) {
+    if (!iso) return '—';
+    const [y, m, d] = iso.split('-');
+    const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m - 1];
+    return `${d} ${mn} ${y}`;
+  }
+  function fmtSize(b) { return b < 1048576 ? (b / 1024).toFixed(0) + ' KB' : (b / 1048576).toFixed(1) + ' MB'; }
+  function daysLeft(iso) { return Math.round((new Date(iso) - new Date()) / 86400000); }
+
+  /* ─── Open / Close (overrides existing openModal) ─── */
+  window.openModal = function (certId) {
     wizEditMode = !!certId;
     wizEditId   = certId || null;
 
@@ -1516,7 +1753,7 @@
 
   /* ─── STEP 1: File ─── */
   window.wizDrag = function (e, id, over) { e.preventDefault(); $(`${id}`).classList.toggle('drag-over', over); };
-  window.wizDropFile = function (e) { e.preventDefault(); $('#wizDrop').classList.remove('drag-over'); const f = e.originalEvent.dataTransfer.files[0]; if (f) wizProcessFile(f); };
+  window.wizDropFile = function (e) { e.preventDefault(); $('#wizDrop').classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) wizProcessFile(f); };
   window.wizFileSelect = function (inp) { if (inp.files[0]) wizProcessFile(inp.files[0]); };
 
   function wizProcessFile(f) { wizFile = f; $('#wizFpName').textContent = f.name; $('#wizFpSize').textContent = fmtSize(f.size); $('#wizFilePreview').classList.add('visible'); wizParseFilename(f.name); wizValidateStep(); }
