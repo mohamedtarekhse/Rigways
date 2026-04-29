@@ -100,6 +100,34 @@ export async function handleJobs(request, env, path) {
       }, {});
     }
 
+    // Fetch client names
+    const clientIds = [...new Set(jobs.map(j => j.client_id).filter(Boolean))];
+    let clientNameMap = {};
+    if (clientIds.length > 0) {
+      const { data: clientRows } = await db.from('clients', {
+        filters: { 'client_id.in': clientIds },
+        select: 'client_id,name',
+      });
+      clientNameMap = (clientRows || []).reduce((acc, row) => {
+        acc[row.client_id] = row.name || '';
+        return acc;
+      }, {});
+    }
+
+    // Fetch functional location names
+    const flCodes = [...new Set(jobs.map(j => j.functional_location).filter(Boolean))];
+    let flNameMap = {};
+    if (flCodes.length > 0) {
+      const { data: flRows } = await db.from('functional_locations', {
+        filters: { 'fl_id.in': flCodes },
+        select: 'fl_id,name',
+      });
+      flNameMap = (flRows || []).reduce((acc, row) => {
+        acc[row.fl_id] = row.name || '';
+        return acc;
+      }, {});
+    }
+
     const byJob = (assignments || []).reduce((acc, row) => {
       if (!acc[row.job_id]) acc[row.job_id] = [];
       acc[row.job_id].push(row.inspector_id);
@@ -112,6 +140,8 @@ export async function handleJobs(request, env, path) {
         ...job,
         inspector_ids: ids,
         inspector_names: ids.map(id => inspectorNameMap[id]).filter(Boolean),
+        client_name: clientNameMap[job.client_id] || '',
+        functional_location_name: flNameMap[job.functional_location] || '',
       };
     });
 
