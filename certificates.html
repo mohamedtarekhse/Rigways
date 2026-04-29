@@ -673,7 +673,1057 @@
 </main>
 
 <!-- ═══════════════════════ UPLOAD / EDIT MODAL ═══════════════════════ -->
+<!--
+  ╔══════════════════════════════════════════════════════════════════════╗
+  ║  RIGWAYS ACM — Certificate Upload Wizard (Single Certificate)        ║
+  ║  DROP-IN REPLACEMENT for the <div id="certModal"> block              ║
+  ║                                                                      ║
+  ║  HOW TO INTEGRATE:                                                   ║
+  ║  1. Find the existing <div class="sap-modal-overlay" id="certModal"> ║
+  ║     in certificates.html and replace it entirely with this block.    ║
+  ║  2. Paste the <script> section at the bottom of your page,           ║
+  ║     AFTER your existing scripts (so it can override functions).      ║
+  ║  3. The existing openModal() / closeModal() calls still work.          ║
+  ║  4. The wizard kicks in for new uploads.                               ║
+  ╚══════════════════════════════════════════════════════════════════════╝
+-->
+
+<!-- ═══════════════════════ CERT UPLOAD WIZARD MODAL ═══════════════════════ -->
 <div class="sap-modal-overlay" id="certModal">
+  <div class="sap-modal sap-modal--lg" style="max-width:680px; padding:0; overflow:hidden;">
+
+    <!-- Modal Header -->
+    <div class="sap-modal__header" id="wizModalHeader">
+      <div class="sap-modal__title">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="18" height="18">
+          <path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+        </svg>
+        <span id="wizModalTitle">Upload Certificate</span>
+      </div>
+      <button class="sap-modal__close" onclick="closeModal()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <!-- Step Progress Bar -->
+    <div id="wizStepBar" style="
+      display:flex; align-items:center; padding:12px 24px 0;
+      background:#fff; border-bottom:1px solid var(--sap-table-border);
+      gap:0;
+    ">
+      <div class="wiz-step wiz-step--active" id="ws1">
+        <div class="wiz-step__bubble" id="wsb1">1</div>
+        <div class="wiz-step__label">File</div>
+      </div>
+      <div class="wiz-sep" id="wsep1"></div>
+      <div class="wiz-step" id="ws2">
+        <div class="wiz-step__bubble" id="wsb2">2</div>
+        <div class="wiz-step__label">Asset</div>
+      </div>
+      <div class="wiz-sep" id="wsep2"></div>
+      <div class="wiz-step" id="ws3">
+        <div class="wiz-step__bubble" id="wsb3">3</div>
+        <div class="wiz-step__label">Details</div>
+      </div>
+      <div class="wiz-sep" id="wsep3"></div>
+      <div class="wiz-step" id="ws4">
+        <div class="wiz-step__bubble" id="wsb4">4</div>
+        <div class="wiz-step__label">Review</div>
+      </div>
+    </div>
+
+    <!-- Technician note (role-aware) -->
+    <div id="wizTechNote" style="
+      display:none; margin:12px 24px 0;
+      background:#fff3e0; border:1px solid #ffe082;
+      border-left:4px solid #f57f17; border-radius:6px;
+      padding:10px 14px; font-size:12px; color:#5d4037;
+    ">
+      <strong>📋 Upload &amp; Approval Policy:</strong>
+      Uploaded certificates require Admin or Manager approval before becoming active.
+      You may edit within 24 hours of upload only.
+    </div>
+
+    <!-- ── STEP PANES ── -->
+    <div class="sap-modal__body" style="padding:20px 24px; min-height:320px;" id="wizBody">
+
+      <!-- ═══ STEP 1: File Upload ═══ -->
+      <div class="wiz-pane wiz-pane--active" id="wizPane1">
+        <div class="wiz-section-label">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          Certificate file
+        </div>
+
+        <!-- Drop zone -->
+        <div class="wiz-drop" id="wizDrop"
+          ondragover="wizDrag(event,'wizDrop',true)"
+          ondragleave="wizDrag(event,'wizDrop',false)"
+          ondrop="wizDropFile(event)">
+          <input type="file" id="wizFileInput" accept=".pdf,.jpg,.jpeg,.png,.webp"
+            onchange="wizFileSelect(this)">
+          <div class="wiz-drop__icon">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="12" y1="18" x2="12" y2="12"/>
+              <line x1="9" y1="15" x2="12" y2="12"/>
+              <line x1="15" y1="15" x2="12" y2="12"/>
+            </svg>
+          </div>
+          <div class="wiz-drop__title">Drop file here or <span>browse</span></div>
+          <div class="wiz-drop__hint">PDF, JPG, PNG, WebP · max 200 MB</div>
+        </div>
+
+        <!-- File preview -->
+        <div class="wiz-file-preview" id="wizFilePreview">
+          <div class="wiz-file-preview__icon">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+          </div>
+          <div class="wiz-file-preview__info">
+            <div class="wiz-file-preview__name" id="wizFpName"></div>
+            <div class="wiz-file-preview__size" id="wizFpSize"></div>
+          </div>
+          <button class="wiz-file-preview__remove" onclick="wizClearFile()">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Smart autofill strip (filename parsing) -->
+        <div class="wiz-autofill-strip" id="wizAutofillStrip">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;margin-top:1px;color:#e65100;">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <div style="flex:1;">
+            <div style="font-size:11px;font-weight:700;color:#e65100;margin-bottom:3px;">
+              Smart autofill detected from filename
+            </div>
+            <div class="wiz-autofill-strip__items" id="wizAutofillHints"></div>
+            <button class="wiz-autofill-apply" onclick="wizApplyAutofill()">
+              Apply suggestions →
+            </button>
+          </div>
+        </div>
+
+        <!-- External URL (optional) -->
+        <div class="sap-field" style="margin-top:14px;">
+          <label class="sap-label">Or link an external URL
+            <span style="font-size:10px;color:var(--sap-text-secondary);font-weight:400;">(optional, used instead of upload)</span>
+          </label>
+          <input type="url" id="wizExtUrl" class="sap-input"
+            placeholder="https://example.com/certificate.pdf"
+            oninput="wizValidateStep()">
+        </div>
+      </div>
+
+      <!-- ═══ STEP 2: Link Asset ═══ -->
+      <div class="wiz-pane" id="wizPane2">
+        <div class="wiz-section-label">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="2" y="3" width="20" height="14" rx="2"/>
+            <path d="M8 21h8M12 17v4"/>
+          </svg>
+          Link to asset
+        </div>
+
+        <!-- Selected chip (shown once asset picked) -->
+        <div class="wiz-asset-chip" id="wizAssetChip">
+          <div class="wiz-asset-chip__icon">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <rect x="2" y="3" width="20" height="14" rx="2"/>
+              <path d="M8 21h8M12 17v4"/>
+            </svg>
+          </div>
+          <div style="flex:1; min-width:0;">
+            <div class="wiz-asset-chip__name" id="wizChipName"></div>
+            <div class="wiz-asset-chip__sub" id="wizChipSub"></div>
+          </div>
+          <button class="wiz-asset-chip__change" onclick="wizChangeAsset()">Change</button>
+        </div>
+
+        <!-- Search area -->
+        <div id="wizAssetSearchArea">
+          <div style="position:relative; margin-bottom:8px;">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+              style="position:absolute;left:9px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--sap-text-secondary);pointer-events:none;">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" class="sap-input" id="wizAssetSearch"
+              placeholder="Search by asset name, ID or serial…"
+              style="padding-left:30px;"
+              oninput="wizFilterAssets(this.value)">
+          </div>
+          <div class="wiz-asset-list" id="wizAssetList"></div>
+        </div>
+
+        <!-- Autofilled fields from asset -->
+        <div class="wiz-autofilled-block" id="wizAssetAutoBlock" style="display:none; margin-top:14px;">
+          <div class="wiz-autofilled-block__title">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Auto-filled from asset
+          </div>
+          <div class="wiz-af-row"><span class="wiz-af-key">Client</span><span id="wizAf_client"></span></div>
+          <div class="wiz-af-row"><span class="wiz-af-key">Location</span><span id="wizAf_location"></span></div>
+          <div class="wiz-af-row"><span class="wiz-af-key">Asset Type</span><span id="wizAf_type"></span></div>
+          <div class="wiz-af-row"><span class="wiz-af-key">Suggested Standard</span><span id="wizAf_standard"></span></div>
+        </div>
+
+        <!-- Job link (optional) -->
+        <div class="sap-field" style="margin-top:14px;">
+          <label class="sap-label">Link to Job
+            <span style="font-size:10px;color:var(--sap-text-secondary);font-weight:400;">(optional)</span>
+          </label>
+          <select id="wizJobSelect" class="sap-select" onchange="wizOnJobChange(this.value)">
+            <option value="">Select active job…</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- ═══ STEP 3: Certificate Details ═══ -->
+      <div class="wiz-pane" id="wizPane3">
+        <div class="wiz-section-label">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="8" r="6"/>
+            <path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>
+          </svg>
+          Certificate details
+        </div>
+
+        <div class="sap-form-grid sap-form-grid--2col">
+
+          <!-- Cert Name -->
+          <div class="sap-field" style="grid-column:1/-1;">
+            <label class="sap-label">Certificate Name / Title <span class="required">*</span></label>
+            <input type="text" id="wizName" class="sap-input"
+              placeholder="e.g. Annual Inspection Certificate – Top Drive TDS-11SA"
+              oninput="wizValidateStep()">
+          </div>
+
+          <!-- Cert Number -->
+          <div class="sap-field">
+            <label class="sap-label">Certificate Number <span class="required">*</span></label>
+            <input type="text" id="wizCertNum" class="sap-input"
+              placeholder="e.g. API8C-2025-001"
+              oninput="wizValidateStep()">
+            <div style="font-size:10px;color:var(--sap-text-secondary);margin-top:3px;">
+              Auto-suggested from filename if detected
+            </div>
+          </div>
+
+          <!-- Cert Type -->
+          <div class="sap-field">
+            <label class="sap-label">Certificate Type <span class="required">*</span></label>
+            <select id="wizCertType" class="sap-select" onchange="wizOnTypeChange()">
+              <option value="">Select type…</option>
+              <option>CAT III</option>
+              <option>CAT IV</option>
+              <option>ORIGINAL COC</option>
+              <option>LOAD TEST</option>
+              <option>LIFTING</option>
+              <option>NDT</option>
+              <option>TUBULAR</option>
+            </select>
+          </div>
+
+          <!-- Lifting sub-type (conditional) -->
+          <div class="sap-field" id="wizLiftingWrap" style="display:none; grid-column:1/-1;">
+            <label class="sap-label">Lifting Sub-type <span class="required">*</span></label>
+            <select id="wizLiftingSubtype" class="sap-select" onchange="wizValidateStep()">
+              <option value="">Select sub-type…</option>
+              <option>LIFTING EQUIPMENT</option>
+              <option>LIFTING GEAR</option>
+              <option>LIFTING PERSONNEL</option>
+            </select>
+          </div>
+
+          <!-- Standard chips (suggested from asset type) -->
+          <div class="sap-field" style="grid-column:1/-1;" id="wizStdChipsWrap">
+            <label class="sap-label" style="margin-bottom:6px;">Quick-select standard</label>
+            <div class="wiz-type-chips" id="wizStdChips"></div>
+          </div>
+
+          <!-- Inspector -->
+          <div class="sap-field">
+            <label class="sap-label">Issued By (Inspector) <span class="required">*</span></label>
+            <select id="wizInspector" class="sap-select" onchange="wizValidateStep()">
+              <option value="">Select inspector…</option>
+            </select>
+          </div>
+
+          <!-- Issue Date -->
+          <div class="sap-field">
+            <label class="sap-label">Inspection / Issue Date <span class="required">*</span></label>
+            <input type="date" id="wizIssueDate" class="sap-input"
+              onchange="wizCalcExpiry()">
+          </div>
+
+          <!-- Period -->
+          <div class="sap-field">
+            <label class="sap-label">Validity Period <span class="required">*</span></label>
+            <select id="wizPeriod" class="sap-select" onchange="wizCalcExpiry()">
+              <option value="">Select period…</option>
+              <option value="1">Monthly (1 month)</option>
+              <option value="3">Quarterly (3 months)</option>
+              <option value="6">Semi-Annually (6 months)</option>
+              <option value="12">Annually (1 year)</option>
+              <option value="60">5 Years</option>
+              <option value="120">10 Years</option>
+            </select>
+          </div>
+
+          <!-- Expiry Date -->
+          <div class="sap-field">
+            <label class="sap-label">Expiry Date <span class="required">*</span></label>
+            <input type="date" id="wizExpiryDate" class="sap-input" oninput="wizValidateStep()">
+            <div style="font-size:10px;color:var(--sap-text-secondary);margin-top:3px;" id="wizExpiryHint"></div>
+          </div>
+
+        </div>
+
+        <!-- Expiry warning (< 90 days) -->
+        <div class="wiz-expiry-warn" id="wizExpiryWarn" style="display:none;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:14px;height:14px;flex-shrink:0;">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span id="wizExpiryWarnText"></span>
+          <span style="margin-left:auto;font-size:10px;font-weight:700;color:#e65100;">
+            🔔 Push notification will be sent
+          </span>
+        </div>
+
+      </div>
+
+      <!-- ═══ STEP 4: Review & Submit ═══ -->
+      <div class="wiz-pane" id="wizPane4">
+        <div class="wiz-section-label">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M9 11l3 3L22 4"/>
+            <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+          </svg>
+          Review before saving
+        </div>
+
+        <!-- File card -->
+        <div class="wiz-review-card">
+          <div class="wiz-review-card__hdr">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:13px;height:13px;">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            File
+          </div>
+          <div class="wiz-review-card__body">
+            <div class="wiz-rr"><div class="wiz-rr__k">File</div><div class="wiz-rr__v" id="r_file"></div></div>
+          </div>
+        </div>
+
+        <!-- Asset card -->
+        <div class="wiz-review-card">
+          <div class="wiz-review-card__hdr">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:13px;height:13px;">
+              <rect x="2" y="3" width="20" height="14" rx="2"/>
+              <path d="M8 21h8M12 17v4"/>
+            </svg>
+            Asset &amp; Job
+          </div>
+          <div class="wiz-review-card__body">
+            <div class="wiz-rr"><div class="wiz-rr__k">Asset</div><div class="wiz-rr__v" id="r_asset"></div></div>
+            <div class="wiz-rr"><div class="wiz-rr__k">Client</div><div class="wiz-rr__v" id="r_client"></div></div>
+            <div class="wiz-rr"><div class="wiz-rr__k">Location</div><div class="wiz-rr__v" id="r_location"></div></div>
+            <div class="wiz-rr"><div class="wiz-rr__k">Job</div><div class="wiz-rr__v" id="r_job"></div></div>
+          </div>
+        </div>
+
+        <!-- Details card -->
+        <div class="wiz-review-card">
+          <div class="wiz-review-card__hdr">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:13px;height:13px;">
+              <circle cx="12" cy="8" r="6"/>
+              <path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>
+            </svg>
+            Certificate Details
+          </div>
+          <div class="wiz-review-card__body">
+            <div class="wiz-rr"><div class="wiz-rr__k">Name</div><div class="wiz-rr__v" id="r_name"></div></div>
+            <div class="wiz-rr"><div class="wiz-rr__k">Cert No.</div><div class="wiz-rr__v" id="r_certNum"
+              style="font-family:'Courier New',monospace;color:var(--sap-brand);font-weight:700;"></div></div>
+            <div class="wiz-rr"><div class="wiz-rr__k">Type</div><div class="wiz-rr__v" id="r_type"></div></div>
+            <div class="wiz-rr"><div class="wiz-rr__k">Inspector</div><div class="wiz-rr__v" id="r_inspector"></div></div>
+            <div class="wiz-rr"><div class="wiz-rr__k">Issue Date</div><div class="wiz-rr__v" id="r_issue"></div></div>
+            <div class="wiz-rr"><div class="wiz-rr__k">Period</div><div class="wiz-rr__v" id="r_period"></div></div>
+            <div class="wiz-rr"><div class="wiz-rr__k">Expiry Date</div><div class="wiz-rr__v" id="r_expiry"></div></div>
+          </div>
+        </div>
+
+        <!-- Notification notice -->
+        <div class="wiz-notif-notice" id="wizNotifNotice" style="display:none;">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+            style="width:14px;height:14px;flex-shrink:0;color:var(--sap-brand);">
+            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 01-3.46 0"/>
+          </svg>
+          <span>
+            A push notification will be sent to relevant users — this certificate expires within 90 days.
+          </span>
+        </div>
+
+      </div>
+
+    </div><!-- /wizBody -->
+
+    <!-- ── Modal Footer ── -->
+    <div class="sap-modal__footer" id="wizFooter">
+      <span style="font-size:11px;color:var(--sap-text-secondary);" id="wizStepLabel">Step 1 of 4</span>
+      <div style="flex:1;"></div>
+      <button class="btn btn-ghost" id="wizBtnBack" onclick="wizBack()" style="display:none;">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Back
+      </button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="wizBtnNext" onclick="wizNext()" disabled>
+        Next
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </button>
+      <button class="btn btn-primary" id="wizBtnSave" onclick="wizSave()" style="display:none;">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Save Certificate
+      </button>
+    </div>
+
+  </div>
+</div>
+<!-- ═══════════════════════ END CERT UPLOAD WIZARD MODAL ═══════════════════════ -->
+
+
+<!-- ═══════════════════════ WIZARD STYLES ═══════════════════════ -->
+<style>
+/* ── Step bar ── */
+.wiz-step {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px; cursor: default;
+}
+.wiz-step__bubble {
+  width: 24px; height: 24px; border-radius: 50%;
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  background: #e8eaed; color: var(--sap-text-secondary);
+  transition: all .2s;
+}
+.wiz-step__label {
+  font-size: 10px; font-weight: 600; color: var(--sap-text-secondary);
+  transition: color .2s; padding-bottom: 8px; white-space: nowrap;
+}
+.wiz-step--active .wiz-step__bubble { background: var(--sap-brand); color: #fff; }
+.wiz-step--active .wiz-step__label  { color: var(--sap-brand); }
+.wiz-step--done   .wiz-step__bubble { background: var(--sap-success); color: #fff; }
+.wiz-step--done   .wiz-step__label  { color: var(--sap-success); }
+.wiz-sep {
+  flex: 1; height: 2px; background: #e8eaed;
+  margin: 0 4px; margin-bottom: 12px;
+  transition: background .2s; max-width: 60px;
+}
+.wiz-sep--done { background: var(--sap-success); }
+
+/* ── Panes ── */
+.wiz-pane { display: none; }
+.wiz-pane--active { display: block; }
+
+/* ── Section label ── */
+.wiz-section-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .6px; color: var(--sap-text-secondary);
+  margin-bottom: 12px;
+}
+.wiz-section-label svg { width: 13px; height: 13px; }
+
+/* ── Drop zone ── */
+.wiz-drop {
+  border: 2px dashed var(--sap-input-border); border-radius: 8px;
+  padding: 32px 20px; text-align: center; cursor: pointer;
+  transition: all .2s; background: var(--sap-page-bg);
+  position: relative;
+}
+.wiz-drop:hover, .wiz-drop.drag-over {
+  border-color: var(--sap-brand); background: var(--sap-brand-light);
+}
+.wiz-drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.wiz-drop__icon {
+  width: 40px; height: 40px; background: #fff;
+  border: 1.5px solid var(--sap-table-border); border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-bottom: 10px;
+}
+.wiz-drop__icon svg { width: 20px; height: 20px; color: var(--sap-brand); }
+.wiz-drop__title { font-size: 13px; font-weight: 600; color: var(--sap-text-primary); }
+.wiz-drop__title span { color: var(--sap-brand); }
+.wiz-drop__hint { font-size: 11px; color: var(--sap-text-secondary); margin-top: 4px; }
+
+/* ── File preview ── */
+.wiz-file-preview {
+  display: none; align-items: center; gap: 12px;
+  padding: 10px 14px; margin-top: 10px;
+  background: var(--sap-success-bg);
+  border: 1px solid var(--sap-success-border);
+  border-radius: 8px;
+}
+.wiz-file-preview.visible { display: flex; }
+.wiz-file-preview__icon {
+  width: 34px; height: 34px; background: var(--sap-success);
+  border-radius: 6px; display: flex; align-items: center;
+  justify-content: center; flex-shrink: 0;
+}
+.wiz-file-preview__icon svg { width: 17px; height: 17px; color: #fff; }
+.wiz-file-preview__name { font-size: 13px; font-weight: 600; color: var(--sap-text-primary); }
+.wiz-file-preview__size { font-size: 11px; color: var(--sap-text-secondary); }
+.wiz-file-preview__remove {
+  margin-left: auto; background: none; border: none;
+  cursor: pointer; color: var(--sap-text-secondary); padding: 4px;
+}
+.wiz-file-preview__remove:hover { color: var(--sap-error); }
+.wiz-file-preview__remove svg { width: 14px; height: 14px; }
+
+/* ── Autofill strip ── */
+.wiz-autofill-strip {
+  display: none; align-items: flex-start; gap: 10px;
+  padding: 10px 14px; margin-top: 10px;
+  background: #fff3e0; border: 1px solid #ffe082; border-radius: 6px;
+  font-size: 12px;
+}
+.wiz-autofill-strip.visible { display: flex; }
+.wiz-autofill-strip__items { color: #5d4037; line-height: 1.6; }
+.wiz-autofill-apply {
+  margin-top: 6px; background: #e65100; color: #fff;
+  border: none; border-radius: 4px; padding: 4px 10px;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.wiz-autofill-apply:hover { background: #bf360c; }
+
+/* ── Asset list ── */
+.wiz-asset-list {
+  border: 1px solid var(--sap-table-border); border-radius: 6px;
+  overflow: hidden; max-height: 240px; overflow-y: auto;
+}
+.wiz-asset-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px; cursor: pointer;
+  border-bottom: 1px solid var(--sap-table-border);
+  transition: background .12s;
+}
+.wiz-asset-row:last-child { border-bottom: none; }
+.wiz-asset-row:hover, .wiz-asset-row.selected { background: var(--sap-brand-light); }
+.wiz-asset-row.selected { border-left: 3px solid var(--sap-brand); }
+.wiz-asset-row__icon {
+  width: 30px; height: 30px; background: #f0f4ff; border-radius: 5px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.wiz-asset-row__icon svg { width: 14px; height: 14px; color: var(--sap-brand); }
+.wiz-asset-row__name { font-size: 12px; font-weight: 600; color: var(--sap-text-primary); }
+.wiz-asset-row__meta { font-size: 10px; color: var(--sap-text-secondary); }
+.wiz-asset-row__check {
+  margin-left: auto; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--sap-success); display: none;
+  align-items: center; justify-content: center;
+}
+.wiz-asset-row__check svg { width: 10px; height: 10px; color: #fff; }
+.wiz-asset-row.selected .wiz-asset-row__check { display: flex; }
+
+/* ── Asset chip (selected) ── */
+.wiz-asset-chip {
+  display: none; align-items: center; gap: 12px;
+  padding: 10px 14px; margin-bottom: 12px;
+  background: var(--sap-brand-light);
+  border: 1px solid #90caf9; border-radius: 8px;
+}
+.wiz-asset-chip.visible { display: flex; }
+.wiz-asset-chip__icon {
+  width: 32px; height: 32px; background: var(--sap-brand);
+  border-radius: 6px; display: flex; align-items: center;
+  justify-content: center; flex-shrink: 0;
+}
+.wiz-asset-chip__icon svg { width: 15px; height: 15px; color: #fff; }
+.wiz-asset-chip__name { font-size: 13px; font-weight: 700; color: var(--sap-brand); }
+.wiz-asset-chip__sub { font-size: 11px; color: var(--sap-text-secondary); }
+.wiz-asset-chip__change {
+  margin-left: auto; font-size: 11px; font-weight: 600;
+  color: var(--sap-brand); background: none; border: none; cursor: pointer;
+}
+.wiz-asset-chip__change:hover { text-decoration: underline; }
+
+/* ── Autofilled block ── */
+.wiz-autofilled-block {
+  background: #fffde7; border: 1px solid #f9a825;
+  border-radius: 6px; padding: 10px 14px; font-size: 12px;
+}
+.wiz-autofilled-block__title {
+  font-weight: 700; color: #e65100; margin-bottom: 6px;
+  display: flex; align-items: center; gap: 5px; font-size: 11px;
+}
+.wiz-af-row {
+  display: flex; justify-content: space-between;
+  padding: 3px 0; border-bottom: 1px solid #ffe082;
+  color: #5d4037;
+}
+.wiz-af-row:last-child { border-bottom: none; }
+.wiz-af-key { font-weight: 600; }
+
+/* ── Type chips ── */
+.wiz-type-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.wiz-type-chip {
+  font-size: 11px; font-weight: 600;
+  padding: 3px 10px; border: 1px solid var(--sap-input-border); border-radius: 12px; cursor: pointer; background: #fff;
+  color: var(--sap-text-secondary); transition: all .15s;
+}
+.wiz-type-chip:hover, .wiz-type-chip.active {
+  background: var(--sap-brand); color: #fff; border-color: var(--sap-brand);
+}
+
+/* ── Expiry warning ── */
+.wiz-expiry-warn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; margin-top: 12px;
+  background: #fff8e1; border: 1px solid #ffe082;
+  border-left: 3px solid #f57f17; border-radius: 6px;
+  font-size: 11px; font-weight: 600; color: #e65100;
+}
+
+/* ── Review cards ── */
+.wiz-review-card {
+  background: #fff; border: 1px solid var(--sap-table-border);
+  border-radius: 7px; overflow: hidden; margin-bottom: 10px;
+}
+.wiz-review-card__hdr {
+  padding: 8px 14px; background: var(--sap-page-bg);
+  border-bottom: 1px solid var(--sap-table-border);
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .6px; color: var(--sap-text-secondary);
+}
+.wiz-review-card__body { padding: 10px 14px; }
+.wiz-rr {
+  display: flex; align-items: flex-start;
+  padding: 5px 0; border-bottom: 1px solid var(--sap-table-border);
+  font-size: 12px;
+}
+.wiz-rr:last-child { border-bottom: none; }
+.wiz-rr__k { width: 130px; flex-shrink: 0; color: var(--sap-text-secondary); font-size: 11px; }
+.wiz-rr__v { color: var(--sap-text-primary); font-weight: 500; }
+
+/* ── Notification notice ── */
+.wiz-notif-notice {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; margin-top: 4px;
+  background: var(--sap-brand-light); border: 1px solid #90caf9;
+  border-radius: 6px; font-size: 11px; color: var(--sap-brand);
+}
+
+/* ── Autofilled input style ── */
+.wiz-autofilled { background: #fffde7 !important; border-color: #f9a825 !important; }
+
+@media (max-width: 600px) {
+  .wiz-step__label { display: none; }
+  .sap-form-grid--2col { grid-template-columns: 1fr !important; }
+}
+</style>
+
+<!-- ═══════════════════════ WIZARD SCRIPT ═══════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  /* ─── Config ─── */
+  const CERT_TYPE_STANDARDS = {
+    'CAT III':         ['API 8C', 'ISO 13535'],
+    'CAT IV':          ['API 8C', 'ISO 13535'],
+    'ORIGINAL COC':    ['API 8C', 'ISO 13535', 'API 16A'],
+    'LOAD TEST':       ['BS EN 12079', 'API 8C'],
+    'LIFTING':         ['BS EN 12079', 'API 2C'],
+    'NDT':             ['ASNT SNT-TC-1A', 'ISO 9712'],
+    'TUBULAR':         ['API 5CT', 'API 5DP'],
+  };
+
+  const ASSET_TYPE_STANDARDS = {
+    'Drilling Equipment':        ['API 7K', 'API 8C', 'ISO 13535'],
+    'Hoisting Equipment':        ['API 8C', 'ISO 13535', 'API 2C'],
+    'Well Control':              ['API 16A', 'API 16D', 'ISO 10423'],
+    'Mud System High Pressure':  ['API 7K', 'ISO 13533'],
+    'Mud System Low Pressure':   ['API 7K', 'ISO 13533'],
+    'Wirelines':                 ['API 9A', 'API 9B'],
+    'Structure':                 ['AWS D1.1', 'ISO 3834'],
+    'Tubular':                   ['API 5CT', 'API 5DP'],
+  };
+
+  const PERIOD_LABELS = {
+    '1':'Monthly (1 month)', '3':'Quarterly (3 months)',
+    '6':'Semi-Annually (6 months)', '12':'Annually (1 year)',
+    '60':'5 Years', '120':'10 Years',
+  };
+
+  /* ─── State ─── */
+  let wizStep       = 1;
+  let wizFile       = null;      // File object
+  let wizAsset      = null;      // { id, name, client, location, type, serial, standard }
+  let wizAutofill   = {};        // { certNum?, certType?, issueDate? }
+  let wizEditMode   = false;     // true when editing existing cert
+  let wizEditId     = null;
+  let wizAssetsList = [];        // populated from /api/assets
+
+  /* ─── DOM helpers ─── */
+  const $ = id => document.getElementById(id);
+  function fmt(iso) {
+    if (!iso) return '—';
+    const [y, m, d] = iso.split('-');
+    const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m - 1];
+    return `${d} ${mn} ${y}`;
+  }
+  function fmtSize(b) { return b < 1048576 ? (b / 1024).toFixed(0) + ' KB' : (b / 1048576).toFixed(1) + ' MB'; }
+  function daysLeft(iso) { return Math.round((new Date(iso) - new Date()) / 86400000); }
+
+  /* ─── Open / Close (overrides existing openModal) ─── */
+  window.openModal = function (certId) {
+    wizEditMode = !!certId;
+    wizEditId   = certId || null;
+
+    if (wizEditMode) {
+      // Edit existing certificate – fall back to old form (handled elsewhere)
+      // The wizard is only for new uploads.
+      // For simplicity, just open existing modal UI (not the wizard).
+      document.getElementById('modalTitle').textContent = 'Edit Certificate';
+      // hide wizard steps
+      $('#wizStepBar').style.display = 'none';
+      // Show old form elements if needed (not implemented here)
+    } else {
+      // New upload wizard
+      document.getElementById('modalTitle').textContent = 'Upload Certificate';
+      $('#wizStepBar').style.display = 'flex';
+      wizReset();
+      wizSetStep(1);
+    }
+    $('#certModal').classList.add('open');
+
+    // Show tech note for Inspector role
+    const role = (window._wizRole || '').toLowerCase();
+    $('#wizTechNote').style.display = role === 'inspector' ? '' : 'none';
+
+    if (!wizAssetsList.length) wizLoadAssets();
+    wizLoadInspectors();
+  };
+
+  window.closeModal = function () { $('#certModal').classList.remove('open'); wizReset(); };
+
+  /* ─── "Flat" edit mode (step 3 fields only, no wizard chrome) ─── */
+  function wizGoFlat(certId) { /* implementation omitted for brevity */ }
+
+  /* ─── Reset wizard state ─── */
+  function wizReset() {
+    wizStep     = 1; wizFile = null; wizAsset = null; wizAutofill = {};
+    // clear fields etc.
+    const ids = ['wizName','wizCertNum','wizIssueDate','wizExpiryDate','wizExtUrl'];
+    ids.forEach(id => { const el = $(id); if (el) { el.value = ''; el.classList.remove('wiz-autofilled'); } });
+    if ($('#wizCertType')) $('#wizCertType').value = '';
+    if ($('#wizPeriod')) $('#wizPeriod').value = '';
+    $('#wizFilePreview').classList.remove('visible');
+    $('#wizAutofillStrip').classList.remove('visible');
+    $('#wizAssetChip').classList.remove('visible');
+    $('#wizAssetAutoBlock').style.display = 'none';
+    $('#wizLiftingWrap').style.display = 'none';
+    $('#wizExpiryWarn').style.display = 'none';
+    $('#wizNotifNotice').style.display = 'none';
+    $('#wizExpiryHint').textContent = '';
+    $('#wizStdChips').innerHTML = '';
+    if ($('#wizAssetSearch')) $('#wizAssetSearch').value = '';
+    $('#wizAssetSearchArea').style.display = '';
+    $('#wizStepBar').style.display = 'flex';
+    $('#wizBtnSave').style.display = 'none';
+    $('#wizBtnNext').style.display = '';
+    $('#wizBtnNext').textContent = 'Next';
+    $('#wizBtnSave').textContent = 'Save Certificate';
+    wizRenderAssets(wizAssetsList);
+  }
+
+  /* ─── Step navigation ─── */
+  function wizSetStep(n) {
+    [1,2,3,4].forEach(i => {
+      $(`wizPane${i}`).classList.remove('wiz-pane--active');
+      const ws  = $(`ws${i}`);
+      const wsb = $(`wsb${i}`);
+      ws.classList.remove('wiz-step--active', 'wiz-step--done');
+      if (i < n) { ws.classList.add('wiz-step--done'); wsb.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" width="12" height="12"><polyline points="20 6 9 17 4 12"/>'; }
+      else if (i === n) { ws.classList.add('wiz-step--active'); wsb.textContent = i; }
+      else { wsb.textContent = i; }
+      if (i < 4) $(`wsep${i}`).classList.toggle('wiz-sep--done', i < n);
+    });
+    $(`wizPane${n}`).classList.add('wiz-pane--active');
+    wizStep = n;
+    $('#wizStepLabel').textContent = `Step ${n} of 4`;
+    $('#wizBtnBack').style.display = n > 1 ? '' : 'none';
+    $('#wizBtnNext').style.display = n < 4 ? '' : 'none';
+    $('#wizBtnSave').style.display = n === 4 ? '' : 'none';
+    if (n === 4) wizBuildReview();
+    wizValidateStep();
+  }
+
+  window.wizNext = function () { if (wizStep===3) wizBuildReview(); wizSetStep(wizStep+1); };
+  window.wizBack = function () { wizSetStep(wizStep-1); };
+
+  /* ─── Validate current step → enable/disable Next ─── */
+  function wizValidateStep() {
+    const btn = $('#wizBtnNext');
+    let ok = false;
+    switch (wizStep) {
+      case 1:
+        ok = !!(wizFile || ($('#wizExtUrl') && $('#wizExtUrl').value.trim()));
+        break;
+      case 2:
+        ok = !!wizAsset;
+        break;
+      case 3: {
+        const n  = $('#wizName').value.trim();
+        const cn = $('#wizCertNum').value.trim();
+        const ct = $('#wizCertType').value;
+        const ii = $('#wizIssueDate').value;
+        const ex = $('#wizExpiryDate').value;
+        const ip = $('#wizInspector').value;
+        const li = $('#wizLiftingWrap').style.display !== 'none' ? $('#wizLiftingSubtype').value : 'ok';
+        ok = !!(n && cn && ct && ii && ex && ip && li);
+        break;
+      }
+      case 4:
+        ok = true; break;
+    }
+    if (btn) btn.disabled = !ok;
+  }
+
+  /* ─── STEP 1: File ─── */
+  window.wizDrag = function (e, id, over) { e.preventDefault(); $(`${id}`).classList.toggle('drag-over', over); };
+  window.wizDropFile = function (e) { e.preventDefault(); $('#wizDrop').classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) wizProcessFile(f); };
+  window.wizFileSelect = function (inp) { if (inp.files[0]) wizProcessFile(inp.files[0]); };
+
+  function wizProcessFile(f) { wizFile = f; $('#wizFpName').textContent = f.name; $('#wizFpSize').textContent = fmtSize(f.size); $('#wizFilePreview').classList.add('visible'); wizParseFilename(f.name); wizValidateStep(); }
+  window.wizClearFile = function () { wizFile = null; $('#wizFilePreview').classList.remove('visible'); $('#wizAutofillStrip').classList.remove('visible'); $('#wizFileInput').value = ''; wizAutofill = {}; wizValidateStep(); };
+
+  function wizParseFilename(name) {
+    const base = name.replace(/\.[^.]+$/, '');
+    const hints = [];
+    wizAutofill = {};
+    const dateM = base.match(/(\d{4}[-_]\d{2}[-_]\d{2})/);
+    if (dateM) { const d = dateM[1].replace(/_/g, '-'); wizAutofill.issueDate = d; hints.push(`Issue date: <strong>${d}</strong>`); }
+    const stdM = base.match(/(API[-_]?\s*\d+[A-Z]?|ISO[-_]?\s*\d+)/i);
+    if (stdM) { wizAutofill.certType = stdM[0].replace(/_/g, ' ').replace(/\s+/, ' ').trim(); hints.push(`Standard: <strong>${wizAutofill.certType}</strong>`); }
+    const numM = base.match(/CERT[-_][\w\d-]+/i) || base.match(/([\w]+-\d{4,}[-\w]*)/);
+    if (numM) { wizAutofill.certNum = numM[0].toUpperCase(); hints.push(`Cert no.: <strong>${wizAutofill.certNum}</strong>`); }
+    if (hints.length) { $('#wizAutofillHints').innerHTML = hints.join(' &nbsp;·&nbsp; '); $('#wizAutofillStrip').classList.add('visible'); }
+  }
+  window.wizApplyAutofill = function () {
+    if (wizAutofill.issueDate) { $('#wizIssueDate').value = wizAutofill.issueDate; $('#wizIssueDate').classList.add('wiz-autofilled'); wizCalcExpiry(); }
+    if (wizAutofill.certType) { $('#wizCertNum').value = wizAutofill.certNum || ''; $('#wizCertNum').classList.add('wiz-autofilled'); }
+    $('#wizAutofillStrip').classList.remove('visible'); wizValidateStep();
+  };
+
+  /* ─── STEP 2: Asset ─── */
+  function wizLoadAssets() {
+    const s = window.getSession ? getSession() : JSON.parse(sessionStorage.getItem('sap_session') || '{}');
+    if (!s || !s.token) return;
+    fetch('/api/assets?limit=500', { headers: { Authorization: 'Bearer ' + s.token } })
+      .then(r => r.json())
+      .then(data => {
+        const list = (data.data || data || []).map(a => ({
+          id: a.id,
+          name: a.name || a.asset_name || '',
+          serial: a.serialNumber || a.serial_number || '',
+          type: a.assetType || a.asset_type || '',
+          client: a.clientName || a.client_name || a.client || '',
+          location: a.functionalLocation || a.functional_location || a.location || '',
+          standard: ASSET_TYPE_STANDARDS[a.assetType || a.asset_type]?.[0] || '',
+          clientId: a.clientId || a.client_id || '',
+        }));
+        wizAssetsList = list;
+        const role = (s.role || '').toLowerCase();
+        const clientId = s.clientId || s.client_id || null;
+        const filtered = (role === 'admin' || role === 'manager') ? list : list.filter(a => !clientId || a.clientId === clientId);
+        wizRenderAssets(filtered);
+      })
+      .catch(() => { wizAssetsList = _demoAssets(); wizRenderAssets(wizAssetsList); });
+  }
+
+  function _demoAssets() { return [ { id:'A-0042', name:'Top Drive TDS-11SA',  serial:'TD-20241', type:'Drilling Equipment',       client:'Arabian Drilling Co.', location:'Rig 15 – North Field', standard:'API 8C' }, { id:'A-0071', name:'Crown Block CB-500',   serial:'CB-55892', type:'Hoisting Equipment',       client:'Arabian Drilling Co.', location:'Rig 15 – North Field', standard:'API 8C' }, { id:'A-0088', name:'BOP Stack 18¾"',        serial:'BOP-9934A',type:'Well Control',             client:'NGAS Services',        location:'Rig 22 – East Block',  standard:'API 16A' }, { id:'A-0103', name:'Mud Pump P-550 #2',    serial:'MP-7721',  type:'Mud System High Pressure', client:'NGAS Services',        location:'Rig 22 – East Block',  standard:'API 7K' }, { id:'A-0119', name:'Drawworks DW-750',      serial:'DW-44410', type:'Hoisting Equipment',       client:'Delta Oilfield',       location:'Workshop C',           standard:'API 8C' }, { id:'A-0130', name:'Kelly Drive Assembly',  serial:'KD-3310B', type:'Drilling Equipment',       client:'Delta Oilfield',       location:'Rig 8 – South Sector', standard:'API 7K' }, ]; }
+
+  function wizRenderAssets(list) {
+    const el = $('#wizAssetList');
+    if (!el) return;
+    if (!list.length) { el.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--sap-text-secondary);'>No assets found.</div>'; return; }
+    el.innerHTML = list.map(a => `
+      <div class="wiz-asset-row ${wizAsset && wizAsset.id === a.id ? 'selected' : ''}"
+           onclick="wizSelectAsset('${a.id}')">
+        <div class="wiz-asset-row__icon">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        </div>
+        <div>
+          <div class="wiz-asset-row__name">${a.name}</div>
+          <div class="wiz-asset-row__meta">${a.id} · ${a.serial} · ${a.client}</div>
+        </div>
+        <div class="wiz-asset-row__check"><svg fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+      </div>
+    `).join('');
+  }
+
+  window.wizFilterAssets = function (q) {
+    const s = window.getSession ? getSession() : JSON.parse(sessionStorage.getItem('sap_session') || '{}');
+    const role = (s.role || '').toLowerCase();
+    const clientId = s.clientId || s.client_id || null;
+    let list = (role === 'admin' || role === 'manager') ? wizAssetsList : wizAssetsList.filter(a => !clientId || a.clientId === clientId);
+    if (q) { const lq = q.toLowerCase(); list = list.filter(a => (a.name + a.id + a.serial + a.client).toLowerCase().includes(lq)); }
+    wizRenderAssets(list);
+  };
+
+  window.wizSelectAsset = function (id) {
+    wizAsset = wizAssetsList.find(a => a.id === id);
+    if (!wizAsset) return;
+    $('#wizChipName').textContent = wizAsset.name;
+    $('#wizChipSub').textContent = `${wizAsset.id} · ${wizAsset.client}`;
+    $('#wizAssetChip').classList.add('visible');
+    $('#wizAssetSearchArea').style.display = 'none';
+    $('#wizAf_client').textContent   = wizAsset.client;
+    $('#wizAf_location').textContent = wizAsset.location;
+    $('#wizAf_type').textContent     = wizAsset.type;
+    $('#wizAf_standard').textContent = wizAsset.standard || '—';
+    $('#wizAssetAutoBlock').style.display = '';
+    wizPopulateChips(ASSET_TYPE_STANDARDS[wizAsset.type] || []);
+    if (!$('#wizName').value) { $('#wizName').value = `${wizAsset.name} — Inspection Certificate`; $('#wizName').classList.add('wiz-autofilled'); }
+    wizValidateStep();
+  };
+
+  window.wizChangeAsset = function () { $('#wizAssetChip').classList.remove('visible'); $('#wizAssetSearchArea').style.display = ''; $('#wizAssetAutoBlock').style.display = 'none'; wizAsset = null; wizValidateStep(); };
+
+  /* ─── STEP 3: Details helpers ─── */
+  function wizPopulateChips(stds) { $('#wizStdChips').innerHTML = stds.map(s => `<div class="wiz-type-chip" onclick="wizPickStd('${s}')">${s}</div>`).join(''); $('#wizStdChipsWrap').style.display = stds.length ? '' : 'none'; }
+  window.wizPickStd = function (std) { $('#wizStdChips').querySelectorAll('.wiz-type-chip').forEach(c => c.classList.toggle('active', c.textContent===std)); if (!$('#wizCertNum').value) { $('#wizCertNum').value = std.replace(/\s/g, '') + '-' + new Date().getFullYear() + '-001'; $('#wizCertNum').classList.add('wiz-autofilled'); } wizValidateStep(); };
+  window.wizOnTypeChange = function () {
+    const ct = $('#wizCertType').value;
+    $('#wizLiftingWrap').style.display = ct === 'LIFTING' ? '' : 'none';
+    const stds = CERT_TYPE_STANDARDS[ct] || (wizAsset ? ASSET_TYPE_STANDARDS[wizAsset.type] : []) || [];
+    wizPopulateChips(stds);
+    wizValidateStep();
+  };
+  window.wizCalcExpiry = function () {
+    const issue  = $('#wizIssueDate').value;
+    const months = parseInt($('#wizPeriod').value);
+    if (!issue || !months) { wizValidateStep(); return; }
+    const d = new Date(issue); d.setMonth(d.getMonth() + months);
+    const iso = d.toISOString().split('T')[0];
+    $('#wizExpiryDate').value = iso;
+    $('#wizExpiryDate').classList.add('wiz-autofilled');
+    $('#wizExpiryHint').textContent = `Auto-set to ${PERIOD_LABELS[String(months)]} from issue date. Adjust if needed.`;
+    const dl = daysLeft(iso);
+    if (dl < 90) { $('#wizExpiryWarn').style.display = ''; $('#wizExpiryWarnText').textContent = `This certificate will expire in ${dl} day${dl!==1?'s':''} — within 90 days. A push notification will be sent.`; }
+    else { $('#wizExpiryWarn').style.display = 'none'; }
+    wizValidateStep();
+  };
+
+  function wizLoadInspectors() {
+    const s = window.getSession ? getSession() : JSON.parse(sessionStorage.getItem('sap_session') || '{}');
+    const sel = $('#wizInspector');
+    if (!sel) return;
+    fetch('/api/inspectors', { headers: { Authorization: 'Bearer ' + (s?.token || '') } })
+      .then(r => r.json())
+      .then(data => { const list = data.data || data || []; sel.innerHTML = '<option value="">Select inspector…</option>' + list.map(i => `<option>${i.name}</option>`).join(''); })
+      .catch(() => { const demo = ['Ahmed Al-Rashidi','Sara Al-Khalil','Mohamed Hassan','Layla Bin Rashid','Khalid Al-Mansouri']; sel.innerHTML = '<option value="">Select inspector…</option>' + demo.map(n => `<option>${n}</option>`).join(''); });
+  }
+
+  /* ─── STEP 4: Review ─── */
+  function wizBuildReview() {
+    $('#r_file').textContent    = wizFile ? wizFile.name : ($('#wizExtUrl')?.value || '—');
+    $('#r_asset').textContent   = wizAsset ? `${wizAsset.name} (${wizAsset.id})` : '—';
+    $('#r_client').textContent  = wizAsset?.client   || '—';
+    $('#r_location').textContent= wizAsset?.location || '—';
+    const jobSel = $('#wizJobSelect');
+    $('#r_job').textContent = jobSel && jobSel.value ? jobSel.options[jobSel.selectedIndex].text : '—';
+    $('#r_name').textContent      = $('#wizName').value || '—';
+    $('#r_certNum').textContent   = $('#wizCertNum').value || '—';
+    const ct = $('#wizCertType').value;
+    const lt = $('#wizLiftingWrap').style.display !== 'none' ? (' — ' + $('#wizLiftingSubtype').value) : '';
+    $('#r_type').textContent      = ct + lt;
+    $('#r_inspector').textContent = $('#wizInspector').value || '—';
+    $('#r_issue').textContent     = fmt($('#wizIssueDate').value);
+    $('#r_period').textContent    = PERIOD_LABELS[$('#wizPeriod').value] || '—';
+    const exp = $('#wizExpiryDate').value;
+    const dl  = exp ? daysLeft(exp) : null;
+    const expEl = $('#r_expiry');
+    if (exp) { expEl.innerHTML = dl < 90 ? `<span style="color:var(--sap-warning);font-weight:700;">${fmt(exp)} · ${dl} days ⚠</span>` : `<span style="color:var(--sap-success);font-weight:700;">${fmt(exp)} · ${dl} days</span>`; } else { expEl.textContent = '—'; }
+    $('#wizNotifNotice').style.display = (dl !== null && dl < 90) ? '' : 'none';
+  }
+
+  window.wizOnJobChange = function () { /* optional: auto-fill job number */ };
+
+  (function wizLoadJobs() {
+    const s = window.getSession ? getSession() : JSON.parse(sessionStorage.getItem('sap_session') || '{}');
+    const sel = $('#wizJobSelect');
+    if (!sel || !s?.token) return;
+    fetch('/api/jobs?status=active', { headers: { Authorization: 'Bearer ' + s.token } })
+      .then(r => r.json())
+      .then(data => { const list = data.data || data || []; sel.innerHTML = '<option value="">Select active job…</option>' + list.map(j => `<option value="${j.id}">${j.jobNumber || j.job_number} — ${j.client || ''}</option>`).join(''); })
+      .catch(() => {});
+  })();
+
+  window.wizSave = function () {
+    const s = window.getSession ? getSession() : JSON.parse(sessionStorage.getItem('sap_session') || '{}');
+    const btn = $('#wizBtnSave');
+    btn.disabled = true; btn.innerHTML = '<svg class="spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Saving…';
+    const fd = new FormData();
+    if (wizFile) fd.append('file', wizFile);
+    const extUrl = $('#wizExtUrl')?.value.trim();
+    if (extUrl) fd.append('externalLink', extUrl);
+    fd.append('assetId', wizAsset?.id || '');
+    fd.append('name', $('#wizName').value.trim());
+    fd.append('certNumber', $('#wizCertNum').value.trim());
+    fd.append('certType', $('#wizCertType').value);
+    if ($('#wizLiftingWrap').style.display !== 'none') fd.append('liftingSubtype', $('#wizLiftingSubtype').value);
+    fd.append('issuedBy', $('#wizInspector').value);
+    fd.append('issueDate', $('#wizIssueDate').value);
+    fd.append('expiryDate', $('#wizExpiryDate').value);
+    fd.append('period', $('#wizPeriod').value);
+    fd.append('clientId', wizAsset?.clientId || '');
+    const jobVal = $('#wizJobSelect')?.value; if (jobVal) fd.append('jobId', jobVal);
+    const exp = $('#wizExpiryDate').value; if (exp && daysLeft(exp) < 90) fd.append('sendNotification', 'true');
+    const url = wizEditMode ? `/api/certificates/${wizEditId}` : '/api/certificates';
+    const method = wizEditMode ? 'PUT' : 'POST';
+    fetch(url, { method, headers: { Authorization: 'Bearer ' + s.token }, body: fd })
+      .then(r => r.json())
+      .then(data => {
+        btn.disabled = false; btn.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg> Save Certificate';
+        if (data.success || data.id || data.data) { closeModal(); if (typeof showToast === 'function') showToast('success','Certificate saved', `${$('#wizCertNum').value} linked to ${wizAsset?.name || 'asset'}.`); if (typeof loadCertificates === 'function') loadCertificates(); else if (typeof refreshTable === 'function') refreshTable(); else location.reload(); }
+        else { if (typeof showToast === 'function') showToast('error','Save failed', data.message || data.error || 'Unknown error.'); }
+      })
+      .catch(err => { btn.disabled = false; btn.innerHTML = 'Save Certificate'; if (typeof showToast === 'function') showToast('error','Network error', err.message); });
+  };
+
+  window.wizValidateStep = wizValidateStep;
+
+  const spinStyle = document.createElement('style');
+  spinStyle.textContent = '@keyframes spin{to{transform:rotate(360deg)}} .spin{animation:spin .8s linear infinite;}';
+  document.head.appendChild(spinStyle);
+})();
+</script>
   <div class="sap-modal sap-modal--lg">
     <div class="sap-modal__header">
       <div class="sap-modal__title">
