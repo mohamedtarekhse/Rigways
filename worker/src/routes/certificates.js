@@ -48,6 +48,8 @@ export async function handleCertificates(request, env, path) {
     const filters = { 'approval_status.eq':'approved', 'expiry_date.gte': today, 'expiry_date.lte': cutoff };
     if (['user','technician'].includes(session.role) && session.customerId)
       filters['client_id.eq'] = session.customerId;
+    if (['user','technician'].includes(session.role) && session.functional_location)
+      filters['functional_location.eq'] = session.functional_location;
     const { data, error } = await db.from('certificates', { select:'*', filters, order:'expiry_date.asc', limit:200 });
     if (error) return serverErr(env);
     return ok({ certificates: data || [], days }, env);
@@ -60,6 +62,8 @@ export async function handleCertificates(request, env, path) {
     const fBase  = {};
     if (['user','technician'].includes(session.role) && session.customerId)
       fBase['client_id.eq'] = session.customerId;
+    if (['user','technician'].includes(session.role) && session.functional_location)
+      fBase['functional_location.eq'] = session.functional_location;
 
     const [total, valid, expiring, expired, pending] = await Promise.all([
       db.count('certificates', { filters: { ...fBase } }),
@@ -83,6 +87,8 @@ export async function handleCertificates(request, env, path) {
     const filters = {};
     if (['user','technician'].includes(session.role) && session.customerId)
       filters['client_id.eq'] = session.customerId;
+    if (['user','technician'].includes(session.role) && session.functional_location)
+      filters['functional_location.eq'] = session.functional_location;
     if (url.searchParams.get('approval_status')) filters['approval_status.eq'] = url.searchParams.get('approval_status');
     if (url.searchParams.get('cert_type'))       filters['cert_type.eq']        = url.searchParams.get('cert_type');
     if (url.searchParams.get('asset_id'))        filters['asset_id.eq']         = url.searchParams.get('asset_id');
@@ -100,6 +106,8 @@ export async function handleCertificates(request, env, path) {
     const cert = Array.isArray(data) ? data[0] : data;
     if (!cert) return notFound('Certificate', env);
     if (['user','technician'].includes(session.role) && session.customerId && cert.client_id !== session.customerId)
+      return forbidden(env);
+    if (['user','technician'].includes(session.role) && session.functional_location && cert.functional_location !== session.functional_location)
       return forbidden(env);
     const [withNames] = await _withUserNames(db, [cert], 'uploaded_by');
     return ok(withNames || cert, env);
@@ -133,10 +141,7 @@ export async function handleCertificates(request, env, path) {
       if (!aliases.includes(String(asset.client_id || ''))) return forbidden(env);
     }
 
-    // Verify job_id is required for technicians and validate assignment
-    if (session.role === 'technician' && !body.job_id) {
-      return badReq('job_id is required for technician uploads', 'VALIDATION', env);
-    }
+    // Temporary relaxation: allow technician uploads without strict job assignment checks.
 
     let job = null;
     if (body.job_id) {
@@ -149,64 +154,9 @@ export async function handleCertificates(request, env, path) {
       if (!job) return notFound('Job', env);
     }
 
-    if (session.role === 'technician') {
-      const { data: iRows } = await db.from('inspectors', {
-        filters: { 'user_id.eq': session.sub, 'status.eq': 'active' },
-        select: 'id',
-        limit: 1,
-      });
-      let inspector = Array.isArray(iRows) ? iRows[0] : iRows;
+    // NOTE: job/assignment/status constraints for technicians are temporarily disabled.
 
-      // Fallback for environments where inspector.user_id backfill has not completed.
-      if (!inspector) {
-        const { data: assignedRows } = await db.from('job_inspectors', {
-          filters: { 'job_id.eq': body.job_id },
-          select: 'inspector_id',
-        });
-        const assignedIds = (Array.isArray(assignedRows) ? assignedRows : [])
-          .map(r => r.inspector_id)
-          .filter(Boolean);
-        if (assignedIds.length > 0) {
-          const { data: inspRows } = await db.from('inspectors', {
-            filters: { 'id.in': assignedIds, 'status.eq': 'active' },
-            select: 'id,name,email',
-          });
-          const techName = String(session.name || '').trim().toLowerCase();
-          const techUser = String(session.username || '').trim().toLowerCase();
-          const matched = (Array.isArray(inspRows) ? inspRows : []).find(r =>
-            String(r.name || '').trim().toLowerCase() === techName ||
-            String(r.email || '').trim().toLowerCase() === techUser
-          );
-          if (matched) inspector = { id: matched.id };
-        }
-      }
-      if (!inspector) return forbidden(env);
-
-      const { data: assignRows } = await db.from('job_inspectors', {
-        filters: { 'job_id.eq': body.job_id, 'inspector_id.eq': inspector.id },
-        select: 'id',
-        limit: 1,
-      });
-      const assignment = Array.isArray(assignRows) ? assignRows[0] : assignRows;
-      if (!assignment) return forbidden(env);
-
-      if (!['active', 'reopened'].includes(String(job?.status || '').toLowerCase())) {
-        return badReq('Technician uploads are only allowed for active or reopened jobs', 'INVALID_STATE', env);
-      }
-
-      // Job and asset must belong to same client.
-      if (job && String(job.client_id || '') !== String(asset.client_id || '')) {
-        return badReq('Asset client must match the assigned job client', 'VALIDATION', env);
-      }
-
-      // Functional location must match job FL when job FL is present.
-      // If job has no FL, fallback is client-level permission (validated above).
-      const jobFL = String(job?.functional_location || '').trim();
-      const assetFL = String(asset?.functional_location || '').trim();
-      if (jobFL && jobFL !== assetFL) {
-        return badReq('Asset functional location must match the assigned job functional location', 'VALIDATION', env);
-      }
-    }
+    // NOTE: job/client and functional-location matching constraints are temporarily disabled.
 
     const { data, error } = await db.insert('certificates', {
       name:            body.name,

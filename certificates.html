@@ -1160,6 +1160,11 @@ function renderTable() {
   } else if (clientF !== 'all') {
     data = data.filter(c => c.client === clientF);
   }
+  /* Scope by user's predefined functional location (if assigned) */
+  const userFL = String(session.functional_location || session.functionalLocation || '').trim();
+  if (userFL && role !== 'admin' && role !== 'manager') {
+    data = data.filter(c => String(c.functional_location || '').trim() === userFL);
+  }
 
   /* Technician sees only their own uploads */
   if (role === 'technician') data = data.filter(c => c.uploadedBy === 'Ali T.' || true); /* allow all for demo */
@@ -1234,8 +1239,11 @@ function renderTable() {
   filteredData = data;
 
   /* Sidebar badge — update expiry count */
-  const all = session.customerId && role !== 'admin' && role !== 'manager'
+  let all = session.customerId && role !== 'admin' && role !== 'manager'
     ? CERTS.filter(c => c.client === session.customerId) : CERTS;
+  if (userFL && role !== 'admin' && role !== 'manager') {
+    all = all.filter(c => String(c.functional_location || '').trim() === userFL);
+  }
   const expCount = all.filter(c=>getCertStatus(c)==='expiring'||getCertStatus(c)==='expired').length;
   const sidebarBadgeEl = document.getElementById('sidebarBadge');
   if (sidebarBadgeEl) sidebarBadgeEl.textContent = expCount;
@@ -1318,7 +1326,10 @@ function renderTable() {
         <span style="font-family:monospace;font-size:11px;font-weight:700;color:var(--sap-brand);background:var(--sap-brand-light);border:1px solid var(--sap-info-border);border-radius:4px;padding:2px 6px;white-space:nowrap;">${c.jobNumber||'—'}</span>
       </td>
       <td data-col="certId"><span class="cert-id-chip">${fmtCertId(c)}</span></td>
-      <td data-col="assetId"><span class="asset-id-chip">${c.assetId||'—'}</span></td>
+      <td data-col="assetId">
+        <span class="asset-id-chip">${c.assetId||'—'}</span>
+        <div style="font-size:11px;color:var(--sap-text-secondary);margin-top:3px;line-height:1.25;">${h(c.assetDescription || '—')}</div>
+      </td>
       <td data-col="name">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;">
           <div style="min-width:0;">
@@ -2685,10 +2696,16 @@ document.addEventListener('click', e => {
 });
 
 function applyColVisibility() {
+  const isUserRole = session?.role === 'user';
+  const userOnlyCols = new Set(['assetId', 'certType', 'expiry', 'fileLink']);
   let visible = 0;
   COL_KEYS.forEach(key => {
     const cb   = document.getElementById('col_' + key);
-    const show = cb ? cb.checked : true;
+    let show = cb ? cb.checked : true;
+    if (isUserRole) {
+      show = userOnlyCols.has(key);
+      if (cb) cb.checked = show;
+    }
     if (show) visible++;
     const th = document.querySelector(`th[data-col="${key}"]`);
     if (th) th.style.display = show ? '' : 'none';
@@ -3107,7 +3124,12 @@ async function loadCerts() {
     const cd = certRes.data  || certRes;
     const ad = assetRes.data || assetRes;
     const assetMap = {};
-    (ad.assets || ad || []).forEach(a => { if (a.id) assetMap[a.id] = a.asset_number || a.id; });
+    const assetDescMap = {};
+    (ad.assets || ad || []).forEach(a => {
+      if (!a?.id) return;
+      assetMap[a.id] = a.asset_number || a.id;
+      assetDescMap[a.id] = a.description || a.name || '';
+    });
     window._assetMap = assetMap;
     CERTS = (cd.certificates || cd || []).map(cert => {
       const rawType = String(cert.cert_type || '');
@@ -3125,6 +3147,7 @@ async function loadCerts() {
       issueDate:       cert.issue_date,
       issuedBy:        cert.issued_by,
       assetId:         assetMap[cert.asset_id] || cert.asset_id || '—',
+      assetDescription: assetDescMap[cert.asset_id] || '',
       client:          cert.client_id,
       fileName:        cert.file_name || '',
       fileUrl:         cert.file_url  || '',
@@ -3170,6 +3193,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   if (role === 'admin' || role === 'manager') document.getElementById('clientFilter').style.display = 'inline-block';
   if (role !== 'user') document.getElementById('notifBadge').style.display = 'block';
+  if (role === 'user') {
+    const colSelectorWrap = document.getElementById('colSelectorWrap');
+    if (colSelectorWrap) colSelectorWrap.style.display = 'none';
+  }
 
   /* Subtitle */
   document.getElementById('pageSubtitle').textContent = session.customerId
