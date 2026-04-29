@@ -1274,6 +1274,9 @@ async function handleCertUpload(request, env, path) {
 
   // ── POST /api/certificates/upload ──
   if (path === '/certificates/upload' && request.method === 'POST') {
+    if (!requireRole(session, ['admin', 'manager', 'technician'])) {
+      return forbidden(env);
+    }
     if (!isStorageConfigured(env)) {
       return json({ success: false, error: 'Storage is not configured. Configure B2_* variables (primary) or CERT_BUCKET (R2 fallback).', code: 'NO_BUCKET' }, 500, env);
     }
