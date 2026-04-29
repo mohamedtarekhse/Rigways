@@ -395,8 +395,8 @@ async function loadJobs(){
         </div>`;
     return `<tr>
       <td>${j.job_number||''}</td>
-      <td>${j.client_id||''}</td>
-      <td>${j.functional_location||''}</td>
+      <td>${j.client_name || j.client_id||''}</td>
+      <td>${j.functional_location_name || j.functional_location||''}</td>
       <td>${j.scope||''}</td>
       <td>${formatJobStatus(j.status)}</td>
       <td>${actionsHtml}</td>
