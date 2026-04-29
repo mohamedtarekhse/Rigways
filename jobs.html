@@ -221,6 +221,7 @@
 let session = null;
 let jobsReadOnly = false;
 let FUNCTIONAL_LOCATIONS = [];
+let CLIENTS = [];
 let INSPECTORS = [];
 let SELECTED_INSPECTOR_IDS = [];
 function getSession(){ return (typeof SapSession!=='undefined') ? SapSession.get() : JSON.parse(sessionStorage.getItem('sap_session')||'null'); }
@@ -237,11 +238,24 @@ async function loadClientsDropdown() {
   const res = await apiFetch('/api/clients?status=active&limit=500');
   const raw = await res.json();
   const list = (raw.data?.clients || raw.data || []).filter(c => c.status === 'active');
+  CLIENTS = list;
   sel.innerHTML = '<option value="">Select client…</option>' + list.map(c => {
     const val = c.client_id || c.id;
     return `<option value="${val}">${c.name} (${val})</option>`;
   }).join('');
   onJobClientChange();
+}
+
+function clientDisplayName(clientId) {
+  const key = String(clientId || '').trim().toLowerCase();
+  const hit = CLIENTS.find(c => String(c.client_id || c.id || '').trim().toLowerCase() === key);
+  return hit?.name || clientId || '';
+}
+
+function functionalLocationDisplayName(flId) {
+  const key = String(flId || '').trim().toLowerCase();
+  const hit = FUNCTIONAL_LOCATIONS.find(fl => String(fl.fl_id || '').trim().toLowerCase() === key);
+  return hit?.name || flId || '';
 }
 
 async function loadFunctionalLocations() {
@@ -395,8 +409,8 @@ async function loadJobs(){
         </div>`;
     return `<tr>
       <td>${j.job_number||''}</td>
-      <td>${j.client_id||''}</td>
-      <td>${j.functional_location||''}</td>
+      <td>${clientDisplayName(j.client_id)}</td>
+      <td>${functionalLocationDisplayName(j.functional_location)}</td>
       <td>${j.scope||''}</td>
       <td>${formatJobStatus(j.status)}</td>
       <td>${actionsHtml}</td>
@@ -502,7 +516,8 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   if (jobsReadOnly) {
     await loadJobs();
   } else {
-    await Promise.all([loadClientsDropdown(), loadFunctionalLocations(), loadInspectorsDropdown(), loadJobs()]);
+    await Promise.all([loadClientsDropdown(), loadFunctionalLocations(), loadInspectorsDropdown()]);
+    await loadJobs();
     setupInspectorPicker();
   }
 });
