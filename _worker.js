@@ -1611,15 +1611,16 @@ async function handleCertificates(request, env, path) {
         return badReq('Technician uploads are only allowed for active or reopened jobs', 'INVALID_STATE', env);
       }
 
-      if (job && String(job.client_id || '') !== String(asset.client_id || '')) {
-        return badReq('Asset client must match the assigned job client', 'VALIDATION', env);
-      }
+    }
 
-      const jobFL = String(job?.functional_location || '').trim();
-      const assetFL = String(asset?.functional_location || '').trim();
-      if (jobFL && jobFL !== assetFL) {
-        return badReq('Asset functional location must match the assigned job functional location', 'VALIDATION', env);
-      }
+    if (job && String(job.client_id || '') !== String(asset.client_id || '')) {
+      return badReq('Asset client must match the assigned job client', 'VALIDATION', env);
+    }
+
+    const jobFL = String(job?.functional_location || '').trim();
+    const assetFL = String(asset?.functional_location || '').trim();
+    if (jobFL && jobFL !== assetFL) {
+      return badReq('Asset functional location must match the assigned job functional location', 'VALIDATION', env);
     }
 
     const { data, error } = await db.insert('certificates', {
