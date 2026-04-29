@@ -1318,7 +1318,10 @@ function renderTable() {
         <span style="font-family:monospace;font-size:11px;font-weight:700;color:var(--sap-brand);background:var(--sap-brand-light);border:1px solid var(--sap-info-border);border-radius:4px;padding:2px 6px;white-space:nowrap;">${c.jobNumber||'—'}</span>
       </td>
       <td data-col="certId"><span class="cert-id-chip">${fmtCertId(c)}</span></td>
-      <td data-col="assetId"><span class="asset-id-chip">${c.assetId||'—'}</span></td>
+      <td data-col="assetId">
+        <span class="asset-id-chip">${c.assetId||'—'}</span>
+        <div style="font-size:11px;color:var(--sap-text-secondary);margin-top:3px;line-height:1.25;">${h(c.assetDescription || '—')}</div>
+      </td>
       <td data-col="name">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;">
           <div style="min-width:0;">
@@ -3107,7 +3110,12 @@ async function loadCerts() {
     const cd = certRes.data  || certRes;
     const ad = assetRes.data || assetRes;
     const assetMap = {};
-    (ad.assets || ad || []).forEach(a => { if (a.id) assetMap[a.id] = a.asset_number || a.id; });
+    const assetDescMap = {};
+    (ad.assets || ad || []).forEach(a => {
+      if (!a?.id) return;
+      assetMap[a.id] = a.asset_number || a.id;
+      assetDescMap[a.id] = a.description || a.name || '';
+    });
     window._assetMap = assetMap;
     CERTS = (cd.certificates || cd || []).map(cert => {
       const rawType = String(cert.cert_type || '');
@@ -3125,6 +3133,7 @@ async function loadCerts() {
       issueDate:       cert.issue_date,
       issuedBy:        cert.issued_by,
       assetId:         assetMap[cert.asset_id] || cert.asset_id || '—',
+      assetDescription: assetDescMap[cert.asset_id] || '',
       client:          cert.client_id,
       fileName:        cert.file_name || '',
       fileUrl:         cert.file_url  || '',
