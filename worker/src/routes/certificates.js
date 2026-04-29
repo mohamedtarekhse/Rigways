@@ -194,18 +194,16 @@ export async function handleCertificates(request, env, path) {
         return badReq('Technician uploads are only allowed for active or reopened jobs', 'INVALID_STATE', env);
       }
 
-      // Job and asset must belong to same client.
-      if (job && String(job.client_id || '') !== String(asset.client_id || '')) {
-        return badReq('Asset client must match the assigned job client', 'VALIDATION', env);
-      }
+    }
 
-      // Functional location must match job FL when job FL is present.
-      // If job has no FL, fallback is client-level permission (validated above).
-      const jobFL = String(job?.functional_location || '').trim();
-      const assetFL = String(asset?.functional_location || '').trim();
-      if (jobFL && jobFL !== assetFL) {
-        return badReq('Asset functional location must match the assigned job functional location', 'VALIDATION', env);
-      }
+    // When a job is assigned, enforce same client + functional location for all roles.
+    if (job && String(job.client_id || '') !== String(asset.client_id || '')) {
+      return badReq('Asset client must match the assigned job client', 'VALIDATION', env);
+    }
+    const jobFL = String(job?.functional_location || '').trim();
+    const assetFL = String(asset?.functional_location || '').trim();
+    if (jobFL && jobFL !== assetFL) {
+      return badReq('Asset functional location must match the assigned job functional location', 'VALIDATION', env);
     }
 
     const { data, error } = await db.insert('certificates', {

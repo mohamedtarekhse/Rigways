@@ -1274,6 +1274,9 @@ async function handleCertUpload(request, env, path) {
 
   // ── POST /api/certificates/upload ──
   if (path === '/certificates/upload' && request.method === 'POST') {
+    if (!requireRole(session, ['admin', 'manager', 'technician'])) {
+      return forbidden(env);
+    }
     if (!isStorageConfigured(env)) {
       return json({ success: false, error: 'Storage is not configured. Configure B2_* variables (primary) or CERT_BUCKET (R2 fallback).', code: 'NO_BUCKET' }, 500, env);
     }
@@ -1608,15 +1611,16 @@ async function handleCertificates(request, env, path) {
         return badReq('Technician uploads are only allowed for active or reopened jobs', 'INVALID_STATE', env);
       }
 
-      if (job && String(job.client_id || '') !== String(asset.client_id || '')) {
-        return badReq('Asset client must match the assigned job client', 'VALIDATION', env);
-      }
+    }
 
-      const jobFL = String(job?.functional_location || '').trim();
-      const assetFL = String(asset?.functional_location || '').trim();
-      if (jobFL && jobFL !== assetFL) {
-        return badReq('Asset functional location must match the assigned job functional location', 'VALIDATION', env);
-      }
+    if (job && String(job.client_id || '') !== String(asset.client_id || '')) {
+      return badReq('Asset client must match the assigned job client', 'VALIDATION', env);
+    }
+
+    const jobFL = String(job?.functional_location || '').trim();
+    const assetFL = String(asset?.functional_location || '').trim();
+    if (jobFL && jobFL !== assetFL) {
+      return badReq('Asset functional location must match the assigned job functional location', 'VALIDATION', env);
     }
 
     const { data, error } = await db.insert('certificates', {

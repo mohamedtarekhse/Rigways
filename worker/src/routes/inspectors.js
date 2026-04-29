@@ -101,9 +101,15 @@ async function ensureInspectorUser(db, inspector) {
 export async function handleInspectors(request, env, path) {
   const session = await getSession(request, env);
   if (!session) return unauth(env);
-  if (!requireRole(session, ['admin','manager'])) return forbidden(env);
 
   const method = request.method;
+  const isInspectorUpload = method === 'POST' && (path === '/inspectors/upload-file' || path === '/inspectors/upload-cv');
+  if (isInspectorUpload) {
+    if (!requireRole(session, ['admin', 'technician'])) return forbidden(env);
+  } else if (!requireRole(session, ['admin', 'manager'])) {
+    return forbidden(env);
+  }
+
   const db     = createSupabase(env);
   const url    = new URL(request.url);
   const fileM  = path.match(/^\/inspectors\/file\/([^/]+)$/);
@@ -117,7 +123,7 @@ export async function handleInspectors(request, env, path) {
   const isStorageReady = () => !!(env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET_ID && env.B2_BUCKET_NAME) || !!env.CERT_BUCKET;
 
   if (path === '/inspectors/upload-file' && method === 'POST') {
-    if (!requireRole(session, ['admin'])) return forbidden(env);
+    if (!requireRole(session, ['admin', 'technician'])) return forbidden(env);
     if (!isStorageReady()) return badReq('Storage not configured. Set B2_* variables (primary) or CERT_BUCKET (R2 fallback).','NO_BUCKET',env);
     let formData;
     try { formData = await request.formData(); } catch { return badReq('Invalid form data','BAD_FORM_DATA',env); }
@@ -180,7 +186,7 @@ export async function handleInspectors(request, env, path) {
   }
 
   if (path === '/inspectors/upload-cv' && method === 'POST') {
-    if (!requireRole(session, ['admin'])) return forbidden(env);
+    if (!requireRole(session, ['admin', 'technician'])) return forbidden(env);
     if (!isStorageReady()) return badReq('Storage not configured. Set B2_* variables (primary) or CERT_BUCKET (R2 fallback).','NO_BUCKET',env);
     let formData;
     try { formData = await request.formData(); } catch { return badReq('Invalid form data','BAD_FORM_DATA',env); }
