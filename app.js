@@ -1009,7 +1009,12 @@ function ensureJobsNavForRole(role) {
 }
 
 function ensureFilesNavForRole(role) {
-  if (role !== 'admin') return;
+  if (role !== 'admin') {
+    document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
+      inner.querySelector('a[href="files.html"]')?.remove();
+    });
+    return;
+  }
   document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
     if (inner.querySelector('a[href="files.html"]')) return;
     const a = document.createElement('a');
