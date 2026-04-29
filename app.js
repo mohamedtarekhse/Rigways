@@ -988,7 +988,13 @@ const SapEventBus = (() => {
    14. AUTO-INIT
 ================================================================ */
 function ensureJobsNavForRole(role) {
-  if (!['admin', 'manager', 'technician'].includes(role)) return;
+  if (!['admin', 'manager'].includes(role)) {
+    document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
+      inner.querySelector('a[href="jobs.html"]')?.remove();
+      inner.querySelector('a[href="notifications.html"]')?.remove();
+    });
+    return;
+  }
   document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
     if (inner.querySelector('a[href="jobs.html"]')) return;
     const a = document.createElement('a');
