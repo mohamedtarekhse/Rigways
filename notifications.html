@@ -814,10 +814,12 @@ function getPriorityTag(priority, daysLeft) {
 }
 
 function getClientBadge(clientId) {
-  const map = { C001:'Acme Corp', C002:'Gulf Holdings', C003:'Delta Industries', C004:'Nile Ventures' };
   const colors = { C001:'#0070f2', C002:'#188918', C003:'#e76500', C004:'#bb0000' };
   if (!clientId) return '';
-  return `<span style="font-size:10px;font-weight:700;color:${colors[clientId]||'#6a6d70'};background:var(--sap-page-bg);border:1px solid var(--sap-table-border);border-radius:10px;padding:1px 7px;">${map[clientId]||clientId}</span>`;
+  const name = (window.SapClients && typeof window.SapClients.display === 'function')
+    ? window.SapClients.display(clientId)
+    : clientId;
+  return `<span style="font-size:10px;font-weight:700;color:${colors[clientId]||'#6a6d70'};background:var(--sap-page-bg);border:1px solid var(--sap-table-border);border-radius:10px;padding:1px 7px;">${h(name)}</span>`;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1137,7 +1139,7 @@ function buildEmailBody() {
   const recipientName = (selVal && selVal !== '__custom__') ? selText.split('—')[0].trim() : '';
 
   const CLIENT_NAMES = {
-    C001:'Acme Corp', C002:'Gulf Holdings', C003:'Delta Industries', C004:'Nile Ventures', GENERAL:'General'
+    GENERAL:'General'
   };
   const PRIORITY_LABEL = {
     critical:'🔴 CRITICAL', high:'🟠 HIGH', medium:'🟡 MEDIUM', info:'ℹ️  INFO', success:'✅ SUCCESS'
@@ -1172,7 +1174,7 @@ function buildEmailBody() {
   body += `  🟡 Medium          : ${med}\n\n`;
 
   Object.entries(byClient).forEach(([cid, alerts]) => {
-    const cname = CLIENT_NAMES[cid] || cid;
+    const cname = CLIENT_NAMES[cid] || ((window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(cid) : cid);
     body += '─'.repeat(65) + '\n';
     body += `  CLIENT: ${cname}${cid !== 'GENERAL' ? '  ('+cid+')' : ''}  —  ${alerts.length} alert${alerts.length !== 1 ? 's' : ''}\n`;
     body += '─'.repeat(65) + '\n\n';
