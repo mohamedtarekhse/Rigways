@@ -666,7 +666,6 @@ document.addEventListener('click', e => {
 function dFromNow(d) { const dt=new Date(); dt.setDate(dt.getDate()+d); return dt.toISOString().split('T')[0]; }
 
 let NOTIFICATIONS = [];
-let FILTER_CLIENT_IDS = [];
 let FILTER_CLIENT_NAMES = [];
 let FILTER_LOCATIONS = [];
 let FILTER_LOCATIONS_BY_CLIENT = new Map();
@@ -781,8 +780,8 @@ async function loadFilterSources() {
       const raw = await clientsRes.value.json();
       const clients = raw?.data?.clients || raw?.data || raw?.clients || [];
       const cList = Array.isArray(clients) ? clients : [];
-      FILTER_CLIENT_IDS = [...new Set(cList.map(c => String(c.client_id || c.id || '').trim()).filter(Boolean))];
-      FILTER_CLIENT_NAMES = [...new Set(cList.map(c => String(c.name || c.client_name || '').trim()).filter(Boolean))];
+      // Only store unique client names (not IDs) for the dropdown - sorted alphabetically
+      FILTER_CLIENT_NAMES = [...new Set(cList.map(c => String(c.name || c.client_name || '').trim()).filter(Boolean))].sort();
     }
 
     if (locsRes.status === 'fulfilled') {
@@ -790,6 +789,7 @@ async function loadFilterSources() {
       const locs = raw?.data?.functional_locations || raw?.data || raw?.functional_locations || [];
       const flList = Array.isArray(locs) ? locs : [];
       FILTER_LOCATIONS = [...new Set(flList.map(l => String(l.name || l.functional_location || l.location || '').trim()).filter(Boolean))];
+      // Build map of client name → functional locations for filtering
       FILTER_LOCATIONS_BY_CLIENT = new Map();
       flList.forEach(l => {
         const clientId = String(l.client_id || '').trim();
@@ -811,17 +811,23 @@ function populateFilters(source = NOTIFICATIONS) {
   const prevClient = clientSel.value;
   const prevLoc = locSel.value;
 
+  // Combine database clients with clients from notifications, deduplicate and sort
   const clients = [...new Set([...(FILTER_CLIENT_NAMES || []), ...(source || []).map(n => (n.clientName || '').trim())].filter(Boolean))].sort();
 
+  // Populate client dropdown with names only (no IDs)
   clientSel.innerHTML = '<option value="">All Clients</option>' + clients.map(name => (`<option value="${h(name)}">${h(name)}</option>`)).join('');
 
+  // Get selected client (preserve previous selection if still valid)
   const selectedClient = prevClient && clients.includes(prevClient) ? prevClient : (clientSel.value || '');
+  
+  // Filter functional locations based on selected client
   const locsFromNotifications = (source || []).filter(n => !selectedClient || String(n.clientName || '').trim() === selectedClient).map(n => (n.functionalLocation || '').trim());
   const locsFromClientMap = selectedClient && FILTER_LOCATIONS_BY_CLIENT.has(selectedClient) ? [...FILTER_LOCATIONS_BY_CLIENT.get(selectedClient)] : FILTER_LOCATIONS;
   const locs = [...new Set([...(locsFromClientMap || []), ...locsFromNotifications].filter(Boolean))].sort();
 
   locSel.innerHTML = '<option value="">All Functional Locations</option>' + locs.map(loc => `<option value="${h(loc)}">${h(loc)}</option>`).join('');
 
+  // Restore previous selections if they're still valid
   if (prevClient && clients.includes(prevClient)) clientSel.value = prevClient;
   if (prevLoc && locs.includes(prevLoc)) locSel.value = prevLoc;
 }
