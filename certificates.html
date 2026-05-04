@@ -793,8 +793,16 @@
           <!-- Client -->
           <div class="sap-field" id="f_client_wrap">
             <label class="sap-label">Linked Client <span class="required">*</span></label>
-            <select id="f_client" class="sap-select">
+            <select id="f_client" class="sap-select" onchange="onCertClientChange()">
               <option value="">Select client…</option>
+            </select>
+          </div>
+
+          <!-- Functional Location -->
+          <div class="sap-field" id="f_funcLoc_wrap">
+            <label class="sap-label">Functional Location</label>
+            <select id="f_funcLoc" class="sap-select">
+              <option value="">Select functional location…</option>
             </select>
           </div>
 
