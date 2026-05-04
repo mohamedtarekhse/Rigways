@@ -1496,7 +1496,7 @@ const DEFAULT_FUNC_LOCS = [
 ];
 function loadFuncLocs() {
   // Synchronous fallback — returns cached data populated by loadFuncLocsFromAPI()
-  return window._funcLocsCache || [];
+  return window._funcLocsCache || DEFAULT_FUNC_LOCS;
 }
 function saveFuncLocs() {} // no-op — managed via API now
 function nextFuncLocId() { return 'FL-' + Date.now().toString().slice(-4); }
