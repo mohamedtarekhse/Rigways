@@ -847,14 +847,6 @@
                   <input type="text" id="inline_loc_name" class="sap-input" placeholder="e.g. Rig 15 or Workshop C"/>
                 </div>
                 <div class="sap-field">
-
-          <!-- Client (admin/manager only) -->
-          <div class="sap-field" id="f_client_wrap">
-            <label class="sap-label">Assigned Client <span class="required">*</span></label>
-            <select id="f_client" class="sap-select" required onchange="onAssetClientChange()">
-              <option value="">Select client…</option>
-            </select>
-          </div>
                   <label class="sap-label">Type <span class="required">*</span></label>
                   <select id="inline_loc_type" class="sap-select">
                     <option value="Rig">Rig</option>
@@ -875,6 +867,14 @@
                 </button>
               </div>
             </div>
+          </div>
+
+          <!-- Client (admin/manager only) -->
+          <div class="sap-field" id="f_client_wrap">
+            <label class="sap-label">Assigned Client <span class="required">*</span></label>
+            <select id="f_client" class="sap-select" required onchange="onAssetClientChange()">
+              <option value="">Select client…</option>
+            </select>
           </div>
 
           <!-- Notes -->
