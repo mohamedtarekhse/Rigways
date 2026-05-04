@@ -464,7 +464,7 @@
       </div>
 
       <div style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-sm);flex-wrap:wrap;justify-content:flex-end;">
-        <select class="sap-select" id="clientFilter" onchange="renderNotifs()" style="min-width:170px;">
+        <select class="sap-select" id="clientFilter" onchange="onClientFilterChange()" style="min-width:170px;">
           <option value="">All Clients</option>
         </select>
         <select class="sap-select" id="funcLocFilter" onchange="renderNotifs()" style="min-width:190px;">
@@ -667,7 +667,9 @@ function dFromNow(d) { const dt=new Date(); dt.setDate(dt.getDate()+d); return d
 
 let NOTIFICATIONS = [];
 let FILTER_CLIENT_IDS = [];
+let FILTER_CLIENT_NAMES = [];
 let FILTER_LOCATIONS = [];
+let FILTER_LOCATIONS_BY_CLIENT = new Map();
 
 
 /* ═══════════════════════════════════════════════════════
@@ -762,6 +764,12 @@ function getClientBadge(clientId) {
 
 
 
+
+function onClientFilterChange() {
+  populateFilters(NOTIFICATIONS);
+  renderNotifs();
+}
+
 async function loadFilterSources() {
   try {
     const [clientsRes, locsRes] = await Promise.allSettled([
@@ -772,13 +780,25 @@ async function loadFilterSources() {
     if (clientsRes.status === 'fulfilled') {
       const raw = await clientsRes.value.json();
       const clients = raw?.data?.clients || raw?.data || raw?.clients || [];
-      FILTER_CLIENT_IDS = [...new Set((Array.isArray(clients) ? clients : []).map(c => String(c.client_id || c.id || '').trim()).filter(Boolean))];
+      const cList = Array.isArray(clients) ? clients : [];
+      FILTER_CLIENT_IDS = [...new Set(cList.map(c => String(c.client_id || c.id || '').trim()).filter(Boolean))];
+      FILTER_CLIENT_NAMES = [...new Set(cList.map(c => String(c.name || c.client_name || '').trim()).filter(Boolean))];
     }
 
     if (locsRes.status === 'fulfilled') {
       const raw = await locsRes.value.json();
       const locs = raw?.data?.functional_locations || raw?.data || raw?.functional_locations || [];
-      FILTER_LOCATIONS = [...new Set((Array.isArray(locs) ? locs : []).map(l => String(l.name || l.functional_location || l.location || '').trim()).filter(Boolean))];
+      const flList = Array.isArray(locs) ? locs : [];
+      FILTER_LOCATIONS = [...new Set(flList.map(l => String(l.name || l.functional_location || l.location || '').trim()).filter(Boolean))];
+      FILTER_LOCATIONS_BY_CLIENT = new Map();
+      flList.forEach(l => {
+        const clientId = String(l.client_id || '').trim();
+        const clientName = (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(clientId) : clientId;
+        const locName = String(l.name || l.functional_location || l.location || '').trim();
+        if (!locName) return;
+        if (!FILTER_LOCATIONS_BY_CLIENT.has(clientName)) FILTER_LOCATIONS_BY_CLIENT.set(clientName, new Set());
+        FILTER_LOCATIONS_BY_CLIENT.get(clientName).add(locName);
+      });
     }
   } catch (e) {}
 }
@@ -791,13 +811,14 @@ function populateFilters(source = NOTIFICATIONS) {
   const prevClient = clientSel.value;
   const prevLoc = locSel.value;
 
-  const clients = [...new Set([...(FILTER_CLIENT_IDS || []), ...(source || []).map(n => (n.client || '').trim())].filter(Boolean))].sort();
-  const locs = [...new Set([...(FILTER_LOCATIONS || []), ...(source || []).map(n => (n.functionalLocation || '').trim())].filter(Boolean))].sort();
+  const clients = [...new Set([...(FILTER_CLIENT_NAMES || []), ...(source || []).map(n => (n.clientName || '').trim())].filter(Boolean))].sort();
 
-  clientSel.innerHTML = '<option value="">All Clients</option>' + clients.map(cid => {
-    const label = (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(cid) : cid;
-    return `<option value="${h(cid)}">${h(label)}</option>`;
-  }).join('');
+  clientSel.innerHTML = '<option value="">All Clients</option>' + clients.map(name => (`<option value="${h(name)}">${h(name)}</option>`)).join('');
+
+  const selectedClient = prevClient && clients.includes(prevClient) ? prevClient : (clientSel.value || '');
+  const locsFromNotifications = (source || []).filter(n => !selectedClient || String(n.clientName || '').trim() === selectedClient).map(n => (n.functionalLocation || '').trim());
+  const locsFromClientMap = selectedClient && FILTER_LOCATIONS_BY_CLIENT.has(selectedClient) ? [...FILTER_LOCATIONS_BY_CLIENT.get(selectedClient)] : FILTER_LOCATIONS;
+  const locs = [...new Set([...(locsFromClientMap || []), ...locsFromNotifications].filter(Boolean))].sort();
 
   locSel.innerHTML = '<option value="">All Functional Locations</option>' + locs.map(loc => `<option value="${h(loc)}">${h(loc)}</option>`).join('');
 
@@ -836,7 +857,7 @@ function renderNotifs() {
   if (currentTab === 'unread')   data = data.filter(n => !n.read && !n.is_read && !n.isRead);
 
   /* Dropdown filters */
-  if (clientFilter) data = data.filter(n => String(n.client || '').trim() === clientFilter);
+  if (clientFilter) data = data.filter(n => String(n.clientName || '').trim() === clientFilter);
   if (funcLocFilter) data = data.filter(n => String(n.functionalLocation || '').trim() === funcLocFilter);
 
   /* Search */
@@ -1279,21 +1300,18 @@ async function loadNotifications() {
     await loadFilterSources();
 
     // Load each source independently so one failing API does not blank the page
-    const [notifRes, expiringRes, expiredRes, assetsRes] = await Promise.allSettled([
+    const [notifRes, certsRes, assetsRes] = await Promise.allSettled([
       apiFetch('/api/notifications?limit=200'),
-      apiFetch('/api/certificates/expiring?days=30'),
-      apiFetch('/api/certificates?approval_status=approved&limit=200'),
+      apiFetch('/api/certificates?limit=2000'),
       apiFetch('/api/assets?limit=1000'),
     ]);
 
     const nd = notifRes.status === 'fulfilled' ? await notifRes.value.json() : {};
-    const ed = expiringRes.status === 'fulfilled' ? await expiringRes.value.json() : {};
-    const ad = expiredRes.status === 'fulfilled' ? await expiredRes.value.json() : {};
+    const cd = certsRes.status === 'fulfilled' ? await certsRes.value.json() : {};
     const as = assetsRes.status === 'fulfilled' ? await assetsRes.value.json() : {};
 
     const dbNotifs  = ((nd.data || nd).notifications || nd.data || []);
-    const expiring  = ((ed.data || ed).certificates  || []);
-    const allCerts  = ((ad.data || ad).certificates  || []);
+    const allCerts  = ((cd.data || cd).certificates  || []);
     const allAssets = ((as.data || as).assets || []);
     const assetsList = Array.isArray(allAssets) ? allAssets : [];
     const assetNumberById = new Map(assetsList.map(a => [a.id, a.asset_number || a.id]));
@@ -1306,9 +1324,11 @@ async function loadNotifications() {
     const expiryNotifs = [];
 
     // Certs expiring within 30 days
-    expiring.forEach(cert => {
+    (Array.isArray(allCerts) ? allCerts : []).forEach(cert => {
+      if (!cert?.expiry_date) return;
       const expiryMs = new Date(cert.expiry_date).setHours(0,0,0,0);
       const days     = Math.ceil((expiryMs - todayMs) / 86400000);
+      if (days < 0 || days > 30) return;
       const priority = days <= 7 ? 'critical' : days <= 14 ? 'high' : 'medium';
       const assetLabel = assetNumberById.get(cert.asset_id) || cert.asset_id || '—';
       const funcLoc = assetLocById.get(cert.asset_id) || '';
@@ -1320,6 +1340,7 @@ async function loadNotifications() {
         priority,
         daysLeft:  days,
         client:    cert.client_id,
+        clientName: (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(cert.client_id) : (cert.client_id || ''),
         certId:    cert.cert_number || cert.id,
         jobNumber: cert.notes || '',
         read:      false,
@@ -1346,6 +1367,7 @@ async function loadNotifications() {
           priority:  'critical',
           daysLeft:  days,
           client:    cert.client_id,
+          clientName: (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(cert.client_id) : (cert.client_id || ''),
           certId:    cert.cert_number || cert.id,
           jobNumber: cert.notes || '',
           read:      false,
@@ -1379,6 +1401,7 @@ async function loadNotifications() {
         priority,
         daysLeft:  null,
         client:    n.client_id || null,
+        clientName: (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(n.client_id || '') : (n.client_id || ''),
         certId:    n.ref_type === 'certificate' ? n.ref_id : null,
         jobNumber: '',
         functionalLocation: '',
