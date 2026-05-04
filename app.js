@@ -1045,6 +1045,48 @@ function ensureDashboardNavForRole(role) {
 
 
 
+
+function normalizeNavbarStructure(role) {
+  const preferred = [
+    'assets.html',
+    'certificates.html',
+    'jobs.html',
+    'notifications.html',
+    'dashboard.html',
+    'files.html',
+    'clients.html',
+    'inspectors.html',
+    'functional-locations.html',
+  ];
+  const adminSet = new Set(['dashboard.html','files.html','clients.html','inspectors.html','functional-locations.html']);
+
+  document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
+    const links = [...inner.querySelectorAll('a.sap-nav-item')];
+    if (!links.length) return;
+
+    const byHref = new Map(links.map(a => [a.getAttribute('href') || '', a]));
+    const ordered = preferred.map(h => byHref.get(h)).filter(Boolean);
+    const leftovers = links.filter(a => !preferred.includes(a.getAttribute('href') || ''));
+    const finalLinks = [...ordered, ...leftovers];
+
+    const hasAdminLink = finalLinks.some(a => adminSet.has(a.getAttribute('href') || ''));
+
+    inner.innerHTML = '';
+    let dividerAdded = false;
+    finalLinks.forEach(a => {
+      const href = a.getAttribute('href') || '';
+      if (!dividerAdded && hasAdminLink && adminSet.has(href) && role === 'admin') {
+        const divider = document.createElement('div');
+        divider.className = 'sap-navbar__divider';
+        divider.id = 'adminSection';
+        inner.appendChild(divider);
+        dividerAdded = true;
+      }
+      inner.appendChild(a);
+    });
+  });
+}
+
 function applyPageBodyClass() {
   const page = (window.location.pathname.split('/').pop() || '').toLowerCase();
   const slug = page.replace(/\.html$/, '').replace(/[^a-z0-9-]/g, '');
@@ -1114,6 +1156,7 @@ function applyPlanBMobileLayout() {
     ensureJobsNavForRole(session.role);
     ensureFilesNavForRole(session.role);
     ensureDashboardNavForRole(session.role);
+    normalizeNavbarStructure(session.role);
 
     /* ── Role visibility ── */
     SapRoles.applyVisibility(session.role);
