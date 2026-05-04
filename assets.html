@@ -1515,7 +1515,8 @@ async function loadFuncLocsFromAPI() {
     }));
   } catch(e) {
     console.warn('loadFuncLocsFromAPI failed:', e);
-    window._funcLocsCache = window._funcLocsCache || [];
+    // Keep default fallback on error instead of empty array
+    window._funcLocsCache = DEFAULT_FUNC_LOCS;
   }
   populateToolbarLocationFilter();
 }
