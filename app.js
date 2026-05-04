@@ -85,6 +85,88 @@ function apiFetch(path, options = {}) {
   });
 }
 
+
+
+const SapClients = (() => {
+  const CACHE_KEY = 'sap_clients_name_map';
+  let memo = null;
+
+  function _readCache() {
+    if (memo) return memo;
+    try {
+      const raw = sessionStorage.getItem(CACHE_KEY);
+      memo = raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      memo = {};
+    }
+    return memo;
+  }
+
+  function _writeCache(map) {
+    memo = map || {};
+    try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(memo)); } catch (e) {}
+  }
+
+  async function warm() {
+    const current = _readCache();
+    if (Object.keys(current).length) return current;
+    try {
+      const res = await apiFetch('/api/clients?limit=1000');
+      const raw = await res.json();
+      const list = raw?.data?.clients || raw?.data || raw?.clients || [];
+      const map = {};
+      (Array.isArray(list) ? list : []).forEach(c => {
+        const id = String(c.client_id || c.id || '').trim();
+        const name = String(c.name || c.client_name || '').trim();
+        if (id && name) map[id.toUpperCase()] = name;
+      });
+      if (Object.keys(map).length) _writeCache(map);
+      return _readCache();
+    } catch (e) {
+      return current;
+    }
+  }
+
+  function display(id) {
+    const key = String(id || '').trim().toUpperCase();
+    return _readCache()[key] || String(id || '').trim();
+  }
+
+  function hydrateUi(root = document) {
+    const map = _readCache();
+    if (!Object.keys(map).length) return;
+
+    const headerIndexes = new WeakMap();
+    root.querySelectorAll('table').forEach(table => {
+      const headers = [...table.querySelectorAll('thead th')].map(th => (th.textContent || '').trim().toLowerCase());
+      const idx = headers.map((h,i)=> /client/.test(h) ? i : -1).filter(i => i >= 0);
+      if (idx.length) headerIndexes.set(table, new Set(idx));
+    });
+
+    root.querySelectorAll('tbody tr').forEach(tr => {
+      const table = tr.closest('table');
+      const idxSet = table ? headerIndexes.get(table) : null;
+      if (!idxSet) return;
+      [...tr.children].forEach((td, i) => {
+        if (!idxSet.has(i)) return;
+        const raw = (td.textContent || '').trim();
+        const key = raw.toUpperCase();
+        if (map[key] && !td.querySelector('*')) td.textContent = map[key];
+      });
+    });
+
+    root.querySelectorAll('option').forEach(opt => {
+      const v = String(opt.value || '').trim().toUpperCase();
+      if (!map[v]) return;
+      const text = (opt.textContent || '').trim();
+      if (text === opt.value || text === v) opt.textContent = map[v];
+    });
+  }
+
+  return { warm, display, hydrateUi };
+})();
+if (typeof window !== 'undefined') window.SapClients = SapClients;
+
 /* ================================================================
    DRAFT STORAGE (sessionStorage)
 ================================================================ */
@@ -1045,6 +1127,48 @@ function ensureDashboardNavForRole(role) {
 
 
 
+
+function normalizeNavbarStructure(role) {
+  const preferred = [
+    'assets.html',
+    'certificates.html',
+    'jobs.html',
+    'notifications.html',
+    'dashboard.html',
+    'files.html',
+    'clients.html',
+    'inspectors.html',
+    'functional-locations.html',
+  ];
+  const adminSet = new Set(['dashboard.html','files.html','clients.html','inspectors.html','functional-locations.html']);
+
+  document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
+    const links = [...inner.querySelectorAll('a.sap-nav-item')];
+    if (!links.length) return;
+
+    const byHref = new Map(links.map(a => [a.getAttribute('href') || '', a]));
+    const ordered = preferred.map(h => byHref.get(h)).filter(Boolean);
+    const leftovers = links.filter(a => !preferred.includes(a.getAttribute('href') || ''));
+    const finalLinks = [...ordered, ...leftovers];
+
+    const hasAdminLink = finalLinks.some(a => adminSet.has(a.getAttribute('href') || ''));
+
+    inner.innerHTML = '';
+    let dividerAdded = false;
+    finalLinks.forEach(a => {
+      const href = a.getAttribute('href') || '';
+      if (!dividerAdded && hasAdminLink && adminSet.has(href) && role === 'admin') {
+        const divider = document.createElement('div');
+        divider.className = 'sap-navbar__divider';
+        divider.id = 'adminSection';
+        inner.appendChild(divider);
+        dividerAdded = true;
+      }
+      inner.appendChild(a);
+    });
+  });
+}
+
 function applyPageBodyClass() {
   const page = (window.location.pathname.split('/').pop() || '').toLowerCase();
   const slug = page.replace(/\.html$/, '').replace(/[^a-z0-9-]/g, '');
@@ -1114,6 +1238,7 @@ function applyPlanBMobileLayout() {
     ensureJobsNavForRole(session.role);
     ensureFilesNavForRole(session.role);
     ensureDashboardNavForRole(session.role);
+    normalizeNavbarStructure(session.role);
 
     /* ── Role visibility ── */
     SapRoles.applyVisibility(session.role);
@@ -1122,6 +1247,8 @@ function applyPlanBMobileLayout() {
     applyPageBodyClass();
     applyPlanBMobileLayout();
     SapDensity.init();
+
+    SapClients.warm().then(() => SapClients.hydrateUi()).catch(() => {});
 
     /* ── Wire global buttons ── */
     const langBtn = document.getElementById('langBtn');
@@ -1177,6 +1304,9 @@ function applyPlanBMobileLayout() {
 
     /* ── Emit ready event ── */
     SapEventBus.emit('app:ready', { session, lang: sessionLang });
+
+    const obs = new MutationObserver(() => { SapClients.hydrateUi(); });
+    obs.observe(document.body, { childList: true, subtree: true });
   });
 })();
 

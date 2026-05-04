@@ -417,85 +417,11 @@
       <div class="sap-page-header__subtitle">Certificate expiry alerts, approval updates, and system events</div>
     </div>
     <div class="sap-page-header__actions">
-      <button class="btn btn-ghost" onclick="resubscribePush()" title="Reset Push Delivery">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-        <span>Reset Push</span>
-      </button>
-      <button class="btn btn-ghost" onclick="markAllRead()">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="20 6 9 17 4 12"/></svg>
-        <span>Mark All Read</span>
-      </button>
-      <button class="btn btn-ghost" onclick="dismissAll()" id="dismissAllBtn">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
-        <span>Clear All</span>
-      </button>
       <button class="btn btn-primary" onclick="openEmailModal()" id="sendEmailBtn">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
         <span>Send Alerts by Email</span>
       </button>
-      <button class="btn btn-ghost" onclick="runDiagnostic()">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-        <span>Check Health</span>
-      </button>
     </div>
-  </div>
-
-  <!-- Alert Config Panel (Admin only) -->
-  <div class="config-panel" id="configPanel">
-    <div class="config-panel__left">
-      <div class="config-panel__title">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-        <span>Alert Configuration</span>
-      </div>
-      <div class="config-panel__sub">Configure when expiry alerts are triggered for certificates</div>
-    </div>
-    <div class="config-panel__right">
-      <div class="config-field">
-        <label>CRITICAL (days before)</label>
-        <input type="number" class="config-input" id="critDays" value="7" min="1" max="30" style="width:80px;"/>
-      </div>
-      <div class="config-field">
-        <label>WARNING (days before)</label>
-        <input type="number" class="config-input" id="warnDays" value="14" min="1" max="60" style="width:80px;"/>
-      </div>
-      <div class="config-field">
-        <label>NOTICE (days before)</label>
-        <input type="number" class="config-input" id="noticeDays" value="30" min="1" max="90" style="width:80px;"/>
-      </div>
-      <div class="config-field">
-        <label>EMAIL DIGEST</label>
-        <select class="config-input" id="digestFreq" style="width:120px;">
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
-          <option value="off">Off</option>
-        </select>
-      </div>
-      <button class="config-save-btn" onclick="saveConfig()">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        <span>Save Config</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- Deployment Diagnostic Panel -->
-  <div class="sap-card" id="diagPanel" style="display:none; margin-bottom:var(--sp-md); border-left: 4px solid var(--sap-warning);">
-    <div class="sap-card__header">
-      <div class="sap-card__title">System & Deployment Status</div>
-      <button class="btn btn-ghost btn-sm" onclick="this.parentElement.parentElement.parentElement.style.display='none'">Close</button>
-    </div>
-    <div class="sap-card__body">
-      <div id="diagContent" style="font-family: monospace; font-size: 11px; white-space: pre-wrap; background: #f8f9fa; padding: 10px; border-radius: 4px; border: 1px solid #ddd;">Loading...</div>
-    </div>
-  </div>
-
-  <!-- KPI strip -->
-  <div class="sap-kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:var(--sp-md);" id="kpiStrip">
-    <div class="sap-kpi sap-kpi--blue">  <div class="sap-kpi__accent"></div><div class="sap-kpi__value" id="kpiAll">0</div>    <div class="sap-kpi__label">Total</div></div>
-    <div class="sap-kpi sap-kpi--red">   <div class="sap-kpi__accent"></div><div class="sap-kpi__value" id="kpiUnread">0</div>  <div class="sap-kpi__label">Unread</div></div>
-    <div class="sap-kpi sap-kpi--orange"><div class="sap-kpi__accent"></div><div class="sap-kpi__value" id="kpiCrit">0</div>   <div class="sap-kpi__label">Critical</div></div>
-    <div class="sap-kpi sap-kpi--orange"><div class="sap-kpi__accent"></div><div class="sap-kpi__value" id="kpiWarn">0</div>   <div class="sap-kpi__label">Warnings</div></div>
-    <div class="sap-kpi sap-kpi--green"> <div class="sap-kpi__accent"></div><div class="sap-kpi__value" id="kpiInfo">0</div>   <div class="sap-kpi__label">Info</div></div>
   </div>
 
   <!-- Main card -->
@@ -537,8 +463,14 @@
         </div>
       </div>
 
-      <div style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-sm);">
-        <div class="sap-search-box" style="width:200px;">
+      <div style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-sm);flex-wrap:wrap;justify-content:flex-end;">
+        <select class="sap-select" id="clientFilter" onchange="renderNotifs()" style="min-width:170px;">
+          <option value="">All Clients</option>
+        </select>
+        <select class="sap-select" id="funcLocFilter" onchange="renderNotifs()" style="min-width:190px;">
+          <option value="">All Functional Locations</option>
+        </select>
+        <div class="sap-search-box" style="width:220px;">
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" id="searchInput" placeholder="Search notifications…" oninput="renderNotifs()"/>
         </div>
@@ -734,38 +666,44 @@ document.addEventListener('click', e => {
 function dFromNow(d) { const dt=new Date(); dt.setDate(dt.getDate()+d); return dt.toISOString().split('T')[0]; }
 
 let NOTIFICATIONS = [];
+let FILTER_CLIENT_IDS = [];
+let FILTER_LOCATIONS = [];
 
 
 /* ═══════════════════════════════════════════════════════
    CONFIG
 ═══════════════════════════════════════════════════════ */
 function saveConfig() {
-  config.critDays   = parseInt(document.getElementById('critDays').value)   || 7;
-  config.warnDays   = parseInt(document.getElementById('warnDays').value)   || 14;
-  config.noticeDays = parseInt(document.getElementById('noticeDays').value) || 30;
-  config.digestFreq = document.getElementById('digestFreq').value;
+  const crit = document.getElementById('critDays');
+  const warn = document.getElementById('warnDays');
+  const notice = document.getElementById('noticeDays');
+  const digest = document.getElementById('digestFreq');
+  if (!crit || !warn || !notice || !digest) return;
 
-  /* Save to localStorage */
+  config.critDays   = parseInt(crit.value) || 7;
+  config.warnDays   = parseInt(warn.value) || 14;
+  config.noticeDays = parseInt(notice.value) || 30;
+  config.digestFreq = digest.value;
+
   localStorage.setItem('sap_notif_config', JSON.stringify(config));
-
-  showToast('success',
-    'Configuration Saved',
-    `Critical: ${config.critDays}d · Warning: ${config.warnDays}d · Notice: ${config.noticeDays}d`
-  );
-  renderNotifs();
 }
 
 function loadConfig() {
   const saved = localStorage.getItem('sap_notif_config');
   if (saved) {
-    try {
-      config = { ...config, ...JSON.parse(saved) };
-      document.getElementById('critDays').value   = config.critDays;
-      document.getElementById('warnDays').value   = config.warnDays;
-      document.getElementById('noticeDays').value = config.noticeDays;
-      document.getElementById('digestFreq').value = config.digestFreq;
-    } catch(e) {}
+    try { config = { ...config, ...JSON.parse(saved) }; } catch(e) {}
   }
+
+  const crit = document.getElementById('critDays');
+  const warn = document.getElementById('warnDays');
+  const notice = document.getElementById('noticeDays');
+  const digest = document.getElementById('digestFreq');
+  if (!crit || !warn || !notice || !digest) return;
+
+  crit.value = config.critDays;
+  warn.value = config.warnDays;
+  notice.value = config.noticeDays;
+  digest.value = config.digestFreq;
 }
 
 function toggleEmailNotif(cb) {
@@ -814,10 +752,57 @@ function getPriorityTag(priority, daysLeft) {
 }
 
 function getClientBadge(clientId) {
-  const map = { C001:'Acme Corp', C002:'Gulf Holdings', C003:'Delta Industries', C004:'Nile Ventures' };
   const colors = { C001:'#0070f2', C002:'#188918', C003:'#e76500', C004:'#bb0000' };
   if (!clientId) return '';
-  return `<span style="font-size:10px;font-weight:700;color:${colors[clientId]||'#6a6d70'};background:var(--sap-page-bg);border:1px solid var(--sap-table-border);border-radius:10px;padding:1px 7px;">${map[clientId]||clientId}</span>`;
+  const name = (window.SapClients && typeof window.SapClients.display === 'function')
+    ? window.SapClients.display(clientId)
+    : clientId;
+  return `<span style="font-size:10px;font-weight:700;color:${colors[clientId]||'#6a6d70'};background:var(--sap-page-bg);border:1px solid var(--sap-table-border);border-radius:10px;padding:1px 7px;">${h(name)}</span>`;
+}
+
+
+
+async function loadFilterSources() {
+  try {
+    const [clientsRes, locsRes] = await Promise.allSettled([
+      apiFetch('/api/clients?limit=1000'),
+      apiFetch('/api/functional-locations?limit=1000'),
+    ]);
+
+    if (clientsRes.status === 'fulfilled') {
+      const raw = await clientsRes.value.json();
+      const clients = raw?.data?.clients || raw?.data || raw?.clients || [];
+      FILTER_CLIENT_IDS = [...new Set((Array.isArray(clients) ? clients : []).map(c => String(c.client_id || c.id || '').trim()).filter(Boolean))];
+    }
+
+    if (locsRes.status === 'fulfilled') {
+      const raw = await locsRes.value.json();
+      const locs = raw?.data?.functional_locations || raw?.data || raw?.functional_locations || [];
+      FILTER_LOCATIONS = [...new Set((Array.isArray(locs) ? locs : []).map(l => String(l.name || l.functional_location || l.location || '').trim()).filter(Boolean))];
+    }
+  } catch (e) {}
+}
+
+function populateFilters(source = NOTIFICATIONS) {
+  const clientSel = document.getElementById('clientFilter');
+  const locSel = document.getElementById('funcLocFilter');
+  if (!clientSel || !locSel) return;
+
+  const prevClient = clientSel.value;
+  const prevLoc = locSel.value;
+
+  const clients = [...new Set([...(FILTER_CLIENT_IDS || []), ...(source || []).map(n => (n.client || '').trim())].filter(Boolean))].sort();
+  const locs = [...new Set([...(FILTER_LOCATIONS || []), ...(source || []).map(n => (n.functionalLocation || '').trim())].filter(Boolean))].sort();
+
+  clientSel.innerHTML = '<option value="">All Clients</option>' + clients.map(cid => {
+    const label = (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(cid) : cid;
+    return `<option value="${h(cid)}">${h(label)}</option>`;
+  }).join('');
+
+  locSel.innerHTML = '<option value="">All Functional Locations</option>' + locs.map(loc => `<option value="${h(loc)}">${h(loc)}</option>`).join('');
+
+  if (prevClient && clients.includes(prevClient)) clientSel.value = prevClient;
+  if (prevLoc && locs.includes(prevLoc)) locSel.value = prevLoc;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -833,6 +818,8 @@ function setTab(tab, el) {
 function renderNotifs() {
   const role    = session?.role;
   const search  = (document.getElementById('searchInput').value || '').toLowerCase();
+  const clientFilter = (document.getElementById('clientFilter')?.value || '').trim();
+  const funcLocFilter = (document.getElementById('funcLocFilter')?.value || '').trim();
   const custId  = session?.customerId;
 
   let data = NOTIFICATIONS.filter(n => !n.dismissed);
@@ -848,6 +835,10 @@ function renderNotifs() {
   if (currentTab === 'system')   data = data.filter(n => n.type === 'system');
   if (currentTab === 'unread')   data = data.filter(n => !n.read && !n.is_read && !n.isRead);
 
+  /* Dropdown filters */
+  if (clientFilter) data = data.filter(n => String(n.client || '').trim() === clientFilter);
+  if (funcLocFilter) data = data.filter(n => String(n.functionalLocation || '').trim() === funcLocFilter);
+
   /* Search */
   if (search) data = data.filter(n =>
     n.titleEn.toLowerCase().includes(search) ||
@@ -859,11 +850,7 @@ function renderNotifs() {
   const allActive = NOTIFICATIONS.filter(n => !n.dismissed && (!custId || role === 'admin' || role === 'manager' || n.client === custId));
 
   /* KPI */
-  document.getElementById('kpiAll').textContent   = allActive.length;
-  document.getElementById('kpiUnread').textContent= allActive.filter(n=>!n.read && !n.is_read && !n.isRead).length;
-  document.getElementById('kpiCrit').textContent  = allActive.filter(n=>n.priority==='critical').length;
-  document.getElementById('kpiWarn').textContent  = allActive.filter(n=>n.priority==='high').length;
-  document.getElementById('kpiInfo').textContent  = allActive.filter(n=>n.type==='system'||n.type==='approval').length;
+  // KPI strip removed by request.
 
   /* Tab counts */
   document.getElementById('tabAll').textContent     = allActive.length;
@@ -941,6 +928,7 @@ function renderNotifItem(n, role) {
         <div class="notif-meta">
           ${getPriorityTag(n.priority, n.daysLeft)}
           ${getClientBadge(n.client)}
+          ${n.functionalLocation ? `<span style="font-size:10px;font-weight:700;color:#35506b;background:#eef4fb;border:1px solid #d6e3f2;border-radius:10px;padding:1px 7px;">${h(n.functionalLocation)}</span>` : ''}
           ${n.certId ? `<span style="font-family:monospace;font-size:10px;background:var(--sap-page-bg);border:1px solid var(--sap-table-border);border-radius:3px;padding:1px 5px;color:var(--sap-brand);">${fmtCertId(h(n.certId), h(n.jobNumber))}</span>` : ''}
           ${n.daysLeft !== null
             ? (n.daysLeft < 0
@@ -982,6 +970,7 @@ function isSyntheticId(id) {
 async function markRead(id) {
   const n = NOTIFICATIONS.find(x => x.id === id);
   if (n) { n.is_read = true; n.isRead = true; n.read = true; }
+  populateFilters(NOTIFICATIONS);
   renderNotifs();
   updateBadge();
   // Only call API for real DB notifications
@@ -1008,6 +997,7 @@ async function markRead(id) {
 async function dismissNotif(id, e) {
   if (e) e.stopPropagation();
   NOTIFICATIONS = NOTIFICATIONS.filter(x => x.id !== id);
+  populateFilters(NOTIFICATIONS);
   renderNotifs();
   updateBadge();
   // Only call API for real DB notifications
@@ -1032,6 +1022,7 @@ async function dismissNotif(id, e) {
 
 async function markAllRead() {
   NOTIFICATIONS.forEach(n => { n.is_read = true; n.isRead = true; n.read = true; });
+  populateFilters(NOTIFICATIONS);
   renderNotifs();
   updateBadge();
   // Mark real DB notifications via API
@@ -1137,7 +1128,7 @@ function buildEmailBody() {
   const recipientName = (selVal && selVal !== '__custom__') ? selText.split('—')[0].trim() : '';
 
   const CLIENT_NAMES = {
-    C001:'Acme Corp', C002:'Gulf Holdings', C003:'Delta Industries', C004:'Nile Ventures', GENERAL:'General'
+    GENERAL:'General'
   };
   const PRIORITY_LABEL = {
     critical:'🔴 CRITICAL', high:'🟠 HIGH', medium:'🟡 MEDIUM', info:'ℹ️  INFO', success:'✅ SUCCESS'
@@ -1172,7 +1163,7 @@ function buildEmailBody() {
   body += `  🟡 Medium          : ${med}\n\n`;
 
   Object.entries(byClient).forEach(([cid, alerts]) => {
-    const cname = CLIENT_NAMES[cid] || cid;
+    const cname = CLIENT_NAMES[cid] || ((window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(cid) : cid);
     body += '─'.repeat(65) + '\n';
     body += `  CLIENT: ${cname}${cid !== 'GENERAL' ? '  ('+cid+')' : ''}  —  ${alerts.length} alert${alerts.length !== 1 ? 's' : ''}\n`;
     body += '─'.repeat(65) + '\n\n';
@@ -1285,27 +1276,28 @@ function showToast(type, title, msg) {
 
 async function loadNotifications() {
   try {
-    // Load DB notifications + expiring certs + expired certs in parallel
-    const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
-    
-    // Limit assets query to avoid performance issues
-    const [notifRes, expiringRes, expiredRes, assetsRes] = await Promise.all([
+    await loadFilterSources();
+
+    // Load each source independently so one failing API does not blank the page
+    const [notifRes, expiringRes, expiredRes, assetsRes] = await Promise.allSettled([
       apiFetch('/api/notifications?limit=200'),
       apiFetch('/api/certificates/expiring?days=30'),
       apiFetch('/api/certificates?approval_status=approved&limit=200'),
-      apiFetch('/api/assets?limit=100'), // Reduced from 5000 to 100 for performance
+      apiFetch('/api/assets?limit=1000'),
     ]);
 
-    const nd = (await notifRes.json());
-    const ed = (await expiringRes.json());
-    const ad = (await expiredRes.json());
-    const as = (await assetsRes.json());
+    const nd = notifRes.status === 'fulfilled' ? await notifRes.value.json() : {};
+    const ed = expiringRes.status === 'fulfilled' ? await expiringRes.value.json() : {};
+    const ad = expiredRes.status === 'fulfilled' ? await expiredRes.value.json() : {};
+    const as = assetsRes.status === 'fulfilled' ? await assetsRes.value.json() : {};
 
     const dbNotifs  = ((nd.data || nd).notifications || nd.data || []);
     const expiring  = ((ed.data || ed).certificates  || []);
     const allCerts  = ((ad.data || ad).certificates  || []);
     const allAssets = ((as.data || as).assets || []);
-    const assetNumberById = new Map((Array.isArray(allAssets) ? allAssets : []).map(a => [a.id, a.asset_number || a.id]));
+    const assetsList = Array.isArray(allAssets) ? allAssets : [];
+    const assetNumberById = new Map(assetsList.map(a => [a.id, a.asset_number || a.id]));
+    const assetLocById = new Map(assetsList.map(a => [a.id, a.functional_location || a.location || '']));
 
     // Today for expiry math
     const todayMs = new Date().setHours(0,0,0,0);
@@ -1319,6 +1311,7 @@ async function loadNotifications() {
       const days     = Math.ceil((expiryMs - todayMs) / 86400000);
       const priority = days <= 7 ? 'critical' : days <= 14 ? 'high' : 'medium';
       const assetLabel = assetNumberById.get(cert.asset_id) || cert.asset_id || '—';
+      const funcLoc = assetLocById.get(cert.asset_id) || '';
       expiryNotifs.push({
         id:        'exp-' + cert.id,
         type:      'expiry',
@@ -1335,6 +1328,7 @@ async function loadNotifications() {
         dismissed: false,
         time:      h(cert.expiry_date),
         link:      'certificates.html',
+        functionalLocation: funcLoc,
       });
     });
 
@@ -1360,6 +1354,7 @@ async function loadNotifications() {
           dismissed: false,
           time:      h(cert.expiry_date),
           link:      'certificates.html',
+          functionalLocation: funcLoc,
         });
       }
     });
@@ -1386,6 +1381,7 @@ async function loadNotifications() {
         client:    n.client_id || null,
         certId:    n.ref_type === 'certificate' ? n.ref_id : null,
         jobNumber: '',
+        functionalLocation: '',
         read:      n.is_read,
         isRead:    n.is_read,
         dismissed: false,
@@ -1406,6 +1402,7 @@ async function loadNotifications() {
     console.error('loadNotifications error:', e);
     NOTIFICATIONS = [];
   }
+  populateFilters(NOTIFICATIONS);
   renderNotifs();
   updateBadge();
 }
@@ -1438,8 +1435,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (role !== 'admin') {
     document.getElementById('adminSection').style.display    = 'none';
     document.getElementById('adminClientsLink').style.display = 'none';
-    document.getElementById('configPanel').style.display     = 'none';
-    document.getElementById('dismissAllBtn').style.display   = 'none';
+    const dismissBtn = document.getElementById('dismissAllBtn');
+    if (dismissBtn) dismissBtn.style.display = 'none';
   }
   /* Send Email button — visible to admin, manager, user; hidden for technician */
   if (role === 'technician') {
