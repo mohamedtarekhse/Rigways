@@ -1325,7 +1325,7 @@ async function loadNotifications() {
 
     // Certs expiring within 30 days
     (Array.isArray(allCerts) ? allCerts : []).forEach(cert => {
-      if (!cert?.expiry_date) return;
+      if (!cert?.expiry_date || cert.approval_status !== 'approved') return;
       const expiryMs = new Date(cert.expiry_date).setHours(0,0,0,0);
       const days     = Math.ceil((expiryMs - todayMs) / 86400000);
       if (days < 0 || days > 30) return;
@@ -1355,10 +1355,12 @@ async function loadNotifications() {
 
     // Certs already expired (approved but past expiry date)
     allCerts.forEach(cert => {
+      if (!cert?.expiry_date || cert.approval_status !== 'approved') return;
       const expiryMs = new Date(cert.expiry_date).setHours(0,0,0,0);
       const days     = Math.ceil((expiryMs - todayMs) / 86400000);
       if (days < 0) {
         const assetLabel = assetNumberById.get(cert.asset_id) || cert.asset_id || '—';
+        const funcLoc = assetLocById.get(cert.asset_id) || '';
         expiryNotifs.push({
           id:        'expired-' + cert.id,
           type:      'expiry',
