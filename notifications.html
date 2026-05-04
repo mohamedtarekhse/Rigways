@@ -666,6 +666,8 @@ document.addEventListener('click', e => {
 function dFromNow(d) { const dt=new Date(); dt.setDate(dt.getDate()+d); return dt.toISOString().split('T')[0]; }
 
 let NOTIFICATIONS = [];
+let FILTER_CLIENT_IDS = [];
+let FILTER_LOCATIONS = [];
 
 
 /* ═══════════════════════════════════════════════════════
@@ -759,6 +761,28 @@ function getClientBadge(clientId) {
 }
 
 
+
+async function loadFilterSources() {
+  try {
+    const [clientsRes, locsRes] = await Promise.allSettled([
+      apiFetch('/api/clients?limit=1000'),
+      apiFetch('/api/functional-locations?limit=1000'),
+    ]);
+
+    if (clientsRes.status === 'fulfilled') {
+      const raw = await clientsRes.value.json();
+      const clients = raw?.data?.clients || raw?.data || raw?.clients || [];
+      FILTER_CLIENT_IDS = [...new Set((Array.isArray(clients) ? clients : []).map(c => String(c.client_id || c.id || '').trim()).filter(Boolean))];
+    }
+
+    if (locsRes.status === 'fulfilled') {
+      const raw = await locsRes.value.json();
+      const locs = raw?.data?.functional_locations || raw?.data || raw?.functional_locations || [];
+      FILTER_LOCATIONS = [...new Set((Array.isArray(locs) ? locs : []).map(l => String(l.name || l.functional_location || l.location || '').trim()).filter(Boolean))];
+    }
+  } catch (e) {}
+}
+
 function populateFilters(source = NOTIFICATIONS) {
   const clientSel = document.getElementById('clientFilter');
   const locSel = document.getElementById('funcLocFilter');
@@ -767,8 +791,8 @@ function populateFilters(source = NOTIFICATIONS) {
   const prevClient = clientSel.value;
   const prevLoc = locSel.value;
 
-  const clients = [...new Set((source || []).map(n => (n.client || '').trim()).filter(Boolean))].sort();
-  const locs = [...new Set((source || []).map(n => (n.functionalLocation || '').trim()).filter(Boolean))].sort();
+  const clients = [...new Set([...(FILTER_CLIENT_IDS || []), ...(source || []).map(n => (n.client || '').trim())].filter(Boolean))].sort();
+  const locs = [...new Set([...(FILTER_LOCATIONS || []), ...(source || []).map(n => (n.functionalLocation || '').trim())].filter(Boolean))].sort();
 
   clientSel.innerHTML = '<option value="">All Clients</option>' + clients.map(cid => {
     const label = (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(cid) : cid;
@@ -1252,21 +1276,20 @@ function showToast(type, title, msg) {
 
 async function loadNotifications() {
   try {
-    // Load DB notifications + expiring certs + expired certs in parallel
-    const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
-    
-    // Limit assets query to avoid performance issues
-    const [notifRes, expiringRes, expiredRes, assetsRes] = await Promise.all([
+    await loadFilterSources();
+
+    // Load each source independently so one failing API does not blank the page
+    const [notifRes, expiringRes, expiredRes, assetsRes] = await Promise.allSettled([
       apiFetch('/api/notifications?limit=200'),
       apiFetch('/api/certificates/expiring?days=30'),
       apiFetch('/api/certificates?approval_status=approved&limit=200'),
-      apiFetch('/api/assets?limit=100'), // Reduced from 5000 to 100 for performance
+      apiFetch('/api/assets?limit=1000'),
     ]);
 
-    const nd = (await notifRes.json());
-    const ed = (await expiringRes.json());
-    const ad = (await expiredRes.json());
-    const as = (await assetsRes.json());
+    const nd = notifRes.status === 'fulfilled' ? await notifRes.value.json() : {};
+    const ed = expiringRes.status === 'fulfilled' ? await expiringRes.value.json() : {};
+    const ad = expiredRes.status === 'fulfilled' ? await expiredRes.value.json() : {};
+    const as = assetsRes.status === 'fulfilled' ? await assetsRes.value.json() : {};
 
     const dbNotifs  = ((nd.data || nd).notifications || nd.data || []);
     const expiring  = ((ed.data || ed).certificates  || []);
