@@ -1652,10 +1652,8 @@ function renderTable() {
     data = data.filter(a => a.client === clientF);
   }
 
-  /* Functional Location scope */
-  if (session.functional_location && role !== 'admin' && role !== 'manager') {
-    data = data.filter(a => a.location === session.functional_location);
-  } else if (locF !== 'all') {
+  /* The API already scopes user/technician asset rows by assigned location. */
+  if (locF !== 'all') {
     data = data.filter(a => a.location === locF);
   }
 
