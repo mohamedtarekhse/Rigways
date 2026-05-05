@@ -41,7 +41,7 @@ function extract(source, start, end) {
   getElementById('searchInput').value = '';
   getElementById('clientFilter').value = 'all';
   getElementById('typeFilter').value = 'all';
-  getElementById('locationFilter').value = 'all';
+  getElementById('locationFilter').value = 'Rig 99';
   getElementById('inspectionDateFilter').value = '';
   const context = {
     session: { role: 'user', customerId: 'C001' },

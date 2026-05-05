@@ -1640,7 +1640,8 @@ function renderTable() {
   const search = (document.getElementById('searchInput').value || '').toLowerCase();
   const clientF = document.getElementById('clientFilter').value || 'all';
   const typeF   = document.getElementById('typeFilter').value || 'all';
-  const locF    = document.getElementById('locationFilter')?.value || 'all';
+  const locationFilterEl = document.getElementById('locationFilter');
+  const locF    = role === 'user' ? 'all' : (locationFilterEl?.value || 'all');
   const inspDateF = document.getElementById('inspectionDateFilter')?.value || '';
 
   let data = [...ASSETS];
@@ -3552,10 +3553,16 @@ function populateToolbarLocationFilter() {
   const sel = document.getElementById('locationFilter');
   if (!sel) return;
   const role = session?.role || 'user';
+  if (role === 'user') {
+    sel.value = 'all';
+    sel.style.display = 'none';
+    return;
+  }
+  sel.style.display = 'inline-block';
   const current = sel.value || 'all';
   const clientF = document.getElementById('clientFilter')?.value || 'all';
   let locs = loadFuncLocs();
-  if (role === 'user' || role === 'technician') {
+  if (role === 'technician') {
     if (session?.functional_location) {
       const assigned = String(session.functional_location || '').trim().toLowerCase();
       const scoped = locs.filter((l) =>
@@ -3661,6 +3668,13 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Client filter visibility */
   if (role === 'admin' || role === 'manager') {
     document.getElementById('clientFilter').style.display = 'inline-block';
+  }
+  if (role === 'user') {
+    const locationFilter = document.getElementById('locationFilter');
+    if (locationFilter) {
+      locationFilter.value = 'all';
+      locationFilter.style.display = 'none';
+    }
   }
   const importBtn = document.getElementById('importBtn');
   if (importBtn && role !== 'admin') importBtn.style.display = 'none';
