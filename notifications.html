@@ -519,11 +519,8 @@
         <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">
           <select class="sap-select" id="emailRecipientSelect" onchange="onRecipientChange()" style="flex:1;min-width:200px;">
             <option value="">Select a known contact…</option>
-            <optgroup label="Client Contacts">
-              <option value="j.wheeler@acme.com">James Wheeler — Acme Corp (C001)</option>
-              <option value="f.rashid@gulfholdings.ae">Fatima Al-Rashid — Gulf Holdings (C002)</option>
-              <option value="o.khalil@delta.sa">Omar Khalil — Delta Industries (C003)</option>
-              <option value="s.hassan@nileventures.eg">Sara Hassan — Nile Ventures (C004)</option>
+            <optgroup label="Client Contacts" id="emailClientContactsGroup">
+              <!-- Will be dynamically populated from API -->
             </optgroup>
             <optgroup label="Internal">
               <option value="admin@company.com">System Administrator</option>
@@ -782,6 +779,19 @@ async function loadFilterSources() {
       const cList = Array.isArray(clients) ? clients : [];
       // Only store unique client names (not IDs) for the dropdown - sorted alphabetically
       FILTER_CLIENT_NAMES = [...new Set(cList.map(c => String(c.name || c.client_name || '').trim()).filter(Boolean))].sort();
+      
+      // Update CLIENT_CONTACTS dynamically
+      cList.forEach(c => {
+        const cId = c.customer_id || c.client_id || c.customerId || c.id || c.customer_code;
+        if (cId) {
+          CLIENT_CONTACTS[cId] = {
+            name: c.contact || c.contact_person || 'Unknown Contact',
+            email: c.email || c.contact_email || '',
+            company: c.name || c.client_name || ''
+          };
+        }
+      });
+      updateRecipientDropdown();
     }
 
     if (locsRes.status === 'fulfilled') {
@@ -1086,12 +1096,36 @@ function bulkDismiss() { dismissAll(); }
 /* ═══════════════════════════════════════════════════════
    EMAIL ALERTS
 ═══════════════════════════════════════════════════════ */
-const CLIENT_CONTACTS = {
-  C001: { name:'James Wheeler',      email:'j.wheeler@acme.com',          company:'Acme Corp' },
-  C002: { name:'Fatima Al-Rashid',   email:'f.rashid@gulfholdings.ae',    company:'Gulf Holdings' },
-  C003: { name:'Omar Khalil',        email:'o.khalil@delta.sa',           company:'Delta Industries' },
-  C004: { name:'Sara Hassan',        email:'s.hassan@nileventures.eg',    company:'Nile Ventures' },
-};
+let CLIENT_CONTACTS = {};
+
+function updateRecipientDropdown() {
+  const sel = document.getElementById('emailRecipientSelect');
+  if (!sel) return;
+  const currentVal = sel.value;
+  
+  let html = `<option value="">Select a known contact…</option>`;
+  html += `<optgroup label="Client Contacts">`;
+  Object.keys(CLIENT_CONTACTS).forEach(cId => {
+    const contact = CLIENT_CONTACTS[cId];
+    if (contact.email) {
+      html += `<option value="${h(contact.email)}">${h(contact.name)} — ${h(contact.company)} (${h(cId)})</option>`;
+    }
+  });
+  html += `</optgroup>`;
+  
+  html += `<optgroup label="Internal">
+    <option value="admin@company.com">System Administrator</option>
+    <option value="manager@company.com">Operations Manager</option>
+  </optgroup>
+  <option value="__custom__">✏ Type a custom address…</option>`;
+  
+  sel.innerHTML = html;
+  
+  // Restore selection if possible
+  if (currentVal && Array.from(sel.options).some(o => o.value === currentVal)) {
+    sel.value = currentVal;
+  }
+}
 
 function openEmailModal() {
   if (!lastVisibleData.length) {
