@@ -137,8 +137,10 @@ export async function handleAssets(request, env, path) {
   /* ── GET /api/assets/stats — dashboard KPIs ── */
   if (path === '/assets/stats' && method === 'GET') {
     const filters = {};
-    if (['user','technician'].includes(session.role) && session.customerId)
-      filters['client_id.eq'] = session.customerId;
+    if (['user','technician'].includes(session.role)) {
+      if (session.customerId) filters['client_id.eq'] = session.customerId;
+      if (session.functional_location) filters['functional_location.eq'] = session.functional_location;
+    }
 
     const [total, active, maintenance, inactive] = await Promise.all([
       db.count('assets', { filters }),
@@ -158,7 +160,10 @@ export async function handleAssets(request, env, path) {
     const offset = parseInt(url.searchParams.get('offset') || '0');
     const filters = {};
     const isRestricted = ['user','technician'].includes(session.role);
-    if (isRestricted && session.customerId) filters['client_id.eq'] = session.customerId;
+    if (isRestricted) {
+      if (session.customerId) filters['client_id.eq'] = session.customerId;
+      if (session.functional_location) filters['functional_location.eq'] = session.functional_location;
+    }
     if (url.searchParams.get('status'))    filters['status.eq']    = url.searchParams.get('status');
     if (url.searchParams.get('type'))      filters['asset_type.eq']= url.searchParams.get('type');
     if (url.searchParams.get('client_id') && requireRole(session,['admin','manager']))
