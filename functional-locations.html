@@ -368,8 +368,8 @@ function loadAssets() {
   return DEFAULT_ASSETS;
 }
 
-function countAssetsForLoc(locName) {
-  return loadAssets().filter(a => a.location === locName).length;
+function countAssetsForLoc(locId) {
+  return loadAssets().filter(a => a.location === locId).length;
 }
 let CLIENT_COLORS = {};
 let _clientsCache = null;
@@ -573,7 +573,7 @@ function renderTable(data) {
       <td>
         <div style="display:flex;align-items:center;gap:6px;">
           ${(() => {
-            const n = countAssetsForLoc(loc.name);
+            const n = countAssetsForLoc(loc.id);
             return n > 0
               ? `<span style="font-size:15px;font-weight:800;color:var(--sap-brand);">${n}</span>`
               : `<span style="font-size:13px;font-weight:600;color:var(--sap-text-disabled);">0</span>`;

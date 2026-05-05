@@ -1333,7 +1333,7 @@ function openTransferModal(id) {
     filtered = clientFiltered.length ? clientFiltered : filtered;
     document.getElementById('t_to').innerHTML =
       '<option value="">Select destination…</option>' +
-      filtered.map(l => `<option value="${l.name}">${l.name} (${l.type})</option>`).join('');
+      filtered.map(l => `<option value="${l.id}">${l.name} (${l.type})</option>`).join('');
     if (!filtered.length) {
       document.getElementById('t_to').innerHTML = '<option value="">No other locations available — add one first</option>';
     }
@@ -1365,13 +1365,13 @@ function renderTransferLog(assetId) {
       <td>
         <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;">
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:12px;height:12px;opacity:.5;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-          ${t.from||'—'}
+          ${h(window._funcLocsCache?.find(l => l.id === t.from)?.name || t.from || '—')}
         </span>
       </td>
       <td>
         <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--sap-success);font-weight:600;">
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:12px;height:12px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-          ${t.to||'—'}
+          ${h(window._funcLocsCache?.find(l => l.id === t.to)?.name || t.to || '—')}
         </span>
       </td>
       <td style="font-size:12px;">${t.by||'—'}</td>
@@ -1408,12 +1408,12 @@ async function saveTransfer() {
     // Refresh destination dropdown
     const locs   = loadFuncLocs();
     const a      = asset;
-    let filteredR = locs.filter(l => l.name !== to);
+    let filteredR = locs.filter(l => l.id !== to);
     const cf      = filteredR.filter(l => !l.client || l.client === a?.client);
     filteredR     = cf.length ? cf : filteredR;
     document.getElementById('t_to').innerHTML =
       '<option value="">Select destination…</option>' +
-      filteredR.map(l => `<option value="${l.name}">${l.name} (${l.type})</option>`).join('');
+      filteredR.map(l => `<option value="${l.id}">${l.name} (${l.type})</option>`).join('');
     document.getElementById('t_notes').value = '';
 
     renderTransferLog(transferTargetId);
@@ -1525,7 +1525,7 @@ function populateFuncLocDropdown(selectedValue, filterClient) {
   let locs = loadFuncLocs();
   if (filterClient) locs = locs.filter(l => !l.client || l.client === filterClient);
   sel.innerHTML = '<option value="">Select functional location…</option>' +
-    locs.map(l => `<option value="${l.name}" ${l.name === selectedValue ? 'selected' : ''}>${l.name} (${l.type})</option>`).join('');
+    locs.map(l => `<option value="${l.id}" ${l.id === selectedValue ? 'selected' : ''}>${l.name} (${l.type})</option>`).join('');
 }
 
 function onAssetClientChange() {
@@ -1594,6 +1594,7 @@ const TYPE_COLORS = {
   'Structure':                {'bg':'#f3e5f5','color':'#7b1fa2'},
   'Well Control':             {'bg':'#e0f2f1','color':'#00838f'},
   'Tubular':                  {'bg':'#fbe9e7','color':'#bf360c'},
+  'Other':                    {'bg':'#f5f6f7','color':'#6a6d70'},
 };
 
 let ASSETS = []; // populated from API by loadAssets()
@@ -1752,7 +1753,7 @@ function renderTable() {
         <span style="font-size:12px;font-weight:600;color:${(TYPE_COLORS[a.type]||TYPE_COLORS['Other']).color};">${a.type}</span>
       </td>
       <td data-col="serial" style="font-family:monospace;font-size:12px;color:var(--sap-text-secondary);">${h(a.serial)||'—'}</td>
-      <td data-col="location" style="font-size:12px;">${h(a.location)}</td>
+      <td data-col="location" style="font-size:12px;">${h(window._funcLocsCache?.find(l => l.id === a.location)?.name || a.location)}</td>
       <td data-col="status">
         ${getStatusBadge(a.status)}
         ${isTech && a._pendingStatus ? `<div class="approval-badge" style="margin-top:3px;">⏳ Approval Pending</div>` : ''}

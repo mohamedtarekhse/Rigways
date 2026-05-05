@@ -947,6 +947,9 @@ async function handleAssets(request, env, path) {
     if (error) return serverErr(env);
     const updated = Array.isArray(data) ? data[0] : data;
     if (!updated) return notFound('Asset', env);
+    if (update.functional_location) {
+      await db.update('certificates', { functional_location: update.functional_location }, { filters: { 'asset_id.eq': asId } });
+    }
     await audit(db, session, 'assets', asId, 'update', existing, updated);
     return ok(updated, env);
   }
@@ -1596,6 +1599,7 @@ async function handleCertificates(request, env, path) {
       file_name: body.file_name || null,
       file_url: body.file_url || null,
       notes: body.notes || null,
+      functional_location: asset.functional_location || null,
       approval_status: session.role === 'admin' ? 'approved' : 'pending',
       uploaded_by: session.sub,
     });
@@ -1635,7 +1639,8 @@ async function handleCertificates(request, env, path) {
       if (['user', 'technician'].includes(session.role) && session.customerId && asset.client_id !== session.customerId)
         return forbidden(env);
       body.asset_id = asset.id;
-      // Keep client in sync with selected asset if client_id was not explicitly sent.
+      // Keep location and client in sync with selected asset
+      body.functional_location = asset.functional_location || null;
       if (!body.client_id && asset.client_id) body.client_id = asset.client_id;
     }
 
