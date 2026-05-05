@@ -1374,7 +1374,7 @@ function renderTable() {
         ${getApprovalBadge(c.approvalStatus)}
         ${c.rejectionReason ? `<div style="font-size:10px;color:var(--sap-error);margin-top:2px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${h(c.rejectionReason)}">${h(c.rejectionReason)}</div>` : ''}
       </td>
-      <td data-col="client">${showClient ? `<span style="font-size:12px;font-weight:600;">${CLIENTS_MAP[c.client]||c.client}</span><br/><span class="asset-id-chip">${c.client}</span>` : `<span class="asset-id-chip">${c.client}</span>`}</td>
+      <td data-col="client">${showClient ? `<span style="font-size:12px;font-weight:600;">${CLIENTS_MAP[c.client]||c.client}</span><br/><span class="asset-id-chip">${c.client}</span>${c.functionalLocationName ? `<div style="font-size:10px;color:var(--sap-text-secondary);margin-top:3px;display:flex;align-items:center;gap:3px;"><svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>${h(c.functionalLocationName)}</div>` : ''}` : `<span class="asset-id-chip">${c.client}</span>${c.functionalLocationName ? `<div style="font-size:10px;color:var(--sap-text-secondary);margin-top:3px;display:flex;align-items:center;gap:3px;"><svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>${h(c.functionalLocationName)}</div>` : ''}`}</td>
       <td data-col="fileLink">
         ${c.fileName ? `<button type="button" class="cert-file-link" onclick="openCertLink('${c.certId}')" title="Open certificate in new tab">
           <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -3117,20 +3117,33 @@ async function loadJobDropdown(selectedJobNumber) {
 
 async function loadCerts() {
   try {
-    const [certRes, assetRes] = await Promise.all([
+    const [certRes, assetRes, locRes] = await Promise.all([
       apiFetch('/api/certificates?limit=200').then(r => r.json()),
       apiFetch('/api/assets?limit=500').then(r => r.json()),
+      apiFetch('/api/functional-locations?limit=1000').then(r => r.json()).catch(() => ({ data: [] })),
     ]);
     const cd = certRes.data  || certRes;
     const ad = assetRes.data || assetRes;
+    const ld = locRes.data   || locRes;
+
+    /* Map: location_id → location name */
+    const locNameMap = {};
+    (ld.locations || ld || []).forEach(l => {
+      if (l && l.id) locNameMap[l.id] = l.name || l.id;
+    });
+
     const assetMap = {};
     const assetDescMap = {};
+    const assetLocMap = {};   // asset_id → functional location name
     (ad.assets || ad || []).forEach(a => {
       if (!a?.id) return;
-      assetMap[a.id] = a.asset_number || a.id;
+      assetMap[a.id]     = a.asset_number || a.id;
       assetDescMap[a.id] = a.description || a.name || '';
+      const locId = a.functional_location_id || a.location_id || '';
+      assetLocMap[a.id]  = locNameMap[locId] || '';
     });
     window._assetMap = assetMap;
+
     CERTS = (cd.certificates || cd || []).map(cert => {
       const rawType = String(cert.cert_type || '');
       const parts = rawType.split(' — ');
@@ -3148,12 +3161,13 @@ async function loadCerts() {
       issuedBy:        cert.issued_by,
       assetId:         assetMap[cert.asset_id] || cert.asset_id || '—',
       assetDescription: assetDescMap[cert.asset_id] || '',
+      functionalLocationName: assetLocMap[cert.asset_id] || '',
       client:          cert.client_id,
       fileName:        cert.file_name || '',
       fileUrl:         cert.file_url  || '',
       rejectionReason: cert.rejection_reason || '',
       jobNumber:       cert.notes || '',
-      uploadTime:      cert.created_at || cert.uploaded_at || cert.createdAt || '',   // full timestamp for 24h edit window
+      uploadTime:      cert.created_at || cert.uploaded_at || cert.createdAt || '',
       uploadedBy:      cert.uploaded_by_username || cert.uploaded_by || '',
       uploaded_by:     cert.uploaded_by || '',
     })});
