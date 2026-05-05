@@ -4,6 +4,7 @@ import { getSession, requireRole }           from '../middleware/jwt.js';
 import { ok, created, badReq, unauth, forbidden, notFound, serverErr } from '../utils/response.js';
 import { validate, pick, compact }           from '../utils/validate.js';
 import { sendPushToUser, sendPushToRoles }   from '../lib/web-push.js';
+import { isStorageConfigured, putStorageObject } from '../lib/storage.js';
 
 const TYPES    = ['CAT III','CAT IV','ORIGINAL COC','LOAD TEST','LIFTING','NDT','TUBULAR'];
 const STATUSES = ['pending','approved','rejected'];
@@ -13,8 +14,71 @@ export async function handleCertificates(request, env, path) {
   if (!session) return unauth(env);
 
   const method = request.method;
-  const db     = createSupabase(env);
   const url    = new URL(request.url);
+
+  if (path === '/certificates/upload' && method === 'POST') {
+    if (!requireRole(session, ['admin','manager','technician'])) return forbidden(env);
+    if (!isStorageConfigured(env)) {
+      return badReq('Certificate storage is not configured. Configure CERT_BUCKET or Backblaze B2 before uploading files.', 'NO_BUCKET', env);
+    }
+
+    let formData;
+    try { formData = await request.formData(); }
+    catch { return badReq('Could not parse form data', 'BAD_FORM', env); }
+
+    const file = formData.get('file');
+    if (!file || typeof file === 'string') return badReq('No file provided', 'NO_FILE', env);
+
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      return badReq('Invalid file type. Allowed: PDF, JPG, PNG, WEBP', 'INVALID_TYPE', env);
+    }
+    if (file.size > 200 * 1024 * 1024) {
+      return badReq('File too large. Maximum size is 200MB', 'FILE_TOO_LARGE', env);
+    }
+
+    const clientId = String(formData.get('client_id') || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    const jobNumber = String(formData.get('job_number') || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    const certNumber = String(formData.get('cert_number') || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    const ext = String(file.name.split('.').pop() || 'pdf').toLowerCase().replace(/[^a-z0-9]/g, '') || 'pdf';
+
+    if (!clientId || !jobNumber || !certNumber) {
+      return badReq('client_id, job_number and cert_number are required for structured upload', 'MISSING_FIELDS', env);
+    }
+
+    const safeOriginal = file.name
+      .replace(/\.[^.]+$/, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'certificate';
+    const safeJobNumber = jobNumber.replace(/[^a-z0-9-]/gi, '-');
+    const safeCertNumber = certNumber.replace(/[^a-z0-9-]/gi, '-');
+    const baseKey = `clients/${clientId}/jobs/${safeJobNumber}/${safeJobNumber}_${safeCertNumber}_${safeOriginal}.${ext}`;
+
+    let finalKey;
+    try {
+      finalKey = await putStorageObject(env, baseKey, await file.arrayBuffer(), file.type, {
+        originalName: file.name,
+        uploadedBy: session.sub,
+        username: session.username,
+        certNumber,
+        jobNumber,
+        clientId,
+      });
+    } catch (e) {
+      console.error('Certificate upload failed:', e);
+      return badReq(`File upload failed: ${e.message || 'Storage rejected the file'}`, 'UPLOAD_FAILED', env);
+    }
+
+    return ok({
+      key: finalKey,
+      file_name: `${jobNumber}_${certNumber}_${safeOriginal}.${ext}`,
+      file_url: finalKey,
+    }, env);
+  }
+
+  const db     = createSupabase(env);
   async function clientAliases(rawClientId) {
     const key = String(rawClientId || '').trim();
     if (!key) return [];

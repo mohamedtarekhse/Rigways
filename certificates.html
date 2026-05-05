@@ -2234,6 +2234,7 @@ async function saveCert() {
   }
 
   /* ── Step 2: Upload file with structured R2 key (only if a new file was selected) ── */
+  let fileUploaded = false;
   if (selectedFile) {
     if (saveBtn) { const _lbl4 = document.getElementById('saveBtnLabel'); if (_lbl4) _lbl4.textContent = 'Uploading file…'; }
     
@@ -2268,29 +2269,47 @@ async function saveCert() {
       if (!ud.success) {
         hideUploadProgressToast();
         // Cert record is already saved — warn but don't block
-        showToast('warning','File Upload Failed',
+        showToast('error','File Upload Failed',
           'Certificate saved but file could not be uploaded: ' + (udd.error || 'Unknown error') +
           '. Edit the certificate to try again.');
+        if (saveBtn) { saveBtn.disabled = false; const _lblFail = document.getElementById('saveBtnLabel'); if (_lblFail) _lblFail.textContent = 'Save Certificate'; }
+        await loadCerts();
+        return;
       } else {
         // Step 3: PATCH the cert record with the structured file_url + file_name
         showUploadProgressToast(100, 'Finalizing...');
-        await apiFetch('/api/certificates/' + certUUID, {
+        const attachRes = await apiFetch('/api/certificates/' + certUUID, {
           method: 'PATCH',
           body: JSON.stringify({ file_name: udd.file_name, file_url: udd.file_url }),
         });
-        setTimeout(() => hideUploadProgressToast(), 500);
+        const attachData = await attachRes.json().catch(() => ({}));
+        if (!attachRes.ok || !attachData.success) {
+          hideUploadProgressToast();
+          showToast('error','Upload Finalize Failed',
+            (attachData.data || attachData).error || 'File uploaded, but the certificate was not linked to it.');
+          if (saveBtn) { saveBtn.disabled = false; const _lblAttachFail = document.getElementById('saveBtnLabel'); if (_lblAttachFail) _lblAttachFail.textContent = 'Save Certificate'; }
+          await loadCerts();
+          return;
+        }
+        fileUploaded = true;
+        showUploadProgressToast(100, 'Upload successful.');
+        showToast('success','Upload Successful','Certificate file uploaded and attached.');
+        setTimeout(() => hideUploadProgressToast(), 800);
       }
     } catch(e) {
       hideUploadProgressToast();
-      showToast('warning','File Upload Error',
+      showToast('error','File Upload Error',
         'Certificate saved but file upload failed. Edit the certificate to re-attach the file.');
+      if (saveBtn) { saveBtn.disabled = false; const _lblErr = document.getElementById('saveBtnLabel'); if (_lblErr) _lblErr.textContent = 'Save Certificate'; }
+      await loadCerts();
+      return;
     }
   }
 
   /* ── Done ── */
   selectedFile = null;
   showToast('success', editId ? 'Updated' : 'Saved',
-    '"' + name + '" ' + (editId ? 'updated.' : 'saved & sent for approval.'));
+    '"' + name + '" ' + (editId ? 'updated.' : (fileUploaded ? 'uploaded & sent for approval.' : 'saved & sent for approval.')));
   clearCertDraft();
   closeModal(true);
   if (saveBtn) { saveBtn.disabled = false; const _lbl5 = document.getElementById('saveBtnLabel'); if (_lbl5) _lbl5.textContent = 'Save Certificate'; }

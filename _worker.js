@@ -1290,7 +1290,7 @@ async function handleCertUpload(request, env, path) {
       return forbidden(env);
     }
     if (!isStorageConfigured(env)) {
-      return json({ success: false, error: 'Storage is not configured. Configure B2_* variables (primary) or CERT_BUCKET (R2 fallback).', code: 'NO_BUCKET' }, 500, env);
+      return badReq('Certificate storage is not configured. Configure CERT_BUCKET or Backblaze B2 before uploading files.', 'NO_BUCKET', env);
     }
 
     let formData;
@@ -1347,7 +1347,7 @@ async function handleCertUpload(request, env, path) {
       });
     } catch (e) {
       console.error('B2/R2 upload error:', e);
-      return json({ success: false, error: 'File upload failed: ' + e.message, code: 'UPLOAD_FAILED' }, 500, env);
+      return badReq('File upload failed: ' + e.message, 'UPLOAD_FAILED', env);
     }
 
     return ok({ key: finalKey, file_name: `${jobNumber}_${certNumber}_${safeOriginal}.${ext}`, file_url: finalKey }, env);
