@@ -1037,7 +1037,7 @@ async function computeSha1FromBuffer(buffer) {
 // Sanitize filename for B2 storage: replace spaces with hyphens, remove/replace special chars
 function sanitizeFilenameForB2(filename) {
   return filename
-    .replace(/[^a-zA-Z0-9._-\/]/g, '-')  // Replace any non-alphanumeric (except . _ - /) with hyphen
+    .replace(/[^a-zA-Z0-9._\/-]/g, '-')  // Replace any non-alphanumeric (except . _ / -) with hyphen
     .replace(/-+/g, '-')                // Collapse multiple hyphens
     .replace(/^[-.]+|[-.]+$/g, '')      // Remove leading/trailing hyphens/dots
     .slice(0, 200);                     // Limit length
