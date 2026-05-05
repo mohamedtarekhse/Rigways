@@ -26,7 +26,7 @@ export async function handleAuth(request, env, path) {
     const db = createSupabase(env);
     const { data: rows, error } = await db.from('users', {
       filters: { 'username.ilike': body.username.toLowerCase() },
-      select:  'id,username,name,name_ar,role,customer_id,password_hash,is_active',
+      select:  'id,username,name,name_ar,role,customer_id,functional_location,password_hash,is_active',
       limit:   1,
     });
     if (error) { console.error(error); return serverErr(env); }
@@ -43,24 +43,26 @@ export async function handleAuth(request, env, path) {
 
     const expiresIn = parseInt(env.JWT_EXPIRES_SEC || '86400', 10);
     const token = await signJwt({
-      sub:        user.id,
-      username:   user.username,
-      role:       user.role,
-      name:       user.name,
-      nameAr:     user.name_ar || '',
-      customerId: user.customer_id || null,
+      sub:                user.id,
+      username:           user.username,
+      role:               user.role,
+      name:               user.name,
+      nameAr:             user.name_ar || '',
+      customerId:         user.customer_id || null,
+      functional_location: user.functional_location || null,
     }, env.JWT_SECRET, expiresIn);
 
     return ok({
       token,
       expiresIn,
       user: {
-        id:         user.id,
-        username:   user.username,
-        role:       user.role,
-        name:       user.name,
-        nameAr:     user.name_ar || '',
-        customerId: user.customer_id || null,
+        id:                 user.id,
+        username:           user.username,
+        role:               user.role,
+        name:               user.name,
+        nameAr:             user.name_ar || '',
+        customerId:         user.customer_id || null,
+        functional_location: user.functional_location || null,
       },
     }, env);
   }
@@ -73,21 +75,22 @@ export async function handleAuth(request, env, path) {
     const db = createSupabase(env);
     const { data: rows } = await db.from('users', {
       filters: { 'id.eq': session.sub },
-      select:  'id,username,name,name_ar,role,customer_id,is_active,created_at,last_login_at',
+      select:  'id,username,name,name_ar,role,customer_id,functional_location,is_active,created_at,last_login_at',
       limit:   1,
     });
     const user = Array.isArray(rows) ? rows[0] : rows;
     if (!user || !user.is_active) return unauth(env);
 
     return ok({
-      id:          user.id,
-      username:    user.username,
-      role:        user.role,
-      name:        user.name,
-      nameAr:      user.name_ar || '',
-      customerId:  user.customer_id || null,
-      createdAt:   user.created_at,
-      lastLoginAt: user.last_login_at,
+      id:                 user.id,
+      username:           user.username,
+      role:               user.role,
+      name:               user.name,
+      nameAr:             user.name_ar || '',
+      customerId:         user.customer_id || null,
+      functional_location: user.functional_location || null,
+      createdAt:          user.created_at,
+      lastLoginAt:        user.last_login_at,
     }, env);
   }
 
