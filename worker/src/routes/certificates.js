@@ -123,8 +123,10 @@ export async function handleCertificates(request, env, path) {
   if (path === '/certificates/history/export' && method === 'GET') {
     if (!requireRole(session, ['admin','manager','technician'])) return forbidden(env);
     const filters = {};
-    if (['user','technician'].includes(session.role) && session.customerId)
-      filters['client_id.eq'] = session.customerId;
+    if (['user','technician'].includes(session.role)) {
+      if (session.customerId) filters['client_id.eq'] = session.customerId;
+      if (session.functional_location) filters['functional_location.eq'] = session.functional_location;
+    }
     const { data, error } = await db.from('certificate_history', { select:'*', filters, order:'changed_at.desc', limit:2000 });
     if (error) return serverErr(env);
     const withNames = await _withUserNames(db, Array.isArray(data) ? data : [], 'changed_by');
@@ -137,8 +139,10 @@ export async function handleCertificates(request, env, path) {
     const today  = new Date().toISOString().split('T')[0];
     const cutoff = new Date(Date.now() + days * 86_400_000).toISOString().split('T')[0];
     const filters = { 'approval_status.eq':'approved', 'expiry_date.gte': today, 'expiry_date.lte': cutoff };
-    if (['user','technician'].includes(session.role) && session.customerId)
-      filters['client_id.eq'] = session.customerId;
+    if (['user','technician'].includes(session.role)) {
+      if (session.customerId) filters['client_id.eq'] = session.customerId;
+      if (session.functional_location) filters['functional_location.eq'] = session.functional_location;
+    }
     const { data, error } = await db.from('certificates', { select:'*', filters, order:'expiry_date.asc', limit:200 });
     if (error) return serverErr(env);
     return ok({ certificates: data || [], days }, env);
@@ -149,8 +153,10 @@ export async function handleCertificates(request, env, path) {
     const today  = new Date().toISOString().split('T')[0];
     const soon   = new Date(Date.now() + 30 * 86_400_000).toISOString().split('T')[0];
     const fBase  = {};
-    if (['user','technician'].includes(session.role) && session.customerId)
-      fBase['client_id.eq'] = session.customerId;
+    if (['user','technician'].includes(session.role)) {
+      if (session.customerId) fBase['client_id.eq'] = session.customerId;
+      if (session.functional_location) fBase['functional_location.eq'] = session.functional_location;
+    }
 
     const [total, valid, expiring, expired, pending] = await Promise.all([
       db.count('certificates', { filters: { ...fBase } }),
@@ -172,8 +178,10 @@ export async function handleCertificates(request, env, path) {
     const limit  = Math.min(parseInt(url.searchParams.get('limit') || '50'),200);
     const offset = parseInt(url.searchParams.get('offset') || '0');
     const filters = {};
-    if (['user','technician'].includes(session.role) && session.customerId)
-      filters['client_id.eq'] = session.customerId;
+    if (['user','technician'].includes(session.role)) {
+      if (session.customerId) filters['client_id.eq'] = session.customerId;
+      if (session.functional_location) filters['functional_location.eq'] = session.functional_location;
+    }
     if (url.searchParams.get('approval_status')) filters['approval_status.eq'] = url.searchParams.get('approval_status');
     if (url.searchParams.get('cert_type'))       filters['cert_type.eq']        = url.searchParams.get('cert_type');
     if (url.searchParams.get('asset_id'))        filters['asset_id.eq']         = url.searchParams.get('asset_id');
@@ -185,9 +193,11 @@ export async function handleCertificates(request, env, path) {
       const aliases = await clientAliases(session.customerId);
       for (const alias of aliases) {
         if (!alias || alias === session.customerId) continue;
+        const fRetry = { ...filters, 'client_id.eq': alias };
+        if (session.functional_location) fRetry['functional_location.eq'] = session.functional_location;
         const retry = await db.from('certificates', {
           select:'*',
-          filters: { ...filters, 'client_id.eq': alias },
+          filters: fRetry,
           limit,
           offset,
           order:'expiry_date.asc',
@@ -212,6 +222,10 @@ export async function handleCertificates(request, env, path) {
     if (['user','technician'].includes(session.role) && session.customerId) {
       const aliases = await clientAliases(session.customerId);
       if (!aliases.includes(String(cert.client_id || ''))) return forbidden(env);
+      // Also verify functional_location matches if user has one assigned
+      if (session.functional_location && cert.functional_location !== session.functional_location) {
+        return forbidden(env);
+      }
     }
     const [withNames] = await _withUserNames(db, [cert], 'uploaded_by');
     return ok(withNames || cert, env);
@@ -243,6 +257,10 @@ export async function handleCertificates(request, env, path) {
     if (session.role === 'technician' && session.customerId) {
       const aliases = await clientAliases(session.customerId);
       if (!aliases.includes(String(asset.client_id || ''))) return forbidden(env);
+      // Also verify functional_location matches if technician has one assigned
+      if (session.functional_location && asset.functional_location !== session.functional_location) {
+        return forbidden(env);
+      }
     }
 
     // Temporary relaxation: allow technician uploads without strict job assignment checks.
