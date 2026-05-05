@@ -1556,7 +1556,7 @@ function openCV(id) {
   const keyToUse = (insp.cvUrl && !/^https?:\/\//i.test(insp.cvUrl)) ? insp.cvUrl : insp.cvKey;
   
   if (keyToUse && insp._uuid) {
-    if (!keyToUse.startsWith('inspectors/')) {
+    if (!keyToUse.startsWith('inspectors/') && !keyToUse.startsWith('inspectors-')) {
        showToast('error', 'Invalid File', 'This file format is outdated. Please edit the inspector and re-upload the CV.');
        return;
     }
@@ -1623,7 +1623,7 @@ async function openTCLinkFromEl(el) {
   if (url) {
     if (/^https?:\/\//i.test(url)) { safeOpen(url); return; }
     if (inspectorUuid) {
-      if (!url.startsWith('inspectors/')) {
+      if (!url.startsWith('inspectors/') && !url.startsWith('inspectors-')) {
          showToast('error', 'Invalid File', 'This file format is outdated. Please edit the inspector and re-upload the certificate.');
          return;
       }
