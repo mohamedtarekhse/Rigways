@@ -1142,14 +1142,27 @@ function normalizeNavbarStructure(role) {
     'functional-locations.html',
   ];
   const adminSet = new Set(['dashboard.html','files.html','clients.html','inspectors.html','functional-locations.html']);
+  const allowedByRole = {
+    admin: new Set(['assets.html','certificates.html','jobs.html','notifications.html','dashboard.html','files.html','clients.html','inspectors.html','functional-locations.html']),
+    manager: new Set(['assets.html','certificates.html','jobs.html','notifications.html']),
+    technician: new Set(['assets.html','certificates.html']),
+    user: new Set(['assets.html','certificates.html']),
+  };
+  const allowed = allowedByRole[role] || allowedByRole.user;
 
   document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
     const links = [...inner.querySelectorAll('a.sap-nav-item')];
     if (!links.length) return;
 
-    const byHref = new Map(links.map(a => [a.getAttribute('href') || '', a]));
+    links.forEach(a => {
+      const href = a.getAttribute('href') || '';
+      if (!allowed.has(href)) a.remove();
+    });
+
+    const scopedLinks = links.filter(a => allowed.has(a.getAttribute('href') || ''));
+    const byHref = new Map(scopedLinks.map(a => [a.getAttribute('href') || '', a]));
     const ordered = preferred.map(h => byHref.get(h)).filter(Boolean);
-    const leftovers = links.filter(a => !preferred.includes(a.getAttribute('href') || ''));
+    const leftovers = scopedLinks.filter(a => !preferred.includes(a.getAttribute('href') || ''));
     const finalLinks = [...ordered, ...leftovers];
 
     const hasAdminLink = finalLinks.some(a => adminSet.has(a.getAttribute('href') || ''));
