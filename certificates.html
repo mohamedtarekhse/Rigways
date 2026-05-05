@@ -3375,9 +3375,10 @@ async function loadCerts() {
 
     /* Map: location_id → location name */
     const locNameMap = {};
-    window._funcLocsList = ld.locations || ld || [];
+    window._funcLocsList = ld.functional_locations || ld.locations || (Array.isArray(ld) ? ld : []);
     window._funcLocsList.forEach(l => {
-      if (l && l.id) locNameMap[l.id] = l.name || l.id;
+      const locId = l.fl_id || l.id;
+      if (locId) locNameMap[locId] = l.name || locId;
     });
 
     const assetMap = {};
