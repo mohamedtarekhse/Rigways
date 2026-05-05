@@ -363,6 +363,117 @@
     /* Original colors for light backgrounds */
   }
 
+  /* ── Wizard Step bar ── */
+    .wiz-step {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 4px; cursor: default;
+    }
+    .wiz-step__bubble {
+      width: 24px; height: 24px; border-radius: 50%;
+      font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      background: #e8eaed; color: var(--sap-text-secondary);
+      transition: all .2s;
+    }
+    .wiz-step__label {
+      font-size: 10px; font-weight: 600; color: var(--sap-text-secondary);
+      transition: color .2s; padding-bottom: 8px; white-space: nowrap;
+    }
+    .wiz-step--active .wiz-step__bubble { background: var(--sap-brand); color: #fff; }
+    .wiz-step--active .wiz-step__label  { color: var(--sap-brand); }
+    .wiz-step--done   .wiz-step__bubble { background: var(--sap-success); color: #fff; }
+    .wiz-step--done   .wiz-step__label  { color: var(--sap-success); }
+    .wiz-sep {
+      flex: 1; height: 2px; background: #e8eaed;
+      margin: 0 4px; margin-bottom: 12px;
+      transition: background .2s; max-width: 60px;
+    }
+    .wiz-sep--done { background: var(--sap-success); }
+
+    /* ── Wizard Panes ── */
+    .wiz-pane { display: none; }
+    .wiz-pane--active { display: block; }
+
+    /* ── Section label ── */
+    .wiz-section-label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--sap-text-secondary);
+      margin-bottom: 12px;
+    }
+    .wiz-section-label svg { width: 13px; height: 13px; }
+
+    /* ── Drop zone ── */
+    .wiz-drop {
+      border: 2px dashed var(--sap-input-border); border-radius: 8px;
+      padding: 32px 20px; text-align: center; cursor: pointer;
+      transition: all .2s; background: var(--sap-page-bg);
+      position: relative;
+    }
+    .wiz-drop:hover, .wiz-drop.drag-over {
+      border-color: var(--sap-brand); background: var(--sap-brand-light);
+    }
+    .wiz-drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .wiz-drop__icon {
+      width: 40px; height: 40px; background: #fff;
+      border: 1.5px solid var(--sap-table-border); border-radius: 8px;
+      display: inline-flex; align-items: center; justify-content: center;
+      margin-bottom: 10px;
+    }
+    .wiz-drop__icon svg { width: 20px; height: 20px; color: var(--sap-brand); }
+    .wiz-drop__title { font-size: 13px; font-weight: 600; color: var(--sap-text-primary); }
+    .wiz-drop__title span { color: var(--sap-brand); }
+    .wiz-drop__hint { font-size: 11px; color: var(--sap-text-secondary); margin-top: 4px; }
+
+    /* ── File preview ── */
+    .wiz-file-preview {
+      display: none; align-items: center; gap: 12px;
+      padding: 10px 14px; margin-top: 10px;
+      background: var(--sap-success-bg);
+      border: 1px solid var(--sap-success-border);
+      border-radius: 8px;
+    }
+    .wiz-file-preview.visible { display: flex; }
+    .wiz-file-preview__icon {
+      width: 34px; height: 34px; background: var(--sap-success);
+      border-radius: 6px; display: flex; align-items: center;
+      justify-content: center; flex-shrink: 0;
+    }
+    .wiz-file-preview__icon svg { width: 17px; height: 17px; color: #fff; }
+    .wiz-file-preview__name { font-size: 13px; font-weight: 600; color: var(--sap-text-primary); }
+    .wiz-file-preview__size { font-size: 11px; color: var(--sap-text-secondary); }
+    .wiz-file-preview__remove {
+      margin-left: auto; background: none; border: none;
+      cursor: pointer; color: var(--sap-text-secondary); padding: 4px;
+    }
+    .wiz-file-preview__remove:hover { color: var(--sap-error); }
+    .wiz-file-preview__remove svg { width: 14px; height: 14px; }
+
+    /* ── Review cards ── */
+    .wiz-review-card {
+      background: #fff; border: 1px solid var(--sap-table-border);
+      border-radius: 7px; overflow: hidden; margin-bottom: 10px;
+    }
+    .wiz-review-card__hdr {
+      padding: 8px 14px; background: var(--sap-page-bg);
+      border-bottom: 1px solid var(--sap-table-border);
+      display: flex; align-items: center; gap: 6px;
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--sap-text-secondary);
+    }
+    .wiz-review-card__body { padding: 10px 14px; }
+    .wiz-rr {
+      display: flex; align-items: flex-start;
+      padding: 5px 0; border-bottom: 1px solid var(--sap-table-border);
+      font-size: 12px;
+    }
+    .wiz-rr:last-child { border-bottom: none; }
+    .wiz-rr__k { width: 130px; flex-shrink: 0; color: var(--sap-text-secondary); font-size: 11px; }
+    .wiz-rr__v { color: var(--sap-text-primary); font-weight: 500; }
+
+    @media (max-width: 600px) {
+      .wiz-step__label { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -678,177 +789,216 @@
 </main>
 
 <!-- ═══════════════════════ UPLOAD / EDIT MODAL ═══════════════════════ -->
+<!-- ═══════════════════════ CERT UPLOAD WIZARD MODAL ═══════════════════════ -->
 <div class="sap-modal-overlay" id="certModal">
-  <div class="sap-modal sap-modal--lg">
-    <div class="sap-modal__header">
+  <div class="sap-modal sap-modal--lg" style="max-width:680px; padding:0; overflow:hidden;">
+
+    <!-- Modal Header -->
+    <div class="sap-modal__header" id="wizModalHeader">
       <div class="sap-modal__title">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
-        <span id="modalTitle">Upload Certificate</span>
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="18" height="18">
+          <path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+        </svg>
+        <span id="wizModalTitle">Upload Certificate</span>
       </div>
-      <button class="sap-modal__close" onclick="closeModal()"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <button class="sap-modal__close" onclick="closeModal()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
-    <div class="sap-modal__body">
-      <!-- Technician upload note -->
-      <div class="approval-info-box" id="techUploadNote" style="display:none;">
-        <strong>📋 <span>Upload & Approval Policy</span></strong><br/>
-        <span>Uploaded certificates require Admin approval. You can edit within 24 hours of upload only.</span>
+
+    <!-- Step Progress Bar -->
+    <div id="wizStepBar" style="display:flex; align-items:center; padding:12px 24px 0; background:#fff; border-bottom:1px solid var(--sap-table-border); gap:0;">
+      <div class="wiz-step wiz-step--active" id="ws1">
+        <div class="wiz-step__bubble" id="wsb1">1</div>
+        <div class="wiz-step__label">File</div>
+      </div>
+      <div class="wiz-sep" id="wsep1"></div>
+      <div class="wiz-step" id="ws2">
+        <div class="wiz-step__bubble" id="wsb2">2</div>
+        <div class="wiz-step__label">Asset</div>
+      </div>
+      <div class="wiz-sep" id="wsep2"></div>
+      <div class="wiz-step" id="ws3">
+        <div class="wiz-step__bubble" id="wsb3">3</div>
+        <div class="wiz-step__label">Details</div>
+      </div>
+      <div class="wiz-sep" id="wsep3"></div>
+      <div class="wiz-step" id="ws4">
+        <div class="wiz-step__bubble" id="wsb4">4</div>
+        <div class="wiz-step__label">Review</div>
+      </div>
+    </div>
+
+    <!-- ── STEP PANES ── -->
+    <div class="sap-modal__body" style="padding:20px 24px; min-height:320px;" id="wizBody">
+
+      <!-- ═══ STEP 1: File Upload ═══ -->
+      <div class="wiz-pane wiz-pane--active" id="wizPane1">
+        <div class="wiz-section-label">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          Certificate file
+        </div>
+        <div class="wiz-drop" id="wizDrop" ondragover="wizDrag(event,'wizDrop',true)" ondragleave="wizDrag(event,'wizDrop',false)" ondrop="wizDropFile(event)">
+          <input type="file" id="wizFileInput" accept=".pdf,.jpg,.jpeg,.png,.webp" onchange="wizFileSelect(this)">
+          <div class="wiz-drop__icon">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="12" y2="12"/><line x1="15" y1="15" x2="12" y2="12"/>
+            </svg>
+          </div>
+          <div class="wiz-drop__title">Drop file here or <span>browse</span></div>
+          <div class="wiz-drop__hint">PDF, JPG, PNG, WebP · max 200 MB</div>
+        </div>
+        <div class="wiz-file-preview" id="wizFilePreview">
+          <div class="wiz-file-preview__icon">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+            </svg>
+          </div>
+          <div class="wiz-file-preview__info">
+            <div class="wiz-file-preview__name" id="wizFpName"></div>
+            <div class="wiz-file-preview__size" id="wizFpSize"></div>
+          </div>
+          <button class="wiz-file-preview__remove" onclick="wizClearFile()">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="sap-field" style="margin-top:14px;">
+          <label class="sap-label">Or link an external URL</label>
+          <input type="url" id="wizExtUrl" class="sap-input" placeholder="https://example.com/certificate.pdf" oninput="wizValidateStep()">
+        </div>
       </div>
 
-      <form id="certForm" novalidate>
-        <input type="hidden" id="editCertId"/>
-        <input type="hidden" id="editUploadTime"/>
-
-        <div class="sap-form-grid sap-form-grid--2col">
-          <!-- Job Number -->
+      <!-- ═══ STEP 2: Cascading Asset Selection ═══ -->
+      <div class="wiz-pane" id="wizPane2">
+        <div class="wiz-section-label">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          Link to asset
+        </div>
+        <div class="sap-form-grid">
           <div class="sap-field">
-            <label class="sap-label">Job Number <span class="required">*</span></label>
-            <input type="text" id="f_jobNumber" class="sap-input" placeholder="e.g. JOB-2024-010 — groups all certs done in one job"/>
-          </div>
-          <div class="sap-field">
-            <label class="sap-label">Select Job</label>
-            <select id="f_jobSelect" class="sap-select" onchange="onJobSelectChange(this.value)">
-              <option value="">Select active job…</option>
-            </select>
-          </div>
-
-          <!-- Linked Asset (moved after job number) -->
-          <div class="sap-field">
-            <label class="sap-label">Linked Asset ID</label>
-            <select id="f_assetId" class="sap-select">
-              <option value="">Select asset…</option>
-            </select>
-          </div>
-
-          <!-- Cert Name -->
-          <div class="sap-field">
-            <label class="sap-label">Certificate Name / Title <span class="required">*</span></label>
-            <input type="text" id="f_name" class="sap-input"/>
-          </div>
-
-          <!-- Cert Type -->
-          <div class="sap-field">
-            <label class="sap-label">Certificate Type <span class="required">*</span></label>
-            <select id="f_certType" class="sap-select" onchange="onCertTypeChange()">
-              <option value="">Select type…</option>
-              <option>CAT III</option>
-              <option>CAT IV</option>
-              <option>ORIGINAL COC</option>
-              <option>LOAD TEST</option>
-              <option>LIFTING</option>
-              <option>NDT</option>
-              <option>TUBULAR</option>
-            </select>
-          </div>
-
-          <!-- Lifting Sub-type — shown only when LIFTING is selected -->
-          <div class="sap-field" id="liftingSubtypeWrap" style="display:none;">
-            <label class="sap-label">Lifting Sub-type <span class="required">*</span></label>
-            <select id="f_liftingSubtype" class="sap-select">
-              <option value="">Select sub-type…</option>
-              <option>LIFTING EQUIPMENT</option>
-              <option>LIFTING GEAR</option>
-              <option>LIFTING PERSONNEL</option>
-            </select>
-          </div>
-
-          <!-- Issued By — inspector dropdown -->
-          <div class="sap-field">
-            <label class="sap-label">Issued By (Inspector) <span class="required">*</span></label>
-            <select id="f_issuedBy" class="sap-select">
-              <option value="">Select inspector…</option>
-              <option>Ahmed Al-Rashidi</option>
-              <option>Sara Al-Khalil</option>
-              <option>Mohamed Hassan</option>
-              <option>Layla Bin Rashid</option>
-              <option>Khalid Al-Mansouri</option>
-            </select>
-          </div>
-
-          <!-- Issue Date -->
-          <div class="sap-field">
-            <label class="sap-label">Inspection Date <span class="required">*</span></label>
-            <input type="date" id="f_issueDate" class="sap-input" onchange="calculateExpiryDate()"/>
-          </div>
-
-          <!-- Period -->
-          <div class="sap-field">
-            <label class="sap-label">Period <span class="required">*</span></label>
-            <select id="f_period" class="sap-select" onchange="calculateExpiryDate()">
-              <option value="">Select period…</option>
-              <option value="1">Monthly (1 month)</option>
-              <option value="3">Quarterly (3 months)</option>
-              <option value="6">Semi-Annually (6 months)</option>
-              <option value="12">Annually (1 year)</option>
-              <option value="60">5 Years</option>
-              <option value="120">10 Years</option>
-            </select>
-          </div>
-
-          <!-- Expiry Date -->
-          <div class="sap-field">
-            <label class="sap-label">Expiry Date <span class="required">*</span></label>
-            <input type="date" id="f_expiryDate" class="sap-input"/>
-          </div>
-
-          <!-- Client -->
-          <div class="sap-field" id="f_client_wrap">
-            <label class="sap-label">Linked Client <span class="required">*</span></label>
-            <select id="f_client" class="sap-select" onchange="onCertClientChange()">
+            <label class="sap-label">Select Client <span class="required">*</span></label>
+            <select id="wizClient" class="sap-select" onchange="onWizClientChange(this.value)">
               <option value="">Select client…</option>
             </select>
           </div>
-
-          <!-- Functional Location -->
-          <div class="sap-field" id="f_funcLoc_wrap">
-            <label class="sap-label">Functional Location</label>
-            <select id="f_funcLoc" class="sap-select">
-              <option value="">Select functional location…</option>
+          <div class="sap-field">
+            <label class="sap-label">Functional Location <span class="required">*</span></label>
+            <select id="wizFuncLoc" class="sap-select" onchange="onWizFuncLocChange(this.value)" disabled>
+              <option value="">Select location…</option>
             </select>
           </div>
-
-        </div><!-- /grid -->
-
-        <!-- File Upload -->
-        <div class="sap-field mt-md">
-          <label class="sap-label">Certificate File (PDF / Image) <span class="required">*</span></label>
-          <div class="upload-zone" id="uploadZone">
-            <input type="file" id="certFileInput" accept=".pdf,.jpg,.jpeg,.png,.webp" onchange="handleFileSelect(this)"/>
-            <div class="upload-zone__icon">📄</div>
-            <div class="upload-zone__title"><span>Click to upload</span> <span>or drag & drop</span></div>
-            <div class="upload-zone__hint">PDF, JPG, PNG up to 200MB</div>
+          <div class="sap-field">
+            <label class="sap-label">Select Asset <span class="required">*</span></label>
+            <select id="wizAsset" class="sap-select" onchange="onWizAssetChange(this.value)" disabled>
+              <option value="">Select asset…</option>
+            </select>
           </div>
-          <div id="uploadPreview" style="display:none;" class="upload-preview">
-            <div class="upload-preview__icon" id="previewIcon">📄</div>
-            <div class="upload-preview__info">
-              <div class="upload-preview__name" id="previewName">—</div>
-              <div class="upload-preview__size" id="previewSize">—</div>
-            </div>
-            <button type="button" class="upload-preview__remove" onclick="clearFile()">
-              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
+          <div class="sap-field">
+            <label class="sap-label">Link to Job (Optional)</label>
+            <select id="wizJobSelect" class="sap-select" onchange="wizValidateStep()">
+              <option value="">Select active job…</option>
+            </select>
           </div>
-          <div id="existingFileNote" style="display:none;font-size:11px;color:var(--sap-text-secondary);margin-top:4px;"></div>
         </div>
+      </div>
 
-        <!-- External Certificate Link -->
-        <div class="sap-field mt-md">
-          <label class="sap-label" for="certExternalLink">Certificate Link (External URL)</label>
-          <input type="url" id="certExternalLink" class="sap-input" placeholder="https://example.com/certificate.pdf" />
-          <div style="font-size:11px;color:var(--sap-text-secondary);margin-top:4px;">Optional: Add an external link to the certificate document</div>
+      <!-- ═══ STEP 3: Certificate Details ═══ -->
+      <div class="wiz-pane" id="wizPane3">
+        <div class="wiz-section-label">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
+          Certificate details
         </div>
+        <div class="sap-form-grid sap-form-grid--2col">
+          <div class="sap-field" style="grid-column:1/-1;">
+            <label class="sap-label">Certificate Name / Title <span class="required">*</span></label>
+            <input type="text" id="wizName" class="sap-input" placeholder="e.g. Annual Inspection Certificate" oninput="wizValidateStep()">
+          </div>
+          <div class="sap-field">
+            <label class="sap-label">Certificate Number <span class="required">*</span></label>
+            <input type="text" id="wizCertNum" class="sap-input" placeholder="e.g. CERT-2025-001" oninput="wizValidateStep()">
+          </div>
+          <div class="sap-field">
+            <label class="sap-label">Certificate Type <span class="required">*</span></label>
+            <select id="wizCertType" class="sap-select" onchange="onWizTypeChange()">
+              <option value="">Select type…</option>
+              <option>CAT III</option><option>CAT IV</option><option>ORIGINAL COC</option>
+              <option>LOAD TEST</option><option>LIFTING</option><option>NDT</option><option>TUBULAR</option>
+            </select>
+          </div>
+          <div class="sap-field" id="wizLiftingWrap" style="display:none; grid-column:1/-1;">
+            <label class="sap-label">Lifting Sub-type <span class="required">*</span></label>
+            <select id="wizLiftingSubtype" class="sap-select" onchange="wizValidateStep()">
+              <option value="">Select sub-type…</option>
+              <option>LIFTING EQUIPMENT</option><option>LIFTING GEAR</option><option>LIFTING PERSONNEL</option>
+            </select>
+          </div>
+          <div class="sap-field">
+            <label class="sap-label">Issued By (Inspector) <span class="required">*</span></label>
+            <select id="wizInspector" class="sap-select" onchange="wizValidateStep()">
+              <option value="">Select inspector…</option>
+            </select>
+          </div>
+          <div class="sap-field">
+            <label class="sap-label">Inspection Date <span class="required">*</span></label>
+            <input type="date" id="wizIssueDate" class="sap-input" onchange="wizCalcExpiry()">
+          </div>
+          <div class="sap-field">
+            <label class="sap-label">Period <span class="required">*</span></label>
+            <select id="wizPeriod" class="sap-select" onchange="wizCalcExpiry()">
+              <option value="">Select period…</option>
+              <option value="1">Monthly</option><option value="3">Quarterly</option>
+              <option value="6">Semi-Annually</option><option value="12">Annually</option>
+              <option value="60">5 Years</option><option value="120">10 Years</option>
+            </select>
+          </div>
+          <div class="sap-field">
+            <label class="sap-label">Expiry Date <span class="required">*</span></label>
+            <input type="date" id="wizExpiryDate" class="sap-input" oninput="wizValidateStep()">
+          </div>
+        </div>
+      </div>
 
-      </form>
+      <!-- ═══ STEP 4: Review & Submit ═══ -->
+      <div class="wiz-pane" id="wizPane4">
+        <div class="wiz-section-label">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          Review before saving
+        </div>
+        <div class="wiz-review-card">
+          <div class="wiz-review-card__hdr">File & Asset</div>
+          <div class="wiz-review-card__body">
+            <div class="wiz-rr"><div class="wiz-rr__k">File</div><div class="wiz-rr__v" id="r_file"></div></div>
+            <div class="wiz-rr"><div class="wiz-rr__k">Asset</div><div class="wiz-rr__v" id="r_asset"></div></div>
+            <div class="wiz-rr"><div class="wiz-rr__k">Client</div><div class="wiz-rr__v" id="r_client"></div></div>
+          </div>
+        </div>
+        <div class="wiz-review-card">
+          <div class="wiz-review-card__hdr">Certificate Details</div>
+          <div class="wiz-review-card__body">
+            <div class="wiz-rr"><div class="wiz-rr__k">Name</div><div class="wiz-rr__v" id="r_name"></div></div>
+            <div class="wiz-rr"><div class="wiz-rr__k">Number</div><div class="wiz-rr__v" id="r_certNum"></div></div>
+            <div class="wiz-rr"><div class="wiz-rr__k">Expiry</div><div class="wiz-rr__v" id="r_expiry"></div></div>
+          </div>
+        </div>
+      </div>
+
     </div>
-    <div class="sap-modal__footer">
+
+    <!-- Modal Footer -->
+    <div class="sap-modal__footer" id="wizFooter">
+      <span style="font-size:11px;color:var(--sap-text-secondary);" id="wizStepLabel">Step 1 of 4</span>
+      <div style="flex:1;"></div>
+      <button class="btn btn-ghost" id="wizBtnBack" onclick="wizBack()" style="display:none;">Back</button>
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-ghost" id="exportHistoryBtn" onclick="exportHistoryPDF()" style="display:none;">
-        <span>Export History PDF</span>
-      </button>
-      <button class="btn btn-primary" onclick="saveCert()" id="saveBtn">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
-        <span id="saveBtnLabel">Upload Certificate</span>
-      </button>
+      <button class="btn btn-primary" id="wizBtnNext" onclick="wizNext()" disabled>Next</button>
+      <button class="btn btn-primary" id="wizBtnSave" onclick="saveCert()" style="display:none;">Save Certificate</button>
     </div>
+
   </div>
 </div>
 
@@ -1588,481 +1738,347 @@ async function massDelete() {
 /* ═══════════════════════════════════════════════════════
    UPLOAD / EDIT MODAL
 ═══════════════════════════════════════════════════════ */
-function certDraftKey(){ const id=document.getElementById('editCertId')?.value||''; return id?`certs:edit:${id}`:'certs:add'; }
-function collectCertDraft(){ return { editCertId:document.getElementById('editCertId')?.value||'', f_jobNumber:document.getElementById('f_jobNumber')?.value||'', f_jobSelect:document.getElementById('f_jobSelect')?.value||'', f_name:document.getElementById('f_name')?.value||'', f_certType:document.getElementById('f_certType')?.value||'', f_liftingSubtype:document.getElementById('f_liftingSubtype')?.value||'', f_issuedBy:document.getElementById('f_issuedBy')?.value||'', f_issueDate:document.getElementById('f_issueDate')?.value||'', f_period:document.getElementById('f_period')?.value||'', f_expiryDate:document.getElementById('f_expiryDate')?.value||'', f_client:document.getElementById('f_client')?.value||'', f_assetId:document.getElementById('f_assetId')?.value||'' }; }
-function saveCertDraft(){ if(window.SapDraft) SapDraft.save(certDraftKey(), collectCertDraft()); }
-function restoreCertDraft(){ if(!window.SapDraft) return; const d=SapDraft.load(certDraftKey(),24*60*60*1000); if(d&&confirm('A saved draft was found. Restore it?')) Object.entries(d).forEach(([k,v])=>{const el=document.getElementById(k); if(el) el.value=v;}); onCertTypeChange(); }
-function clearCertDraft(){ if(!window.SapDraft) return; const id=document.getElementById('editCertId')?.value||''; SapDraft.clear('certs:add'); if(id) SapDraft.clear(`certs:edit:${id}`); }
-function bindCertDraft(){ const f=document.getElementById('certForm'); if(!f||f.dataset.draftBound==='1') return; f.addEventListener('input',saveCertDraft); f.addEventListener('change',saveCertDraft); f.dataset.draftBound='1'; }
-function openUploadModal() {
-  document.getElementById('editCertId').value = '';
-  document.getElementById('certForm').reset();
-  clearFile();
-  document.getElementById('uploadPreview').style.display = 'none';
-  document.getElementById('existingFileNote').style.display = 'none';
-  document.getElementById('liftingSubtypeWrap').style.display = 'none';
-  document.getElementById('modalTitle').textContent = 'Upload Certificate';
-  document.getElementById('saveBtnLabel').textContent = 'Upload Certificate';
-  const historyBtn = document.getElementById('exportHistoryBtn');
-  if (historyBtn) historyBtn.style.display = 'none';
-  document.getElementById('techUploadNote').style.display = session.role === 'technician' ? 'block' : 'none';
+/* ═══════════════════════════════════════════════════════
+   CERTIFICATE WIZARD LOGIC
+═══════════════════════════════════════════════════════ */
+let wizStep = 1;
 
-  if (session.customerId) {
-    document.getElementById('f_client').value = session.customerId;
-    document.getElementById('f_client_wrap').style.display = 'none';
-  } else {
-    document.getElementById('f_client_wrap').style.display = '';
-    document.getElementById('f_client_wrap').style.flexDirection = 'column';
+function wizGoToStep(step) {
+  wizStep = step;
+  // Update panes
+  document.querySelectorAll('.wiz-pane').forEach((p, idx) => {
+    p.classList.toggle('wiz-pane--active', (idx + 1) === step);
+  });
+  // Update progress bar
+  for (let i = 1; i <= 4; i++) {
+    const s = document.getElementById('ws' + i);
+    const b = document.getElementById('wsb' + i);
+    const sep = document.getElementById('wsep' + (i - 1));
+    if (i < step) {
+      s.classList.add('wiz-step--done'); s.classList.remove('wiz-step--active');
+      b.innerHTML = '✓';
+      if (sep) sep.classList.add('wiz-sep--done');
+    } else if (i === step) {
+      s.classList.add('wiz-step--active'); s.classList.remove('wiz-step--done');
+      b.innerHTML = i;
+      if (sep) sep.classList.remove('wiz-sep--done');
+    } else {
+      s.classList.remove('wiz-step--active', 'wiz-step--done');
+      b.innerHTML = i;
+      if (sep) sep.classList.remove('wiz-sep--done');
+    }
   }
+  // Footer buttons
+  document.getElementById('wizBtnBack').style.display = step > 1 ? 'inline-block' : 'none';
+  document.getElementById('wizBtnNext').style.display = step < 4 ? 'inline-block' : 'none';
+  document.getElementById('wizBtnSave').style.display = step === 4 ? 'inline-block' : 'none';
+  document.getElementById('wizStepLabel').textContent = `Step ${step} of 4`;
 
-  /* Set today as default inspection date */
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('f_issueDate').value = today;
-  
-  bindCertDraft(); restoreCertDraft(); document.getElementById('certModal').classList.add('open');
-  // Load all dropdowns from API
-  loadAssetDropdown();
-  loadInspectorDropdown();
-  loadClientDropdown();
-  loadJobDropdown();
-  if (session.role === 'technician') lockTechnicianModalFields();
+  if (step === 4) wizReview();
+  wizValidateStep();
 }
 
-function openEditModal(id) {
-  const c = CERTS.find(x => x.certId === id);
-  if (!c) return;
+function wizNext() { if (wizStep < 4) wizGoToStep(wizStep + 1); }
+function wizBack() { if (wizStep > 1) wizGoToStep(wizStep - 1); }
 
-  /* Technician: check edit window */
-  if (session.role === 'technician') {
-    if (!canTechnicianEdit(c)) {
-      showToast('error',
-        'Edit Window Closed',
-        'You can only edit certificates within 24 hours of upload.');
-      return;
-    }
-    if (c.approvalStatus === 'approved') {
-      showToast('error',
-        'Already Approved',
-        'Approved certificates cannot be edited.');
-      return;
-    }
+function wizValidateStep() {
+  let ok = false;
+  if (wizStep === 1) {
+    ok = !!selectedFile || !!document.getElementById('wizExtUrl').value.trim();
+  } else if (wizStep === 2) {
+    ok = !!document.getElementById('wizClient').value && !!document.getElementById('wizFuncLoc').value && !!document.getElementById('wizAsset').value;
+  } else if (wizStep === 3) {
+    const name = document.getElementById('wizName').value.trim();
+    const cnum = document.getElementById('wizCertNum').value.trim();
+    const type = document.getElementById('wizCertType').value;
+    const insp = document.getElementById('wizInspector').value;
+    const isDt = document.getElementById('wizIssueDate').value;
+    const exDt = document.getElementById('wizExpiryDate').value;
+    ok = !!name && !!cnum && !!type && !!insp && !!isDt && !!exDt;
+    if (type === 'LIFTING' && !document.getElementById('wizLiftingSubtype').value) ok = false;
+  } else if (wizStep === 4) {
+    ok = true;
   }
+  document.getElementById('wizBtnNext').disabled = !ok;
+}
 
-  document.getElementById('editCertId').value       = id;
-  document.getElementById('editUploadTime').value   = c.uploadTime;
-  document.getElementById('f_jobNumber').value      = c.jobNumber || '';
-  document.getElementById('f_name').value           = c.name;
-  document.getElementById('f_certType').value       = c.certType;
-  onCertTypeChange();
-  document.getElementById('f_liftingSubtype').value = c.liftingSubtype || '';
-  document.getElementById('f_issuedBy').value       = c.issuedBy;
-  document.getElementById('f_issueDate').value      = c.issueDate;
-  // Calculate period from issue and expiry dates for edit mode
-  if (c.issueDate && c.expiryDate) {
-    const issue = new Date(c.issueDate);
-    const expiry = new Date(c.expiryDate);
-    const diffMonths = (expiry.getFullYear() - issue.getFullYear()) * 12 + (expiry.getMonth() - issue.getMonth());
-    const periodSelect = document.getElementById('f_period');
-    if (periodSelect) {
-      // Check if the diff matches one of our predefined periods
-      const options = ['1', '3', '6', '12', '60', '120'];
-      if (options.includes(String(diffMonths))) {
-        periodSelect.value = String(diffMonths);
+/* ── Step 1: File ── */
+function wizFileSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const fileSizeMB = file.size / (1024 * 1024);
+  if (fileSizeMB > 200) {
+    showToast('error', 'File Too Large', 'Max 200MB');
+    input.value = ''; return;
+  }
+  selectedFile = file;
+  document.getElementById('wizDrop').style.display = 'none';
+  document.getElementById('wizFilePreview').classList.add('visible');
+  document.getElementById('wizFpName').textContent = file.name;
+  document.getElementById('wizFpSize').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+  
+  // Smart metadata extraction (optional)
+  if (!document.getElementById('wizName').value) {
+    document.getElementById('wizName').value = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+  }
+  wizValidateStep();
+}
+
+function wizClearFile() {
+  selectedFile = null;
+  document.getElementById('wizFileInput').value = '';
+  document.getElementById('wizDrop').style.display = 'block';
+  document.getElementById('wizFilePreview').classList.remove('visible');
+  wizValidateStep();
+}
+
+function wizDrag(e, id, over) {
+  e.preventDefault();
+  document.getElementById(id).classList.toggle('drag-over', over);
+}
+
+function wizDropFile(e) {
+  e.preventDefault();
+  document.getElementById('wizDrop').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document.getElementById('wizFileInput').files = dt.files;
+    wizFileSelect(document.getElementById('wizFileInput'));
+  }
+}
+
+/* ── Step 2: Asset (Cascading) ── */
+async function onWizClientChange(cid) {
+  const locSel = document.getElementById('wizFuncLoc');
+  const astSel = document.getElementById('wizAsset');
+  locSel.innerHTML = '<option value="">Loading locations…</option>';
+  locSel.disabled = true;
+  astSel.innerHTML = '<option value="">Select asset…</option>';
+  astSel.disabled = true;
+
+  if (!cid) { locSel.innerHTML = '<option value="">Select location…</option>'; return; }
+
+  try {
+    const res = await apiFetch('/api/functional-locations?client_id=' + cid + '&limit=500');
+    const data = await res.json();
+    const locs = data.data || data || [];
+    locSel.innerHTML = '<option value="">Select location…</option>' +
+      locs.map(l => `<option value="${l.id}">${l.name || l.id}</option>`).join('');
+    locSel.disabled = false;
+  } catch(e) { locSel.innerHTML = '<option value="">Error loading locations</option>'; }
+  wizValidateStep();
+}
+
+async function onWizFuncLocChange(locId) {
+  const astSel = document.getElementById('wizAsset');
+  astSel.innerHTML = '<option value="">Loading assets…</option>';
+  astSel.disabled = true;
+
+  if (!locId) { astSel.innerHTML = '<option value="">Select asset…</option>'; return; }
+
+  try {
+    const res = await apiFetch('/api/assets?location_id=' + locId + '&limit=1000');
+    const data = await res.json();
+    const assets = data.data?.assets || data.data || [];
+    astSel.innerHTML = '<option value="">Select asset…</option>' +
+      assets.map(a => `<option value="${a.id}">${a.asset_number || a.id} — ${a.name || ''}</option>`).join('');
+    astSel.disabled = false;
+  } catch(e) { astSel.innerHTML = '<option value="">Error loading assets</option>'; }
+  wizValidateStep();
+}
+
+function onWizAssetChange() { wizValidateStep(); }
+
+/* ── Step 3: Details ── */
+function onWizTypeChange() {
+  const type = document.getElementById('wizCertType').value;
+  document.getElementById('wizLiftingWrap').style.display = (type === 'LIFTING') ? 'block' : 'none';
+  wizValidateStep();
+}
+
+function wizCalcExpiry() {
+  const isDt = document.getElementById('wizIssueDate').value;
+  const p = document.getElementById('wizPeriod').value;
+  if (!isDt || !p) return;
+  const d = new Date(isDt);
+  d.setMonth(d.getMonth() + parseInt(p));
+  document.getElementById('wizExpiryDate').value = d.toISOString().split('T')[0];
+  wizValidateStep();
+}
+
+/* ── Step 4: Review ── */
+function wizReview() {
+  document.getElementById('r_file').textContent = selectedFile ? selectedFile.name : (document.getElementById('wizExtUrl').value || 'No file selected');
+  const assetSel = document.getElementById('wizAsset');
+  document.getElementById('r_asset').textContent = assetSel.options[assetSel.selectedIndex]?.text || '—';
+  const clientSel = document.getElementById('wizClient');
+  document.getElementById('r_client').textContent = clientSel.options[clientSel.selectedIndex]?.text || '—';
+  
+  document.getElementById('r_name').textContent = document.getElementById('wizName').value;
+  document.getElementById('r_certNum').textContent = document.getElementById('wizCertNum').value;
+  document.getElementById('r_expiry').textContent = document.getElementById('wizExpiryDate').value;
+}
+
+/* ── Global Save ── */
+async function saveCert() {
+  const editId = document.getElementById('editCertId')?.value || '';
+  const payload = {
+    name:        document.getElementById('wizName').value.trim(),
+    cert_number: document.getElementById('wizCertNum').value.trim(),
+    cert_type:   document.getElementById('wizCertType').value,
+    lifting_subtype: document.getElementById('wizLiftingSubtype').value || null,
+    asset_id:    document.getElementById('wizAsset').value,
+    client_id:   document.getElementById('wizClient').value,
+    job_id:      document.getElementById('wizJobSelect').value || undefined,
+    issued_by:   document.getElementById('wizInspector').value,
+    issue_date:  document.getElementById('wizIssueDate').value,
+    expiry_date: document.getElementById('wizExpiryDate').value,
+    file_url:    document.getElementById('wizExtUrl').value.trim() || null,
+  };
+
+  const btn = document.getElementById('wizBtnSave');
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  try {
+    const url = editId ? '/api/certificates/' + editId : '/api/certificates';
+    const method = editId ? 'PATCH' : 'POST';
+    const res = await apiFetch(url, { method, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('error', 'Save Failed', data.error || 'Server error');
+      btn.disabled = false; btn.textContent = 'Save Certificate';
+      return;
+    }
+    const certUUID = data.data?.id || editId;
+
+    // Handle File Upload if present
+    if (selectedFile) {
+      btn.textContent = 'Uploading file...';
+      const fd = new FormData();
+      fd.append('file', selectedFile);
+      fd.append('cert_number', payload.cert_number);
+      fd.append('job_number', payload.job_id || 'NO-JOB');
+      fd.append('client_id', payload.client_id);
+
+      const uploadRes = await apiFetch('/api/certificates/upload', { method: 'POST', body: fd });
+      const uploadData = await uploadRes.json();
+      if (uploadData.success) {
+        await apiFetch('/api/certificates/' + certUUID, {
+          method: 'PATCH',
+          body: JSON.stringify({ file_name: uploadData.data.file_name, file_url: uploadData.data.file_url })
+        });
       } else {
-        periodSelect.value = ''; // Custom period
+        showToast('warning', 'File Upload Failed', 'Record saved but file failed.');
       }
     }
-  }
-  document.getElementById('f_expiryDate').value     = c.expiryDate;
-  document.getElementById('f_assetId').value        = c.assetId || '';
-  document.getElementById('f_client').value         = c.client;
 
-  clearFile();
-  if (c.fileName) {
-    document.getElementById('existingFileNote').style.display = 'block';
-    document.getElementById('existingFileNote').textContent =
-      '📎 Current file: ' + c.certId;
+    showToast('success', 'Success', 'Certificate saved successfully');
+    closeModal(true);
+    loadCerts();
+  } catch(e) {
+    showToast('error', 'Error', 'Network or system error');
+    btn.disabled = false; btn.textContent = 'Save Certificate';
   }
-
-  document.getElementById('modalTitle').textContent = 'Edit Certificate';
-  const historyBtn = document.getElementById('exportHistoryBtn');
-  if (historyBtn) historyBtn.style.display = '';
-  document.getElementById('saveBtnLabel').textContent = 'Save Changes';
-  document.getElementById('techUploadNote').style.display = session.role === 'technician' ? 'block' : 'none';
-  if (session.customerId) document.getElementById('f_client_wrap').style.display = 'none';
-  bindCertDraft(); restoreCertDraft(); document.getElementById('certModal').classList.add('open');
-  // Load all dropdowns from API then restore selected values
-  const _assetVal = c.assetId || '';
-  const _inspVal  = c.issuedBy || '';
-  const _clientVal = c.client || '';
-  loadAssetDropdown().then(() => {
-    if (_assetVal) document.getElementById('f_assetId').value = _assetVal;
-  });
-  loadInspectorDropdown(_inspVal);
-  loadClientDropdown(_clientVal);
-  loadJobDropdown(c.jobNumber || '');
-  if (session.role === 'technician') lockTechnicianModalFields();
 }
 
-function onJobSelectChange(jobId) {
-  if (!jobId) return;
-  const input = document.getElementById('f_jobNumber');
-  const job = JOBS_BY_ID[jobId] || null;
-  if (input) input.value = job?.job_number || '';
-  if (session?.role === 'technician') {
-    loadClientDropdown();
-    lockTechnicianModalFields();
-  }
-  // Load assets for the selected job
-  loadAssetsForJob(job?.job_number || '');
+function openUploadModal() {
+  document.getElementById('editCertId').value = '';
+  // Reset fields
+  wizClearFile();
+  document.getElementById('wizExtUrl').value = '';
+  document.getElementById('wizClient').value = '';
+  document.getElementById('wizFuncLoc').innerHTML = '<option value="">Select location…</option>';
+  document.getElementById('wizAsset').innerHTML = '<option value="">Select asset…</option>';
+  document.getElementById('wizJobSelect').value = '';
+  document.getElementById('wizName').value = '';
+  document.getElementById('wizCertNum').value = '';
+  document.getElementById('wizCertType').value = '';
+  document.getElementById('wizLiftingSubtype').value = '';
+  document.getElementById('wizIssueDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('wizPeriod').value = '';
+  document.getElementById('wizExpiryDate').value = '';
+  
+  loadWizInspectorDropdown();
+  loadWizClientDropdown();
+  loadWizJobDropdown();
+  
+  document.getElementById('wizModalTitle').textContent = 'Upload Certificate';
+  document.getElementById('certModal').classList.add('open');
+  wizGoToStep(1);
 }
 
-function loadAssetsForJob(jobNumber) {
-  const assetSel = document.getElementById('f_assetId');
-  if (!assetSel) return;
-  // For now, keep all assets in dropdown - filtering can be added later if needed
-  // The asset dropdown is already populated by loadAssetDropdown()
+async function openEditModal(id) {
+  const c = CERTS.find(x => x.certId === id);
+  if (!c) return;
+  
+  document.getElementById('editCertId').value = c.id || id;
+  // Pre-fill steps
+  if (c.fileUrl) {
+    document.getElementById('wizExtUrl').value = c.fileUrl;
+  }
+  
+  // We need to await dropdown loads to set values
+  await loadWizClientDropdown(c.client);
+  await onWizClientChange(c.client);
+  document.getElementById('wizFuncLoc').value = c.functional_location_id || '';
+  await onWizFuncLocChange(c.functional_location_id);
+  document.getElementById('wizAsset').value = c.asset_id || '';
+  
+  document.getElementById('wizName').value = c.name || '';
+  document.getElementById('wizCertNum').value = c.cert_number || '';
+  document.getElementById('wizCertType').value = c.certType || '';
+  onWizTypeChange();
+  document.getElementById('wizLiftingSubtype').value = c.liftingSubtype || '';
+  await loadWizInspectorDropdown(c.issuedBy);
+  document.getElementById('wizIssueDate').value = c.issueDate || '';
+  document.getElementById('wizExpiryDate').value = c.expiryDate || '';
+  
+  document.getElementById('wizModalTitle').textContent = 'Edit Certificate';
+  document.getElementById('certModal').classList.add('open');
+  wizGoToStep(1);
 }
 
-function calculateExpiryDate() {
-  const issueDateVal = document.getElementById('f_issueDate')?.value;
-  const periodMonths = document.getElementById('f_period')?.value;
-  const expiryField = document.getElementById('f_expiryDate');
-  
-  if (!issueDateVal || !periodMonths || !expiryField) return;
-  
-  const issueDate = new Date(issueDateVal);
-  const months = parseInt(periodMonths, 10);
-  
-  // Calculate expiry date by adding months to inspection date
-  const expiryDate = new Date(issueDate);
-  expiryDate.setMonth(expiryDate.getMonth() + months);
-  
-  // Format as YYYY-MM-DD for the date input
-  const year = expiryDate.getFullYear();
-  const month = String(expiryDate.getMonth() + 1).padStart(2, '0');
-  const day = String(expiryDate.getDate()).padStart(2, '0');
-  
-  expiryField.value = `${year}-${month}-${day}`;
+async function loadWizInspectorDropdown(selected) {
+  const sel = document.getElementById('wizInspector');
+  try {
+    const res = await apiFetch('/api/inspectors?status=active');
+    const data = await res.json();
+    const list = data.data || data || [];
+    sel.innerHTML = '<option value="">Select inspector…</option>' +
+      list.map(i => `<option value="${i.name}" ${selected === i.name ? 'selected' : ''}>${i.name}</option>`).join('');
+  } catch(e) {}
 }
 
-function lockTechnicianModalFields() {
-  if (session?.role !== 'technician') return;
-  const inspectorSel = document.getElementById('f_issuedBy');
-  if (inspectorSel) {
-    const inspectorName = (session.name || '').trim();
-    inspectorSel.innerHTML = inspectorName
-      ? `<option value="${inspectorName}">${inspectorName}</option>`
-      : '<option value="">Technician account missing display name</option>';
-    inspectorSel.value = inspectorName;
-    inspectorSel.disabled = true;
-  }
+async function loadWizClientDropdown(selected) {
+  const sel = document.getElementById('wizClient');
+  try {
+    const res = await apiFetch('/api/clients?status=active');
+    const data = await res.json();
+    const list = data.data || data || [];
+    sel.innerHTML = '<option value="">Select client…</option>' +
+      list.map(c => `<option value="${c.client_id || c.id}" ${selected === (c.client_id || c.id) ? 'selected' : ''}>${c.name}</option>`).join('');
+  } catch(e) {}
+}
 
-  const clientSel = document.getElementById('f_client');
-  const clientWrap = document.getElementById('f_client_wrap');
-  if (clientSel) {
-    const selectedJobId = (document.getElementById('f_jobSelect')?.value || '').trim();
-    const selectedJob = selectedJobId ? JOBS_BY_ID[selectedJobId] : null;
-    const cid = String(selectedJob?.client_id || '').trim();
-    const label = cid ? (CLIENTS_MAP[cid] ? `${CLIENTS_MAP[cid]} (${cid})` : cid) : 'Auto from selected job';
-    clientSel.innerHTML = `<option value="${cid}">${label}</option>`;
-    clientSel.value = cid;
-    clientSel.disabled = true;
-    if (clientWrap) clientWrap.style.display = 'none';
-  }
+async function loadWizJobDropdown() {
+  const sel = document.getElementById('wizJobSelect');
+  try {
+    const res = await apiFetch('/api/jobs?limit=100');
+    const data = await res.json();
+    const jobs = data.data?.jobs || data || [];
+    sel.innerHTML = '<option value="">Select active job…</option>' +
+      jobs.filter(j => j.status === 'active').map(j => `<option value="${j.id}">${j.job_number}</option>`).join('');
+  } catch(e) {}
 }
 
 function closeModal(force) {
-  if (!force && (document.getElementById('f_name')?.value || '').trim() &&
-      !confirm('Close this modal? Draft will be kept for 24 hours and can be restored.')) return;
-  saveCertDraft();
+  if (!force && wizStep > 1 && !confirm('Discard changes?')) return;
   document.getElementById('certModal').classList.remove('open');
-  clearFile();
+  wizClearFile();
 }
 
-/* ── Cert type change — show/hide lifting sub-type ── */
-function onCertTypeChange() {
-  const type = document.getElementById('f_certType').value;
-  const wrap = document.getElementById('liftingSubtypeWrap');
-  if (wrap) {
-    wrap.style.display = type === 'LIFTING' ? 'flex' : 'none';
-    wrap.style.flexDirection = 'column';
-  }
-  if (type !== 'LIFTING') {
-    const sub = document.getElementById('f_liftingSubtype');
-    if (sub) sub.value = '';
-  }
-}
-
-/* ── File handling ── */
-const MAX_FILE_SIZE_MB = 200; // 200 MB limit
-
-function handleFileSelect(input) {
-  const file = input.files[0];
-  if (!file) return;
-  
-  // Check file size
-  const fileSizeMB = file.size / (1024 * 1024);
-  if (fileSizeMB > MAX_FILE_SIZE_MB) {
-    showToast('error', 'File Too Large', `File size must be less than ${MAX_FILE_SIZE_MB} MB. Your file is ${fileSizeMB.toFixed(2)} MB.`);
-    input.value = '';
-    return;
-  }
-  
-  const icons = { pdf:'📄', jpg:'🖼️', jpeg:'🖼️', png:'🖼️', webp:'🖼️' };
-  const ext = file.name.split('.').pop().toLowerCase();
-  selectedFile = file;
-  document.getElementById('uploadZone').style.display  = 'none';
-  document.getElementById('uploadPreview').style.display= 'flex';
-  document.getElementById('previewIcon').textContent   = icons[ext] || '📄';
-  document.getElementById('previewName').textContent   = file.name;
-  document.getElementById('previewSize').textContent   = `${(file.size/1024).toFixed(1)} KB`;
-}
-function clearFile() {
-  selectedFile = null;
-  document.getElementById('certFileInput').value = '';
-  document.getElementById('uploadZone').style.display   = 'block';
-  document.getElementById('uploadPreview').style.display = 'none';
-}
-
-/* ── Drag & drop ── */
-const zone = document.getElementById('uploadZone');
-zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag'); });
-zone.addEventListener('dragleave', ()  => zone.classList.remove('drag'));
-zone.addEventListener('drop', e => {
-  e.preventDefault(); zone.classList.remove('drag');
-  const file = e.dataTransfer.files[0];
-  if (file) { const dt = new DataTransfer(); dt.items.add(file); document.getElementById('certFileInput').files = dt.files; handleFileSelect(document.getElementById('certFileInput')); }
-});
-
-/* ── Upload progress toast with bar ── */
-function showUploadProgressToast(progress, message) {
-  let toast = document.getElementById('uploadProgressToast');
-  if (!toast) {
-    // Create the toast element if it doesn't exist
-    toast = document.createElement('div');
-    toast.id = 'uploadProgressToast';
-    toast.className = 'sap-toast sap-toast--info';
-    toast.style.cssText = 'position: fixed; bottom: 24px; right: 24px; z-index: 9999; min-width: 300px; max-width: 400px;';
-    toast.innerHTML = `
-      <div style="display: flex; align-items: flex-start; gap: 12px;">
-        <div style="flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--sap-brand); color: #fff; display: flex; align-items: center; justify-content: center;">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width: 16px; height: 16px;"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-        </div>
-        <div style="flex: 1;">
-          <div style="font-size: 13px; font-weight: 700; color: var(--sap-text-primary);" id="uploadProgressTitle">Uploading...</div>
-          <div style="margin-top: 8px; height: 6px; background: #e8eaed; border-radius: 3px; overflow: hidden;">
-            <div id="uploadProgressBar" style="height: 100%; background: var(--sap-brand); width: 0%; transition: width 0.3s ease;"></div>
-          </div>
-          <div style="margin-top: 4px; font-size: 11px; color: var(--sap-text-secondary);" id="uploadProgressMessage">Preparing upload...</div>
-        </div>
-        <button onclick="this.closest('.sap-toast').remove()" style="background: none; border: none; color: var(--sap-text-secondary); cursor: pointer; padding: 0; flex-shrink: 0;">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width: 16px; height: 16px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-    `;
-    document.body.appendChild(toast);
-  }
-  
-  const progressBar = document.getElementById('uploadProgressBar');
-  const progressMessage = document.getElementById('uploadProgressMessage');
-  
-  if (progressBar) progressBar.style.width = progress + '%';
-  if (progressMessage) progressMessage.textContent = message;
-  
-  toast.style.display = 'block';
-}
-
-function hideUploadProgressToast() {
-  const toast = document.getElementById('uploadProgressToast');
-  if (toast) {
-    toast.style.opacity = '0';
-    setTimeout(() => toast.remove(), 300);
-  }
-}
-
-function formatUploadBytes(bytes) {
-  const n = Number(bytes || 0);
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-function uploadCertificateFileWithProgress({ url, formData, token, onProgress }) {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', url, true);
-    if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
-
-    xhr.upload.onprogress = evt => {
-      if (!evt.lengthComputable) return;
-      const percent = Math.min(100, Math.round((evt.loaded / evt.total) * 100));
-      if (onProgress) onProgress(percent, evt.loaded, evt.total);
-    };
-
-    xhr.onload = () => {
-      let body = null;
-      try {
-        body = xhr.responseText ? JSON.parse(xhr.responseText) : {};
-      } catch {
-        body = { success: false, error: 'Invalid upload response' };
-      }
-      resolve({ status: xhr.status, ok: xhr.status >= 200 && xhr.status < 300, body });
-    };
-    xhr.onerror = () => reject(new Error('Upload request failed'));
-    xhr.onabort = () => reject(new Error('Upload aborted'));
-    xhr.send(formData);
-  });
-}
-
-/* ── Save ── */
-async function saveCert() {
-  const jobNumber      = document.getElementById('f_jobNumber')?.value?.trim() || '';
-  const selectedJobId  = document.getElementById('f_jobSelect')?.value?.trim() || '';
-  const name           = document.getElementById('f_name')?.value?.trim() || '';
-  const certType       = document.getElementById('f_certType')?.value || '';
-  const liftingSubtype = certType === 'LIFTING' ? (document.getElementById('f_liftingSubtype')?.value || '') : '';
-  const issuedBy       = document.getElementById('f_issuedBy')?.value?.trim() || '';
-  const issueDate      = document.getElementById('f_issueDate')?.value || '';
-  const expiryDate     = document.getElementById('f_expiryDate')?.value || '';
-  const client         = document.getElementById('f_client')?.value || session?.customerId || '';
-  const assetId        = document.getElementById('f_assetId')?.value || '';
-  const editId         = document.getElementById('editCertId')?.value || '';
-  const isTechnician   = session?.role === 'technician';
-  const effectiveIssuedBy = isTechnician ? (session?.name || '').trim() : issuedBy;
-  const jobForUpload      = selectedJobId ? JOBS_BY_ID[selectedJobId] : null;
-  const effectiveClient   = isTechnician ? String(jobForUpload?.client_id || '').trim() : client;
-
-  if (!name || !certType || !effectiveIssuedBy || !issueDate || !expiryDate) {
-    showToast('error','Required Fields','Please fill all required fields.'); return;
-  }
-  if (isTechnician && !selectedJobId) {
-    showToast('error','Job Required','Please select an assigned active/reopened job.');
-    return;
-  }
-  if (isTechnician && !effectiveClient) {
-    showToast('error','Job Client Missing','Selected job is missing client mapping. Contact administrator.');
-    return;
-  }
-  if (certType === 'LIFTING' && !liftingSubtype) {
-    showToast('error','Lifting Sub-type Required','Please select a lifting sub-type.'); return;
-  }
-  if (!editId && !selectedFile) {
-    const externalLink = document.getElementById('certExternalLink')?.value?.trim() || '';
-    if (!externalLink) {
-      showToast('error','File or Link Required','Please upload the certificate file or provide an external link.'); return;
-    }
-  }
-  if (issueDate && expiryDate && new Date(expiryDate) <= new Date(issueDate)) {
-    showToast('error','Invalid Date','Expiry date must be after issue date.'); return;
-  }
-
-  const saveBtn = document.querySelector('[onclick*="saveCert"]');
-  if (saveBtn) { saveBtn.disabled = true; const _lbl = document.getElementById('saveBtnLabel'); if (_lbl) _lbl.textContent = 'Saving…'; }
-
-  /* ── Step 1: Save/update the cert record (without file fields) ── */
-  const externalLink = document.getElementById('certExternalLink')?.value?.trim() || '';
-  const payload = {
-    name,
-    cert_type:   certType,
-    lifting_subtype: liftingSubtype || null,
-    asset_id:    assetId   || undefined,
-    client_id:   effectiveClient || undefined,
-    job_id:      selectedJobId || undefined,
-    issued_by:   effectiveIssuedBy,
-    issue_date:  issueDate,
-    expiry_date: expiryDate,
-    notes:       (jobForUpload?.job_number || jobNumber || null),
-    file_url:    externalLink || null,
-  };
-
-  let savedCert = null;
-  let certUUID  = null;   // the real DB UUID we'll use for Step 3
-  try {
-    const editCert = editId ? CERTS.find(x => x.certId === editId) : null;
-    certUUID       = editCert?.id || editId || null;
-    const url      = editId ? '/api/certificates/' + certUUID : '/api/certificates';
-    const method   = editId ? 'PATCH' : 'POST';
-    const res      = await apiFetch(url, { method, body: JSON.stringify(payload) });
-    const data     = await res.json();
-    if (!data.success) {
-      showToast('error','Save Failed',(data.data||data).error || 'Could not save.');
-      if (saveBtn) { saveBtn.disabled = false; const _lbl2 = document.getElementById('saveBtnLabel'); if (_lbl2) _lbl2.textContent = 'Save Certificate'; }
-      return;
-    }
-    savedCert = data.data || data;
-    // For new records the UUID comes back from the server
-    if (!certUUID) certUUID = savedCert.id || savedCert.cert_number;
-  } catch(e) {
-    showToast('error','Network Error','Could not save certificate.');
-    if (saveBtn) { saveBtn.disabled = false; const _lbl3 = document.getElementById('saveBtnLabel'); if (_lbl3) _lbl3.textContent = 'Save Certificate'; }
-    return;
-  }
-
-  /* ── Step 2: Upload file with structured R2 key (only if a new file was selected) ── */
-  if (selectedFile) {
-    if (saveBtn) { const _lbl4 = document.getElementById('saveBtnLabel'); if (_lbl4) _lbl4.textContent = 'Uploading file…'; }
-    
-    // Show upload progress toast
-    showUploadProgressToast(0, 'Starting upload...');
-    
-    try {
-      // Build structured metadata for the R2 key
-      // Key pattern: clients/{CLIENT_ID}/jobs/{JOB_NUMBER}/{JOB_NUMBER}_{CERT_NUMBER}_{originalname}.{ext}
-      const certNumber  = savedCert.cert_number || savedCert.id || certUUID;
-      const jobNum      = jobNumber || savedCert.notes || 'NO-JOB';
-      const clientId    = client || savedCert.client_id || session?.customerId || 'GENERAL';
-
-      const fd = new FormData();
-      fd.append('file',        selectedFile);
-      fd.append('cert_number', certNumber);
-      fd.append('job_number',  jobNum);
-      fd.append('client_id',   clientId);
-
-      const token = JSON.parse(sessionStorage.getItem('sap_session') || '{}').token || '';
-      const uploadResult = await uploadCertificateFileWithProgress({
-        url: '/api/certificates/upload',
-        formData: fd,
-        token,
-        onProgress: (pct, loaded, total) => {
-          showUploadProgressToast(pct, `Uploading ${formatUploadBytes(loaded)} of ${formatUploadBytes(total)} (${pct}%)`);
-        },
-      });
-      const ud  = uploadResult.body || {};
-      const udd = ud.data || ud;
-      
-      if (!ud.success) {
-        hideUploadProgressToast();
-        // Cert record is already saved — warn but don't block
-        showToast('warning','File Upload Failed',
-          'Certificate saved but file could not be uploaded: ' + (udd.error || 'Unknown error') +
-          '. Edit the certificate to try again.');
-      } else {
-        // Step 3: PATCH the cert record with the structured file_url + file_name
-        showUploadProgressToast(100, 'Finalizing...');
-        await apiFetch('/api/certificates/' + certUUID, {
-          method: 'PATCH',
-          body: JSON.stringify({ file_name: udd.file_name, file_url: udd.file_url }),
-        });
-        setTimeout(() => hideUploadProgressToast(), 500);
-      }
-    } catch(e) {
-      hideUploadProgressToast();
-      showToast('warning','File Upload Error',
-        'Certificate saved but file upload failed. Edit the certificate to re-attach the file.');
-    }
-  }
-
-  /* ── Done ── */
-  selectedFile = null;
-  showToast('success', editId ? 'Updated' : 'Saved',
-    '"' + name + '" ' + (editId ? 'updated.' : 'saved & sent for approval.'));
-  clearCertDraft();
-  closeModal(true);
-  if (saveBtn) { saveBtn.disabled = false; const _lbl5 = document.getElementById('saveBtnLabel'); if (_lbl5) _lbl5.textContent = 'Save Certificate'; }
-  await loadCerts();
-}
 
 
 /* ═══════════════════════════════════════════════════════
