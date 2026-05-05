@@ -1497,7 +1497,7 @@ function openDrawer(id) {
         ? (insp.trainingCerts||[]).map(tc => `
         <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--sap-table-border);">
           <div style="font-size:12px;font-weight:600;color:var(--sap-text-primary);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h(tc.name)}</div>
-          ${tc.url
+          ${(tc.url && /^https?:\/\//i.test(tc.url))
             ? `<a href="${tc.url}" target="_blank" rel="noopener"
                 style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
                        color:var(--sap-brand);background:var(--sap-brand-light);border:1px solid var(--sap-info-border);
@@ -1506,19 +1506,19 @@ function openDrawer(id) {
                 <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                 Open URL
               </a>`
-            : tc.file
+            : (tc.url || tc.file)
               ? `<button
-                  data-tcfile="${h(tc.file)}"
-                  data-tcurl=""
+                  data-tcfile="${h(tc.file || '')}"
+                  data-tcurl="${h(/^https?:\/\//i.test(tc.url) ? '' : tc.url || '')}"
                   data-tcname="${h(tc.name)}"
                   data-inspector-uuid="${h(insp._uuid || insp.id || '')}"
                   onclick="openTCLinkFromEl(this)"
                   style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
                          color:var(--sap-success);background:#f0faf0;border:1px solid var(--sap-success-border);
                          border-radius:4px;padding:3px 8px;cursor:pointer;white-space:nowrap;flex-shrink:0;"
-                  title="Open file: ${h(tc.file)}">
+                  title="Open file: ${h(tc.file || 'certificate')}">
                   <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                  ${h(tc.file)}
+                  ${h(tc.file || 'View Certificate')}
                 </button>`
               : `<span style="color:var(--sap-text-disabled);font-size:11px;">No link</span>`}
         </div>`).join('')
@@ -1551,11 +1551,18 @@ document.getElementById('drawerOverlay').addEventListener('click', function(e) {
 function openCV(id) {
   const insp = INSPECTORS.find(i => i.inspectorId === id);
   if (!insp) return;
-  if (insp.cvKey && insp._uuid) {
-    openProtectedInspectorFile(insp._uuid, insp.cvKey, insp.cvFile || 'cv');
+  if (insp.cvUrl && /^https?:\/\//i.test(insp.cvUrl)) { safeOpen(insp.cvUrl); return; }
+  
+  const keyToUse = (insp.cvUrl && !/^https?:\/\//i.test(insp.cvUrl)) ? insp.cvUrl : insp.cvKey;
+  
+  if (keyToUse && insp._uuid) {
+    if (!keyToUse.startsWith('inspectors/')) {
+       showToast('error', 'Invalid File', 'This file format is outdated. Please edit the inspector and re-upload the CV.');
+       return;
+    }
+    openProtectedInspectorFile(insp._uuid, keyToUse, insp.cvFile || 'cv');
     return;
   }
-  if (insp.cvUrl && /^https?:\/\//i.test(insp.cvUrl)) { safeOpen(insp.cvUrl); return; }
   if (insp.cvFile) {
     showToast('warning',
       currentLang==='ar'?'الملف غير متاح':'CV unavailable',
@@ -1616,6 +1623,10 @@ async function openTCLinkFromEl(el) {
   if (url) {
     if (/^https?:\/\//i.test(url)) { safeOpen(url); return; }
     if (inspectorUuid) {
+      if (!url.startsWith('inspectors/')) {
+         showToast('error', 'Invalid File', 'This file format is outdated. Please edit the inspector and re-upload the certificate.');
+         return;
+      }
       await openProtectedInspectorFile(inspectorUuid, url, file || name || 'certificate');
       return;
     }
