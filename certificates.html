@@ -1358,9 +1358,7 @@ function renderTable() {
   let data = [...CERTS];
 
   /* Scope by customer */
-  if (session.customerId && role !== 'admin' && role !== 'manager') {
-    data = data.filter(c => c.client === session.customerId);
-  } else if (clientF !== 'all') {
+  if (clientF !== 'all' && (role === 'admin' || role === 'manager')) {
     data = data.filter(c => c.client === clientF);
   }
 
@@ -1368,9 +1366,6 @@ function renderTable() {
   if (locF !== 'all') {
     data = data.filter(c => String(c.functionalLocationName || c.functional_location || '').trim() === locF);
   }
-
-  /* The API already scopes user/technician certificate rows by assigned location. */
-  const userFL = String(session.functional_location || session.functionalLocation || '').trim();
 
   /* Technician sees only their own uploads */
   if (role === 'technician') data = data.filter(c => c.uploadedBy === 'Ali T.' || true); /* allow all for demo */
@@ -1446,8 +1441,7 @@ function renderTable() {
   filteredData = data;
 
   /* Sidebar badge — update expiry count */
-  let all = session.customerId && role !== 'admin' && role !== 'manager'
-    ? CERTS.filter(c => c.client === session.customerId) : CERTS;
+  let all = [...CERTS];
   const expCount = all.filter(c=>getCertStatus(c)==='expiring'||getCertStatus(c)==='expired').length;
   const sidebarBadgeEl = document.getElementById('sidebarBadge');
   if (sidebarBadgeEl) sidebarBadgeEl.textContent = expCount;

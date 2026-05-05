@@ -93,4 +93,81 @@ function extract(source, start, end) {
   assert.equal(context.fmtCertId({ certId: '2026-004/012', jobNumber: 'JOB-2026-004' }), '2026-004/012');
 }
 
+{
+  const code = extract(certsHtml, 'function renderTable() {', 'function applyClientColVisibility()');
+  const elements = new Map();
+  const getElementById = (id) => {
+    if (!elements.has(id)) {
+      elements.set(id, {
+        value: '',
+        textContent: '',
+        innerHTML: '',
+        style: {},
+      });
+    }
+    return elements.get(id);
+  };
+  getElementById('searchInput').value = '';
+  getElementById('clientFilter').value = 'all';
+  getElementById('typeFilter').value = 'all';
+  getElementById('locationFilter').value = 'all';
+  getElementById('uploadDateFilter').value = '';
+  const context = {
+    session: { role: 'user', customerId: 'C001' },
+    CERTS: [{
+      id: 'cert-1',
+      certId: '2026-004/012',
+      name: 'Main Hoist',
+      certType: 'LOAD TEST',
+      client: '9c390bd2-2a6f-4d4f-a2c9-123456789abc',
+      functionalLocationName: 'Rig 7',
+      approvalStatus: 'approved',
+      expiryDate: '2026-12-31',
+      issueDate: '2026-01-01',
+      issuedBy: 'Rigways',
+      jobNumber: 'JOB-2026-004',
+      liftingSubtype: '',
+      uploadedBy: 'Tester',
+      fileName: 'cert.pdf',
+      fileUrl: '/file',
+      assetId: 'AST-0001',
+    }],
+    activeStatusFilter: 'all',
+    currentPage: 1,
+    PAGE_SIZE: 25,
+    sortCol: 'name',
+    sortDir: 1,
+    filteredData: [],
+    window: {},
+    document: { getElementById },
+    fmtCertId: (cert) => cert.certId,
+    getCertStatus: () => 'valid',
+    parseCertDateTime: () => null,
+    getApprovalBadge: () => 'approved',
+    getExpiryBar: () => '',
+    canTechnicianEdit: () => false,
+    canDeleteFile: () => false,
+    showRowActions: () => {},
+    hideRowActions: () => {},
+    openDrawer: () => {},
+    openEditModal: () => {},
+    approveCert: () => {},
+    openRejectModal: () => {},
+    openDeleteModal: () => {},
+    openCertLink: () => {},
+    openDeleteOptionsModal: () => {},
+    TYPE_COLORS: { 'LOAD TEST': { bg: '#eee', color: '#000' }, Other: { bg: '#eee', color: '#000' } },
+    h: (value) => String(value ?? ''),
+    renderPagination: () => {},
+    applyColVisibility: () => {},
+    applyClientColVisibility: () => {},
+    syncCerts: () => {},
+  };
+  vm.runInNewContext(`${code}; this.renderTable = renderTable;`, context);
+  context.renderTable();
+
+  assert.equal(getElementById('tableCount').textContent, 1);
+  assert.equal(getElementById('emptyState').style.display, 'none');
+}
+
 console.log('user role table render regression passed');
