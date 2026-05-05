@@ -17,10 +17,10 @@ function securityHeaders(request, env = {}) {
     "frame-ancestors 'self'",
     "form-action 'self'",
     "img-src 'self' data: blob: https:",
-    "font-src 'self' data:",
-    "connect-src 'self' https: wss:",
-    "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "connect-src 'self' https: wss: http://localhost:8787 http://127.0.0.1:8787",
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "upgrade-insecure-requests",
   ].join('; ');
   return {
