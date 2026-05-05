@@ -1,5 +1,6 @@
 // worker/src/routes/assets.js
 import { createSupabase }                    from '../lib/supabase.js';
+import { buildFunctionalLocationAliases }    from '../lib/functional-location.js';
 import { getSession, requireRole }           from '../middleware/jwt.js';
 import { ok, created, badReq, unauth, forbidden, notFound, conflict, serverErr } from '../utils/response.js';
 import { validate, pick, compact }           from '../utils/validate.js';
@@ -22,6 +23,33 @@ async function resolveClientAliases(db, rawClientId) {
     if (row?.client_id) out.add(String(row.client_id));
   }
   return Array.from(out);
+}
+
+async function resolveFunctionalLocationAliases(db, rawLocation, rawClientId) {
+  const key = String(rawLocation || '').trim();
+  if (!key) return [];
+  const filtersToTry = [
+    { 'fl_id.eq': key },
+    { 'name.eq': key },
+    { 'id.eq': key },
+  ];
+  const clientAliases = await resolveClientAliases(db, rawClientId);
+  for (const clientId of clientAliases) {
+    if (!clientId) continue;
+    filtersToTry.push({ 'fl_id.eq': key, 'client_id.eq': clientId });
+    filtersToTry.push({ 'name.eq': key, 'client_id.eq': clientId });
+  }
+
+  const rows = [];
+  for (const filters of filtersToTry) {
+    const { data } = await db.from('functional_locations', {
+      filters,
+      select:'id,fl_id,name,client_id',
+      limit:10,
+    });
+    for (const row of Array.isArray(data) ? data : []) rows.push(row);
+  }
+  return buildFunctionalLocationAliases(key, rows);
 }
 
 async function resolveAssetId(db, rawId) {
@@ -143,18 +171,25 @@ export async function handleAssets(request, env, path) {
 
     // Backward-compat fallback: some deployments store assets.client_id as clients.id,
     // while session.customerId contains clients.client_id (or vice versa).
-    if (isRestricted && session.customerId && (!Array.isArray(data) || data.length === 0)) {
-      const aliases = await resolveClientAliases(db, session.customerId);
-      for (const alias of aliases) {
-        if (!alias || alias === session.customerId) continue;
-        const f2 = { ...filters, 'client_id.eq': alias };
-        const retry = await db.from('assets', { select:'*', filters: f2, limit, offset, order:'created_at.desc' });
-        if (retry.error) continue;
-        const rows = Array.isArray(retry.data) ? retry.data : [];
-        if (rows.length) {
-          data = rows;
-          break;
+    if (isRestricted && (!Array.isArray(data) || data.length === 0)) {
+      const clientAliases = session.customerId ? await resolveClientAliases(db, session.customerId) : [''];
+      const locationAliases = session.functional_location
+        ? await resolveFunctionalLocationAliases(db, session.functional_location, session.customerId)
+        : [''];
+      for (const clientAlias of clientAliases) {
+        for (const locationAlias of locationAliases) {
+          const f2 = { ...filters };
+          if (clientAlias) f2['client_id.eq'] = clientAlias;
+          if (locationAlias) f2['functional_location.eq'] = locationAlias;
+          const retry = await db.from('assets', { select:'*', filters: f2, limit, offset, order:'created_at.desc' });
+          if (retry.error) continue;
+          const rows = Array.isArray(retry.data) ? retry.data : [];
+          if (rows.length) {
+            data = rows;
+            break;
+          }
         }
+        if (Array.isArray(data) && data.length) break;
       }
     }
 
@@ -170,8 +205,9 @@ export async function handleAssets(request, env, path) {
       const aliases = await resolveClientAliases(db, session.customerId);
       if (!aliases.includes(String(asset.client_id || ''))) return forbidden(env);
     }
-    if (['user','technician'].includes(session.role) && session.functional_location && asset.functional_location !== session.functional_location) {
-      return forbidden(env);
+    if (['user','technician'].includes(session.role) && session.functional_location) {
+      const aliases = await resolveFunctionalLocationAliases(db, session.functional_location, session.customerId);
+      if (!aliases.includes(String(asset.functional_location || ''))) return forbidden(env);
     }
     return ok(asset, env);
   }
