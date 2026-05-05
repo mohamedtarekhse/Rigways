@@ -125,6 +125,7 @@ export async function handleCertificates(request, env, path) {
     const filters = {};
     if (['user','technician'].includes(session.role)) {
       if (session.customerId) filters['client_id.eq'] = session.customerId;
+      // Only filter by functional_location if it exists and is not null
       if (session.functional_location) filters['functional_location.eq'] = session.functional_location;
     }
     const { data, error } = await db.from('certificate_history', { select:'*', filters, order:'changed_at.desc', limit:2000 });
@@ -141,6 +142,7 @@ export async function handleCertificates(request, env, path) {
     const filters = { 'approval_status.eq':'approved', 'expiry_date.gte': today, 'expiry_date.lte': cutoff };
     if (['user','technician'].includes(session.role)) {
       if (session.customerId) filters['client_id.eq'] = session.customerId;
+      // Only filter by functional_location if it exists and is not null
       if (session.functional_location) filters['functional_location.eq'] = session.functional_location;
     }
     const { data, error } = await db.from('certificates', { select:'*', filters, order:'expiry_date.asc', limit:200 });
@@ -155,6 +157,7 @@ export async function handleCertificates(request, env, path) {
     const fBase  = {};
     if (['user','technician'].includes(session.role)) {
       if (session.customerId) fBase['client_id.eq'] = session.customerId;
+      // Only filter by functional_location if it exists and is not null
       if (session.functional_location) fBase['functional_location.eq'] = session.functional_location;
     }
 
@@ -180,6 +183,7 @@ export async function handleCertificates(request, env, path) {
     const filters = {};
     if (['user','technician'].includes(session.role)) {
       if (session.customerId) filters['client_id.eq'] = session.customerId;
+      // Only filter by functional_location if it exists and is not null
       if (session.functional_location) filters['functional_location.eq'] = session.functional_location;
     }
     if (url.searchParams.get('approval_status')) filters['approval_status.eq'] = url.searchParams.get('approval_status');
@@ -194,6 +198,7 @@ export async function handleCertificates(request, env, path) {
       for (const alias of aliases) {
         if (!alias || alias === session.customerId) continue;
         const fRetry = { ...filters, 'client_id.eq': alias };
+        // Only filter by functional_location if it exists and is not null
         if (session.functional_location) fRetry['functional_location.eq'] = session.functional_location;
         const retry = await db.from('certificates', {
           select:'*',
