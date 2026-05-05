@@ -1037,7 +1037,7 @@ async function computeSha1FromBuffer(buffer) {
 // Sanitize filename for B2 storage: replace spaces with hyphens, remove/replace special chars
 function sanitizeFilenameForB2(filename) {
   return filename
-    .replace(/[^a-zA-Z0-9._-]/g, '-')  // Replace any non-alphanumeric (except . _ -) with hyphen
+    .replace(/[^a-zA-Z0-9._-\/]/g, '-')  // Replace any non-alphanumeric (except . _ - /) with hyphen
     .replace(/-+/g, '-')                // Collapse multiple hyphens
     .replace(/^[-.]+|[-.]+$/g, '')      // Remove leading/trailing hyphens/dots
     .slice(0, 200);                     // Limit length
@@ -2414,7 +2414,7 @@ async function handleInspectors(request, env, path) {
 
   if (fileId && method === 'GET') {
     const key = url.searchParams.get('key') || '';
-    if (!key.startsWith('inspectors/')) return badReq('Invalid file key', 'INVALID_KEY', env);
+    if (!key.startsWith('inspectors/') && !key.startsWith('inspectors-')) return badReq('Invalid file key', 'INVALID_KEY', env);
     const idFilter = fileId.includes('-') ? { 'id.eq': fileId } : { 'inspector_number.eq': fileId };
     const { data } = await db.from('inspectors', { filters: idFilter, select: 'id', limit: 1 });
     if (!(Array.isArray(data) ? data[0] : data)) return notFound('Inspector', env);
