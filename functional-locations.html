@@ -119,9 +119,9 @@
   <div class="sap-navbar__inner">
     <a href="assets.html" class="sap-nav-item"><i data-feather="box"></i><span>Assets</span></a>
     <a href="certificates.html" class="sap-nav-item"><i data-feather="award"></i><span>Certificates</span></a>
-    <a href="jobs.html" class="sap-nav-item"><i data-feather="briefcase"></i><span>Jobs</span></a>
-    <a href="files.html" class="sap-nav-item"><i data-feather="folder"></i><span>Files</span></a>
-    <a href="notifications.html" class="sap-nav-item"><i data-feather="bell"></i><span>Notifications</span></a>
+    <a href="jobs.html" class="sap-nav-item" id="jobsLink"><i data-feather="briefcase"></i><span>Jobs</span></a>
+    <a href="files.html" class="sap-nav-item" id="filesLink"><i data-feather="folder"></i><span>Files</span></a>
+    <a href="notifications.html" class="sap-nav-item" id="notificationsLink"><i data-feather="bell"></i><span>Notifications</span></a>
     <div class="sap-navbar__divider" id="adminDivider"></div>
     <a href="clients.html" class="sap-nav-item sap-nav-item--admin" id="adminClientsLink"><i data-feather="users"></i><span>Clients</span></a>
     <a href="inspectors.html" class="sap-nav-item sap-nav-item--admin" id="inspectorsLink"><i data-feather="check-square"></i><span>Inspectors</span></a>
@@ -827,6 +827,12 @@ document.addEventListener('DOMContentLoaded',()=>{
   }
   if(role!=='admin'&&role!=='manager'){
     document.getElementById('inspectorsLink').style.display='none';
+    if (role === 'user') {
+      const jl = document.getElementById('jobsLink'); if (jl) jl.style.display = 'none';
+      const fl = document.getElementById('filesLink'); if (fl) fl.style.display = 'none';
+      const nl = document.getElementById('notificationsLink'); if (nl) nl.style.display = 'none';
+      const nb = document.getElementById('notifBadge'); if (nb) nb.style.display = 'none';
+    }
   }
   /* funcLocsLink stays visible for all who can see this page */
 

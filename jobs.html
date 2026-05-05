@@ -138,11 +138,11 @@
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
       <span>Certificates</span>
     </a>
-    <a href="jobs.html" class="sap-nav-item active">
+    <a href="jobs.html" class="sap-nav-item active" id="jobsLink">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       <span>Jobs</span>
     </a>
-    <a href="notifications.html" class="sap-nav-item">
+    <a href="notifications.html" class="sap-nav-item" id="notificationsLink">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
       <span>Notifications</span>
     </a>
@@ -504,8 +504,9 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     document.getElementById('adminClientsLink').style.display = 'none';
     document.getElementById('inspectorsLink').style.display = 'none';
     document.getElementById('funcLocsLink').style.display = 'none';
-    const notificationsLink = document.querySelector('a[href="notifications.html"]');
-    if (notificationsLink) notificationsLink.style.display = 'none';
+    const nl = document.getElementById('notificationsLink'); if (nl) nl.style.display = 'none';
+    const jl = document.getElementById('jobsLink'); if (jl) jl.style.display = 'none';
+    const nb = document.getElementById('notifBadge'); if (nb) nb.style.display = 'none';
   } else if (session.role !== 'admin' && session.role !== 'manager') {
     document.getElementById('inspectorsLink').style.display = 'none';
     document.getElementById('funcLocsLink').style.display = 'none';

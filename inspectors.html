@@ -334,15 +334,15 @@
       <i data-feather="award"></i>
       <span data-en="Certificates" data-ar="الشهادات">Certificates</span>
     </a>
-    <a href="jobs.html" class="sap-nav-item">
+    <a href="jobs.html" class="sap-nav-item" id="jobsLink">
       <i data-feather="briefcase"></i>
       <span data-en="Jobs" data-ar="الوظائف">Jobs</span>
     </a>
-    <a href="files.html" class="sap-nav-item">
+    <a href="files.html" class="sap-nav-item" id="filesLink">
       <i data-feather="folder"></i>
       <span data-en="Files" data-ar="الملفات">Files</span>
     </a>
-    <a href="notifications.html" class="sap-nav-item">
+    <a href="notifications.html" class="sap-nav-item" id="notificationsLink">
       <i data-feather="bell"></i>
       <span data-en="Notifications" data-ar="الإشعارات">Notifications</span>
     </a>
@@ -1778,7 +1778,15 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('adminSection').style.display = 'none';
     document.getElementById('adminClientsLink').style.display = 'none';
     const fl = document.getElementById('funcLocsLink'); if (fl) fl.style.display = 'none';
-    /* Inspectors link stays visible for manager */
+    if (role !== 'manager') {
+      const il = document.getElementById('inspectorsLink'); if (il) il.style.display = 'none';
+    }
+    if (role === 'user') {
+      const jl = document.getElementById('jobsLink'); if (jl) jl.style.display = 'none';
+      const fll = document.getElementById('filesLink'); if (fll) fll.style.display = 'none';
+      const nl = document.getElementById('notificationsLink'); if (nl) nl.style.display = 'none';
+      const nb = document.getElementById('notifBadge'); if (nb) nb.style.display = 'none';
+    }
   }
 
   /* Notification badge */
