@@ -696,14 +696,16 @@ async function resolveClientAliases(db, rawClientId) {
   const key = String(rawClientId || '').trim();
   if (!key) return [];
   const out = new Set([key]);
-  const queries = [{ 'id.eq': key }, { 'client_id.eq': key }];
+  const queries = [{ 'id.eq': key }, { 'client_id.eq': key }, { 'name.ilike': key }];
   for (const filters of queries) {
-    const { data } = await db.from('clients', { filters, select: 'id,client_id', limit: 1 });
-    const row = Array.isArray(data) ? data[0] : data;
-    if (row?.id) out.add(String(row.id));
-    if (row?.client_id) out.add(String(row.client_id));
+    const { data } = await db.from('clients', { filters, select: 'id,client_id,name', limit: 5 });
+    for (const row of (Array.isArray(data) ? data : [])) {
+      if (row?.id) out.add(String(row.id));
+      if (row?.client_id) out.add(String(row.client_id));
+      if (row?.name) out.add(String(row.name));
+    }
   }
-  return Array.from(out);
+  return Array.from(out).filter(Boolean);
 }
 
 function buildFunctionalLocationAliases(rawValue, rows = []) {
@@ -736,27 +738,42 @@ function buildFunctionalLocationAliases(rawValue, rows = []) {
 async function resolveFunctionalLocationAliases(db, rawLocation, rawClientId) {
   const key = String(rawLocation || '').trim();
   if (!key) return [];
+  
+  const clientAliases = await resolveClientAliases(db, rawClientId);
+  const outRows = [];
+
+  // Try direct lookups first
   const filtersToTry = [
-    { 'fl_id.eq': key },
-    { 'name.eq': key },
+    { 'fl_id.ilike': key },
+    { 'name.ilike': key },
     { 'id.eq': key },
   ];
-  const clientAliases = await resolveClientAliases(db, rawClientId);
+
+  for (const filters of filtersToTry) {
+    const { data } = await db.from('functional_locations', { filters, select: 'id,fl_id,name,client_id', limit: 10 });
+    if (data) outRows.push(...(Array.isArray(data) ? data : [data]));
+  }
+
+  // Then try scoped lookups
   for (const clientId of clientAliases) {
     if (!clientId) continue;
-    filtersToTry.push({ 'fl_id.eq': key, 'client_id.eq': clientId });
-    filtersToTry.push({ 'name.eq': key, 'client_id.eq': clientId });
-  }
-  const rows = [];
-  for (const filters of filtersToTry) {
-    const { data } = await db.from('functional_locations', {
-      filters,
-      select: 'id,fl_id,name,client_id',
-      limit: 10,
+    const { data } = await db.from('functional_locations', { 
+      filters: { 'client_id.eq': clientId }, 
+      select: 'id,fl_id,name,client_id', 
+      limit: 100 
     });
-    for (const row of Array.isArray(data) ? data : []) rows.push(row);
+    if (data) {
+      const rows = Array.isArray(data) ? data : [data];
+      const match = rows.filter(r => 
+        String(r.fl_id || '').toLowerCase() === key.toLowerCase() || 
+        String(r.name || '').toLowerCase() === key.toLowerCase() ||
+        String(r.id || '').toLowerCase() === key.toLowerCase()
+      );
+      outRows.push(...match);
+    }
   }
-  return buildFunctionalLocationAliases(key, rows);
+
+  return buildFunctionalLocationAliases(key, outRows);
 }
 
 // Resolve AST-number (e.g. AST-0001) to UUID for DB operations
@@ -878,16 +895,24 @@ async function handleAssets(request, env, path) {
       filters['client_id.eq'] = url.searchParams.get('client_id');
     let { data, error } = await db.from('assets', { select: '*', filters, limit, offset, order: 'created_at.desc' });
     if (error) return serverErr(env);
+    
     if (isRestricted && (!Array.isArray(data) || data.length === 0)) {
       const clientAliases = session.customerId ? await resolveClientAliases(db, session.customerId) : [''];
       const locationAliases = session.functional_location
         ? await resolveFunctionalLocationAliases(db, session.functional_location, session.customerId)
         : [''];
+        
       for (const clientAlias of clientAliases) {
         for (const locationAlias of locationAliases) {
-          const retryFilters = { ...filters };
-          if (clientAlias) retryFilters['client_id.eq'] = clientAlias;
-          if (locationAlias) retryFilters['functional_location.eq'] = locationAlias;
+          // Skip if this is exactly the same as the initial query
+          if (clientAlias === session.customerId && locationAlias === session.functional_location) continue;
+          
+          const retryFilters = compact({
+            ...pick(filters, ['status.eq', 'asset_type.eq']),
+            'client_id.eq': clientAlias || undefined,
+            'functional_location.eq': locationAlias || undefined,
+          });
+          
           const retry = await db.from('assets', {
             select: '*',
             filters: retryFilters,
@@ -895,6 +920,7 @@ async function handleAssets(request, env, path) {
             offset,
             order: 'created_at.desc',
           });
+          
           if (retry.error) continue;
           const rows = Array.isArray(retry.data) ? retry.data : [];
           if (rows.length) {
@@ -1632,6 +1658,7 @@ async function handleCertificates(request, env, path) {
       const locationAliases = session.functional_location
         ? await resolveFunctionalLocationAliases(db, session.functional_location, session.customerId)
         : [''];
+        
       for (const clientAlias of clientAliases) {
         for (const locationAlias of locationAliases) {
           const retry = await db.from('certificates', {
@@ -1645,6 +1672,7 @@ async function handleCertificates(request, env, path) {
             offset,
             order: 'expiry_date.asc',
           });
+          
           if (retry.error) continue;
           const rows = Array.isArray(retry.data) ? retry.data : [];
           if (rows.length) {
@@ -1654,19 +1682,25 @@ async function handleCertificates(request, env, path) {
         }
         if (Array.isArray(data) && data.length) break;
       }
+      
+      // Secondary fallback: Find by assets in that location
       if (!Array.isArray(data) || data.length === 0) {
         for (const clientAlias of clientAliases) {
           for (const locationAlias of locationAliases) {
+            if (!locationAlias) continue;
+            
             const assetsResult = await db.from('assets', {
               select: 'id',
               filters: compact({
                 'client_id.eq': clientAlias || undefined,
                 'functional_location.eq': locationAlias || undefined,
               }),
-              limit: 5000,
+              limit: 2000,
             });
+            
             const assetIds = (Array.isArray(assetsResult.data) ? assetsResult.data : []).map((row) => row.id).filter(Boolean);
             if (!assetIds.length) continue;
+            
             const retry = await db.from('certificates', {
               select: '*',
               filters: compact({
@@ -1678,6 +1712,7 @@ async function handleCertificates(request, env, path) {
               offset,
               order: 'expiry_date.asc',
             });
+            
             if (retry.error) continue;
             const rows = Array.isArray(retry.data) ? retry.data : [];
             if (rows.length) {
