@@ -1664,9 +1664,6 @@ function renderTable() {
   /* Type filter */
   if (typeF !== 'all') data = data.filter(a => a.type === typeF);
 
-  /* Functional location filter */
-  if (locF !== 'all') data = data.filter(a => a.location === locF);
-
   /* Inspection date filter */
   if (inspDateF) data = data.filter(a => (a.inspectionDate || '') === inspDateF);
 
