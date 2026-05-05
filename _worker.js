@@ -283,7 +283,7 @@ async function handleAuth(request, env, path) {
     const db = createSupabase(env);
     const { data: rows, error } = await db.from('users', {
       filters: { 'username.ilike': body.username.toLowerCase() },
-      select: 'id,username,name,name_ar,role,customer_id,password_hash,is_active',
+      select: 'id,username,name,name_ar,role,customer_id,functional_location,password_hash,is_active',
       limit: 1,
     });
     if (error) {
@@ -311,6 +311,7 @@ async function handleAuth(request, env, path) {
       name: user.name,
       nameAr: user.name_ar || '',
       customerId: user.customer_id || null,
+      functional_location: user.functional_location || null,
     }, jwtSecret, expiresIn);
 
     return ok({
@@ -323,6 +324,7 @@ async function handleAuth(request, env, path) {
         name: user.name,
         nameAr: user.name_ar || '',
         customerId: user.customer_id || null,
+        functional_location: user.functional_location || null,
       },
     }, env);
   }
@@ -348,6 +350,7 @@ async function handleAuth(request, env, path) {
       name: user.name,
       nameAr: user.name_ar || '',
       customerId: user.customer_id || null,
+      functional_location: user.functional_location || null,
       createdAt: user.created_at,
       lastLoginAt: user.last_login_at,
     }, env);

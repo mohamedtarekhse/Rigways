@@ -666,6 +666,7 @@ async function handleLogin(e) {
       name:       data.user.name,
       nameAr:     data.user.nameAr     || '',
       customerId: data.user.customerId || null,
+      functional_location: data.user.functional_location || null,
       loginTime:  new Date().toISOString(),
     }));
 

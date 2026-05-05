@@ -277,8 +277,9 @@ const SapSession = (() => {
   function isUser()     { return role() === 'user'; }
   function canDo(perm)  { return SAP_CONFIG.ROLES[role()]?.[perm] || false; }
   function customerId() { return get()?.customerId || null; }
+  function functionalLocation() { return get()?.functional_location || null; }
 
-  return { get, set, guard, logout, role, isAdmin, isManager, isTech, isUser, canDo, customerId };
+  return { get, set, guard, logout, role, isAdmin, isManager, isTech, isUser, canDo, customerId, functionalLocation };
 })();
 
 /* ================================================================

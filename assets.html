@@ -1647,6 +1647,13 @@ function renderTable() {
     data = data.filter(a => a.client === clientF);
   }
 
+  /* Functional Location scope */
+  if (session.functional_location && role !== 'admin' && role !== 'manager') {
+    data = data.filter(a => a.location === session.functional_location);
+  } else if (locF !== 'all') {
+    data = data.filter(a => a.location === locF);
+  }
+
   /* Status filter */
   if (activeStatusFilter !== 'all') data = data.filter(a => a.status === activeStatusFilter);
 
@@ -3549,6 +3556,9 @@ function populateToolbarLocationFilter() {
   let locs = loadFuncLocs();
   if (role === 'user' || role === 'technician') {
     locs = locs.filter(l => !session?.customerId || l.client === session.customerId);
+    if (session?.functional_location) {
+      locs = locs.filter(l => l.name === session.functional_location || l.fl_id === session.functional_location);
+    }
   } else if (clientF !== 'all') {
     locs = locs.filter(l => !l.client || l.client === clientF);
   }
@@ -3652,8 +3662,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* Page subtitle */
   if (session.customerId) {
-    document.getElementById('pageSubtitle').textContent =
-      `Your assigned assets — Client ${session.customerId}`;
+    let sub = `Your assigned assets — Client ${session.customerId}`;
+    if (session.functional_location) {
+      sub += ` · ${session.functional_location}`;
+    }
+    document.getElementById('pageSubtitle').textContent = sub;
   }
 
   /* Header actions by role */

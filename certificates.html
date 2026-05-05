@@ -3470,9 +3470,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* Subtitle */
-  document.getElementById('pageSubtitle').textContent = session.customerId
+  let sub = session.customerId
     ? (`Your certificates — Client ${session.customerId}`)
     : ('All certificates across clients');
+  if (session.functional_location) {
+    sub += ` · ${session.functional_location}`;
+  }
+  document.getElementById('pageSubtitle').textContent = sub;
 
   /* Header actions */
   const ha = document.getElementById('headerActions');
