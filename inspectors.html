@@ -1249,6 +1249,9 @@ async function saveInspector() {
   const name   = document.getElementById('f_name')?.value?.trim() || '';
   if (!name) { showToast('error','Required','Name is required.'); return; }
 
+  const saveBtn = document.getElementById('saveBtn') || document.querySelector('#inspectorModal .btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = currentLang==='ar'?'جاري الحفظ...':'Saving…'; }
+
   // Collect education rows
   const education = [...document.querySelectorAll('#educationContainer .dynamic-row')].map(row => ({
     degree:      row.querySelector('.edu-degree')?.value?.trim() || '',
@@ -1275,6 +1278,7 @@ async function saveInspector() {
     if (mode === 'file') {
       const selected = tcFileInput?.files?.[0];
       if (selected) {
+        showToast('info', currentLang==='ar'?'جاري الرفع...':'Uploading...', currentLang==='ar'?`جاري رفع: ${t.name}`:`Uploading: ${t.name}`);
         const uploadedTc = await uploadInspectorFile(selected, { category: 'training', label: t.name });
         if (tcFileInput) {
           tcFileInput.dataset.existing = uploadedTc.file_name || selected.name;
@@ -1298,6 +1302,7 @@ async function saveInspector() {
   if (cvMode === 'file') {
     const selectedFile = cvInput?.files?.[0];
     if (selectedFile) {
+      showToast('info', currentLang==='ar'?'جاري الرفع...':'Uploading...', currentLang==='ar'?'جاري رفع السيرة الذاتية...':'Uploading CV...');
       const uploaded = await uploadInspectorCV(selectedFile, document.getElementById('f_name')?.value?.trim() || 'inspector_cv');
       cvFile = uploaded.cv_file || selectedFile.name;
       cvUrl = uploaded.cv_url || '';
@@ -1329,9 +1334,6 @@ async function saveInspector() {
     training_certs,
   };
 
-  const saveBtn = document.getElementById('saveBtn') || document.querySelector('#inspectorModal .btn-primary');
-  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
-
   try {
     const url    = editId ? '/api/inspectors/' + editId : '/api/inspectors';
     const method = editId ? 'PATCH' : 'POST';
@@ -1343,7 +1345,7 @@ async function saveInspector() {
     closeModal(true);
     await loadInspectors();
   } catch(e) { showToast('error','Network Error','Could not save inspector. Please try again.'); }
-  finally { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Inspector'; } }
+  finally { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = currentLang==='ar'?'حفظ المفتش':'Save Inspector'; } }
 }
 
 /* ═══════════════════════════════════════════════════════

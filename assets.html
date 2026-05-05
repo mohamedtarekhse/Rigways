@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+    script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com;
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com;
     img-src 'self' data: blob:;
@@ -2823,13 +2823,29 @@ let _xlsxLoaderPromise = null;
 function ensureXlsxLoaded() {
   if (typeof XLSX !== 'undefined') return Promise.resolve();
   if (_xlsxLoaderPromise) return _xlsxLoaderPromise;
+  
   _xlsxLoaderPromise = new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-    s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error('Could not load spreadsheet library'));
-    document.head.appendChild(s);
+    const urls = [
+      'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+      'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'
+    ];
+    let i = 0;
+    
+    function tryLoad() {
+      if (i >= urls.length) return reject(new Error('Could not load spreadsheet library. Please check your network/firewall.'));
+      const s = document.createElement('script');
+      s.src = urls[i];
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => {
+        s.remove();
+        i++;
+        tryLoad();
+      };
+      document.head.appendChild(s);
+    }
+    tryLoad();
   });
   return _xlsxLoaderPromise;
 }
