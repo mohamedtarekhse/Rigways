@@ -3654,6 +3654,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const il = document.getElementById('inspectorsLink'); if (il) il.style.display = 'none';
     const fl = document.getElementById('funcLocsLink'); if (fl) fl.style.display = 'none';
     if (role === 'user') {
+      const cl = document.getElementById('adminClientsLink'); if (cl) cl.style.display = 'none';
+      const il2 = document.getElementById('inspectorsLink'); if (il2) il2.style.display = 'none';
+      const fl2 = document.getElementById('funcLocsLink'); if (fl2) fl2.style.display = 'none';
+      const adminDivider = document.getElementById('adminSection'); if (adminDivider) adminDivider.style.display = 'none';
       const jl = document.getElementById('jobsLink'); if (jl) jl.style.display = 'none';
       const fll = document.getElementById('filesLink'); if (fll) fll.style.display = 'none';
       const nl = document.getElementById('notificationsLink'); if (nl) nl.style.display = 'none';
@@ -3674,6 +3678,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (locationFilter) {
       locationFilter.value = 'all';
       locationFilter.style.display = 'none';
+    }
+    const clientFilter = document.getElementById('clientFilter');
+    if (clientFilter) {
+      clientFilter.value = 'all';
+      clientFilter.style.display = 'none';
     }
   }
   const importBtn = document.getElementById('importBtn');
