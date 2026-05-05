@@ -3687,6 +3687,8 @@ document.addEventListener('DOMContentLoaded', () => {
       sub += ` · ${session.functional_location}`;
     }
     document.getElementById('pageSubtitle').textContent = sub;
+  } else if (session.functional_location) {
+    document.getElementById('pageSubtitle').textContent = `Your assigned assets — Location ${session.functional_location}`;
   }
 
   /* Header actions by role */

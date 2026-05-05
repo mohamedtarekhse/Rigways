@@ -3481,7 +3481,9 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Subtitle */
   let sub = session.customerId
     ? (`Your certificates — Client ${session.customerId}`)
-    : ('All certificates across clients');
+    : (session.functional_location 
+        ? `Your certificates — Location ${session.functional_location}`
+        : 'All certificates across clients');
   document.getElementById('pageSubtitle').textContent = sub;
 
   /* Header actions */
