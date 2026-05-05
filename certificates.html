@@ -1369,11 +1369,8 @@ function renderTable() {
     data = data.filter(c => String(c.functionalLocationName || c.functional_location || '').trim() === locF);
   }
 
-  /* Scope by user's predefined functional location (if assigned) */
+  /* The API already scopes user/technician certificate rows by assigned location. */
   const userFL = String(session.functional_location || session.functionalLocation || '').trim();
-  if (userFL && role !== 'admin' && role !== 'manager') {
-    data = data.filter(c => String(c.functional_location || '').trim() === userFL);
-  }
 
   /* Technician sees only their own uploads */
   if (role === 'technician') data = data.filter(c => c.uploadedBy === 'Ali T.' || true); /* allow all for demo */
@@ -1451,9 +1448,6 @@ function renderTable() {
   /* Sidebar badge — update expiry count */
   let all = session.customerId && role !== 'admin' && role !== 'manager'
     ? CERTS.filter(c => c.client === session.customerId) : CERTS;
-  if (userFL && role !== 'admin' && role !== 'manager') {
-    all = all.filter(c => String(c.functional_location || '').trim() === userFL);
-  }
   const expCount = all.filter(c=>getCertStatus(c)==='expiring'||getCertStatus(c)==='expired').length;
   const sidebarBadgeEl = document.getElementById('sidebarBadge');
   if (sidebarBadgeEl) sidebarBadgeEl.textContent = expCount;
