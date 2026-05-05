@@ -571,6 +571,10 @@
             <span>Approval</span>
           </label>
           <label class="col-dropdown__item">
+            <input type="checkbox" id="col_functionalLoc" checked onchange="applyColVisibility()"/>
+            <span>Functional Location</span>
+          </label>
+          <label class="col-dropdown__item">
             <input type="checkbox" id="col_assetId" checked onchange="applyColVisibility()"/>
             <span>Asset ID</span>
           </label>
@@ -639,6 +643,7 @@
             <th class="cell-check"><input type="checkbox" class="sap-checkbox" onchange="toggleSelectAll(this)"/></th>
             <th data-col="jobNumber" onclick="sortTable('jobNumber')">Job No. <span class="sort-icon">↕</span></th>
             <th data-col="certId"    onclick="sortTable('certId')">Cert ID <span class="sort-icon">↕</span></th>
+            <th data-col="functionalLoc" onclick="sortTable('functional_location_name')">Functional Location <span class="sort-icon">↕</span></th>
             <th data-col="assetId"   onclick="sortTable('assetId')">Asset ID <span class="sort-icon">↕</span></th>
             <th data-col="name"      onclick="sortTable('name')">Certificate Name <span class="sort-icon">↕</span></th>
             <th data-col="certType"  onclick="sortTable('certType')">Type <span class="sort-icon">↕</span></th>
@@ -1326,6 +1331,7 @@ function renderTable() {
         <span style="font-family:monospace;font-size:11px;font-weight:700;color:var(--sap-brand);background:var(--sap-brand-light);border:1px solid var(--sap-info-border);border-radius:4px;padding:2px 6px;white-space:nowrap;">${c.jobNumber||'—'}</span>
       </td>
       <td data-col="certId"><span class="cert-id-chip">${fmtCertId(c)}</span></td>
+      <td data-col="functionalLoc" style="font-size:12px;">${h(c.functional_location_name || c.functional_location || '—')}</td>
       <td data-col="assetId">
         <span class="asset-id-chip">${c.assetId||'—'}</span>
         <div style="font-size:11px;color:var(--sap-text-secondary);margin-top:3px;line-height:1.25;">${h(c.assetDescription || '—')}</div>
@@ -2831,6 +2837,7 @@ function exportPDF() {
         </span>`;
       }
     },
+    { key:'functionalLoc', label: 'Functional Location', fn: c => c.functional_location_name || c.functional_location || '—' },
     { key:'assetId',  label: 'Asset ID',         fn: c => c.assetId||'—' },
     { key:'client',   label: 'Client',            fn: c => (CLIENTS_MAP[c.client]||c.client) + ' (' + c.client + ')' },
   ].filter(col => {
@@ -2928,9 +2935,9 @@ function exportPDF() {
 /* ── Export CSV ── */
 function exportCSV() {
   const data = filteredData.length ? filteredData : CERTS;
-  const headers = ['Job Number','Cert ID','Name','Type','Lifting Sub-type','Issued By','Issue Date','Expiry Date','Approval','Asset ID','Customer ID','Client','Uploaded By','File'];
+  const headers = ['Job Number','Cert ID','Functional Location','Name','Type','Lifting Sub-type','Issued By','Issue Date','Expiry Date','Approval','Asset ID','Customer ID','Client','Uploaded By','File'];
   const rows = data.map(c => [
-    c.jobNumber||'', fmtCertId(c), c.name, c.certType, c.liftingSubtype||'', c.issuedBy, c.issueDate, c.expiryDate,
+    c.jobNumber||'', fmtCertId(c), c.functional_location_name||'', c.name, c.certType, c.liftingSubtype||'', c.issuedBy, c.issueDate, c.expiryDate,
     c.approvalStatus, c.assetId||'', c.client, CLIENTS_MAP[c.client]||'', c.uploadedBy, c.fileName
   ].map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(','));
   const csv  = [headers.join(','), ...rows].join('\n');
@@ -3117,12 +3124,20 @@ async function loadJobDropdown(selectedJobNumber) {
 
 async function loadCerts() {
   try {
-    const [certRes, assetRes] = await Promise.all([
+    const [certRes, assetRes, locRes] = await Promise.all([
       apiFetch('/api/certificates?limit=200').then(r => r.json()),
       apiFetch('/api/assets?limit=500').then(r => r.json()),
+      apiFetch('/api/functional-locations?limit=1000').then(r => r.json()).catch(() => ({ data: [] }))
     ]);
     const cd = certRes.data  || certRes;
     const ad = assetRes.data || assetRes;
+    const ld = locRes.data || locRes;
+    
+    const locMap = {};
+    (ld.locations || ld || []).forEach(l => {
+      if (l && l.id) locMap[l.id] = l.name || l.id;
+    });
+
     const assetMap = {};
     const assetDescMap = {};
     (ad.assets || ad || []).forEach(a => {
@@ -3156,6 +3171,8 @@ async function loadCerts() {
       uploadTime:      cert.created_at || cert.uploaded_at || cert.createdAt || '',   // full timestamp for 24h edit window
       uploadedBy:      cert.uploaded_by_username || cert.uploaded_by || '',
       uploaded_by:     cert.uploaded_by || '',
+      functional_location: cert.functional_location_id || '',
+      functional_location_name: locMap[cert.functional_location_id] || cert.functional_location_name || '—'
     })});
     window._certUrls = {};
     CERTS.forEach(cert => { if (cert.file_url) window._certUrls[cert.id] = cert.file_url; });
