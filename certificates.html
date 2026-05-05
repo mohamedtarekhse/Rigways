@@ -1661,30 +1661,30 @@ function populateLocationFilter() {
   const clientF = document.getElementById('clientFilter')?.value || 'all';
   const locSel  = document.getElementById('locationFilter');
   if (!locSel) return;
-  
+
   if ((session.role === 'admin' || session.role === 'manager') && clientF !== 'all') {
     locSel.style.display = 'inline-block';
   } else {
     locSel.style.display = 'none';
     locSel.value = 'all';
+    return;
   }
 
-  let filteredLocs = window._funcLocsList || [];
-  if (clientF !== 'all') {
-    filteredLocs = filteredLocs.filter(l => l.client_id === clientF || l.client === clientF);
-  }
+  // Derive unique locations from actual certs for the selected client
+  const names = new Set();
+  CERTS.forEach(c => {
+    if (clientF !== 'all' && c.client !== clientF) return;
+    const name = String(c.functionalLocationName || '').trim();
+    if (name) names.add(name);
+  });
 
   const cur = locSel.value;
   let options = '<option value="all">All Locations</option>';
-  filteredLocs.forEach(l => {
-    const text = h(l.name || l.id);
-    options += `<option value="${text}">${text}</option>`;
+  [...names].sort().forEach(name => {
+    options += `<option value="${h(name)}">${h(name)}</option>`;
   });
   locSel.innerHTML = options;
-  if (cur && cur !== 'all') {
-    const exists = Array.from(locSel.options).some(o => o.value === cur);
-    if (exists) locSel.value = cur;
-  }
+  if (cur && cur !== 'all' && names.has(cur)) locSel.value = cur;
 }
 
 function sortTable(col) {
@@ -3384,12 +3384,15 @@ async function loadCerts() {
     const assetMap = {};
     const assetDescMap = {};
     const assetLocMap = {};   // asset_id → functional location name
+    const assetFlIdMap = {};  // asset_id → fl_id string (for filter matching)
     (ad.assets || ad || []).forEach(a => {
       if (!a?.id) return;
       assetMap[a.id]     = a.asset_number || a.id;
       assetDescMap[a.id] = a.description || a.name || '';
-      const locId = a.functional_location_id || a.location_id || '';
-      assetLocMap[a.id]  = locNameMap[locId] || '';
+      // The asset DB stores the fl_id string directly in `functional_location`
+      const flId = a.functional_location || a.functional_location_id || a.location_id || '';
+      assetLocMap[a.id]  = locNameMap[flId] || flId; // map fl_id → name, fallback to raw fl_id
+      assetFlIdMap[a.id] = flId;
     });
     window._assetMap = assetMap;
 
