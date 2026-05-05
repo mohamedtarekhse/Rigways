@@ -139,6 +139,7 @@ export async function handleAssets(request, env, path) {
     const filters = {};
     if (['user','technician'].includes(session.role)) {
       if (session.customerId) filters['client_id.eq'] = session.customerId;
+      // Only filter by functional_location if it exists and is not null
       if (session.functional_location) filters['functional_location.eq'] = session.functional_location;
     }
 
@@ -162,6 +163,7 @@ export async function handleAssets(request, env, path) {
     const isRestricted = ['user','technician'].includes(session.role);
     if (isRestricted) {
       if (session.customerId) filters['client_id.eq'] = session.customerId;
+      // Only filter by functional_location if it exists and is not null
       if (session.functional_location) filters['functional_location.eq'] = session.functional_location;
     }
     if (url.searchParams.get('status'))    filters['status.eq']    = url.searchParams.get('status');
