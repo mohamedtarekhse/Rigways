@@ -1641,7 +1641,7 @@ function renderTable() {
   const clientF = document.getElementById('clientFilter').value || 'all';
   const typeF   = document.getElementById('typeFilter').value || 'all';
   const locationFilterEl = document.getElementById('locationFilter');
-  const locF    = role === 'user' ? 'all' : (locationFilterEl?.value || 'all');
+  const locF    = (role === 'admin' || role === 'manager') ? (locationFilterEl?.value || 'all') : 'all';
   const inspDateF = document.getElementById('inspectionDateFilter')?.value || '';
 
   let data = [...ASSETS];
@@ -1651,8 +1651,10 @@ function renderTable() {
     data = data.filter(a => a.client === clientF);
   }
 
-  /* The API already scopes user/technician asset rows by assigned location. */
-  if (locF !== 'all') {
+  /* The API already scopes user/technician asset rows by customer. No location filtering for these roles. */
+  if (role !== 'admin' && role !== 'manager') {
+    // Users and technicians should not be filtered by location
+  } else if (locF !== 'all') {
     data = data.filter(a => a.location === locF);
   }
 
@@ -3553,7 +3555,8 @@ function populateToolbarLocationFilter() {
   const sel = document.getElementById('locationFilter');
   if (!sel) return;
   const role = session?.role || 'user';
-  if (role === 'user') {
+  // Only admin and manager should see the location filter
+  if (role !== 'admin' && role !== 'manager') {
     sel.value = 'all';
     sel.style.display = 'none';
     return;
@@ -3562,15 +3565,7 @@ function populateToolbarLocationFilter() {
   const current = sel.value || 'all';
   const clientF = document.getElementById('clientFilter')?.value || 'all';
   let locs = loadFuncLocs();
-  if (role === 'technician') {
-    if (session?.functional_location) {
-      const assigned = String(session.functional_location || '').trim().toLowerCase();
-      const scoped = locs.filter((l) =>
-        [l.name, l.fl_id, l.id].some((value) => String(value || '').trim().toLowerCase() === assigned)
-      );
-      if (scoped.length) locs = scoped;
-    }
-  } else if (clientF !== 'all') {
+  if (clientF !== 'all') {
     locs = locs.filter(l => !l.client || l.client === clientF);
   }
   const names = [...new Set(locs.map(l => l.name).filter(Boolean))].sort((a,b) => a.localeCompare(b));

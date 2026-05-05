@@ -1362,8 +1362,10 @@ function renderTable() {
     data = data.filter(c => c.client === clientF);
   }
 
-  /* Filter by location dropdown */
-  if (locF !== 'all') {
+  /* Filter by location dropdown - only for admin/manager */
+  if (role !== 'admin' && role !== 'manager') {
+    // Users and technicians should not be filtered by location
+  } else if (locF !== 'all') {
     data = data.filter(c => String(c.functionalLocationName || c.functional_location || '').trim() === locF);
   }
 
@@ -3480,9 +3482,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let sub = session.customerId
     ? (`Your certificates — Client ${session.customerId}`)
     : ('All certificates across clients');
-  if (session.functional_location) {
-    sub += ` · ${session.functional_location}`;
-  }
   document.getElementById('pageSubtitle').textContent = sub;
 
   /* Header actions */
