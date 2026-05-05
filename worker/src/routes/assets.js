@@ -139,8 +139,6 @@ export async function handleAssets(request, env, path) {
     const filters = {};
     if (['user','technician'].includes(session.role) && session.customerId)
       filters['client_id.eq'] = session.customerId;
-    if (['user','technician'].includes(session.role) && session.functional_location)
-      filters['functional_location.eq'] = session.functional_location;
 
     const [total, active, maintenance, inactive] = await Promise.all([
       db.count('assets', { filters }),
@@ -161,7 +159,6 @@ export async function handleAssets(request, env, path) {
     const filters = {};
     const isRestricted = ['user','technician'].includes(session.role);
     if (isRestricted && session.customerId) filters['client_id.eq'] = session.customerId;
-    if (isRestricted && session.functional_location) filters['functional_location.eq'] = session.functional_location;
     if (url.searchParams.get('status'))    filters['status.eq']    = url.searchParams.get('status');
     if (url.searchParams.get('type'))      filters['asset_type.eq']= url.searchParams.get('type');
     if (url.searchParams.get('client_id') && requireRole(session,['admin','manager']))
@@ -173,21 +170,15 @@ export async function handleAssets(request, env, path) {
     // while session.customerId contains clients.client_id (or vice versa).
     if (isRestricted && (!Array.isArray(data) || data.length === 0)) {
       const clientAliases = session.customerId ? await resolveClientAliases(db, session.customerId) : [''];
-      const locationAliases = session.functional_location
-        ? await resolveFunctionalLocationAliases(db, session.functional_location, session.customerId)
-        : [''];
       for (const clientAlias of clientAliases) {
-        for (const locationAlias of locationAliases) {
-          const f2 = { ...filters };
-          if (clientAlias) f2['client_id.eq'] = clientAlias;
-          if (locationAlias) f2['functional_location.eq'] = locationAlias;
-          const retry = await db.from('assets', { select:'*', filters: f2, limit, offset, order:'created_at.desc' });
-          if (retry.error) continue;
-          const rows = Array.isArray(retry.data) ? retry.data : [];
-          if (rows.length) {
-            data = rows;
-            break;
-          }
+        const f2 = { ...filters };
+        if (clientAlias) f2['client_id.eq'] = clientAlias;
+        const retry = await db.from('assets', { select:'*', filters: f2, limit, offset, order:'created_at.desc' });
+        if (retry.error) continue;
+        const rows = Array.isArray(retry.data) ? retry.data : [];
+        if (rows.length) {
+          data = rows;
+          break;
         }
         if (Array.isArray(data) && data.length) break;
       }
@@ -204,10 +195,6 @@ export async function handleAssets(request, env, path) {
     if (['user','technician'].includes(session.role) && session.customerId) {
       const aliases = await resolveClientAliases(db, session.customerId);
       if (!aliases.includes(String(asset.client_id || ''))) return forbidden(env);
-    }
-    if (['user','technician'].includes(session.role) && session.functional_location) {
-      const aliases = await resolveFunctionalLocationAliases(db, session.functional_location, session.customerId);
-      if (!aliases.includes(String(asset.functional_location || ''))) return forbidden(env);
     }
     return ok(asset, env);
   }
