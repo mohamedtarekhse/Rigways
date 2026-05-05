@@ -2871,7 +2871,7 @@ const COL_KEYS = ['jobNumber','certId','fileLink','certType','issuedBy','expiry'
  */
 function fmtCertId(cert) {
   if (!cert || !cert.certId) return '—';
-  const rawCert = cert.certId;
+  const rawCert = String(cert.certId || '');
   
   // If certId already contains '/', it's in the new format YYYY-NNN/NNN
   if (rawCert.includes('/')) {
@@ -2883,7 +2883,7 @@ function fmtCertId(cert) {
   const padded  = certNum.padStart(3, '0');
   if (!cert.jobNumber) return rawCert;
   // Extract the meaningful part of JOB-2024-006 → "2024-006"
-  const jobPart = cert.jobNumber.replace(/^JOB-/i, '');
+  const jobPart = String(cert.jobNumber || '').replace(/^JOB-/i, '');
   return `${jobPart}/${padded}`;
 }
 

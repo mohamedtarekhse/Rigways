@@ -692,6 +692,20 @@ async function handleJobs(request, env, path) {
 const ASSET_TYPES = ['Hoisting Equipment', 'Drilling Equipment', 'Mud System Low Pressure', 'Mud System High Pressure', 'Wirelines', 'Structure', 'Well Control', 'Tubular'];
 const ASSET_STATUSES = ['operation', 'stacked'];
 
+async function resolveClientAliases(db, rawClientId) {
+  const key = String(rawClientId || '').trim();
+  if (!key) return [];
+  const out = new Set([key]);
+  const queries = [{ 'id.eq': key }, { 'client_id.eq': key }];
+  for (const filters of queries) {
+    const { data } = await db.from('clients', { filters, select: 'id,client_id', limit: 1 });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row?.id) out.add(String(row.id));
+    if (row?.client_id) out.add(String(row.client_id));
+  }
+  return Array.from(out);
+}
+
 // Resolve AST-number (e.g. AST-0001) to UUID for DB operations
 // Returns the UUID or the original value if it's already a UUID
 async function resolveAssetId(db, rawId) {
@@ -808,8 +822,27 @@ async function handleAssets(request, env, path) {
     if (url.searchParams.get('type')) filters['asset_type.eq'] = url.searchParams.get('type');
     if (url.searchParams.get('client_id') && requireRole(session, ['admin', 'manager']))
       filters['client_id.eq'] = url.searchParams.get('client_id');
-    const { data, error } = await db.from('assets', { select: '*', filters, limit, offset, order: 'created_at.desc' });
+    let { data, error } = await db.from('assets', { select: '*', filters, limit, offset, order: 'created_at.desc' });
     if (error) return serverErr(env);
+    if (['user', 'technician'].includes(session.role) && session.customerId && (!Array.isArray(data) || data.length === 0)) {
+      const aliases = await resolveClientAliases(db, session.customerId);
+      for (const alias of aliases) {
+        if (!alias || alias === session.customerId) continue;
+        const retry = await db.from('assets', {
+          select: '*',
+          filters: { ...filters, 'client_id.eq': alias },
+          limit,
+          offset,
+          order: 'created_at.desc',
+        });
+        if (retry.error) continue;
+        const rows = Array.isArray(retry.data) ? retry.data : [];
+        if (rows.length) {
+          data = rows;
+          break;
+        }
+      }
+    }
     return ok({ assets: data || [], limit, offset }, env);
   }
 
@@ -818,8 +851,10 @@ async function handleAssets(request, env, path) {
     const { data } = await db.from('assets', { filters: { 'id.eq': asId }, select: '*', limit: 1 });
     const asset = Array.isArray(data) ? data[0] : data;
     if (!asset) return notFound('Asset', env);
-    if (['user', 'technician'].includes(session.role) && session.customerId && asset.client_id !== session.customerId)
-      return forbidden(env);
+    if (['user', 'technician'].includes(session.role) && session.customerId) {
+      const aliases = await resolveClientAliases(db, session.customerId);
+      if (!aliases.includes(String(asset.client_id || ''))) return forbidden(env);
+    }
     if (['user', 'technician'].includes(session.role) && session.functional_location && asset.functional_location !== session.functional_location)
       return forbidden(env);
     return ok(asset, env);
@@ -1525,8 +1560,27 @@ async function handleCertificates(request, env, path) {
     if (url.searchParams.get('asset_id')) filters['asset_id.eq'] = url.searchParams.get('asset_id');
     if (url.searchParams.get('client_id') && requireRole(session, ['admin', 'manager']))
       filters['client_id.eq'] = url.searchParams.get('client_id');
-    const { data, error } = await db.from('certificates', { select: '*', filters, limit, offset, order: 'expiry_date.asc' });
+    let { data, error } = await db.from('certificates', { select: '*', filters, limit, offset, order: 'expiry_date.asc' });
     if (error) return serverErr(env);
+    if (['user', 'technician'].includes(session.role) && session.customerId && (!Array.isArray(data) || data.length === 0)) {
+      const aliases = await resolveClientAliases(db, session.customerId);
+      for (const alias of aliases) {
+        if (!alias || alias === session.customerId) continue;
+        const retry = await db.from('certificates', {
+          select: '*',
+          filters: { ...filters, 'client_id.eq': alias },
+          limit,
+          offset,
+          order: 'expiry_date.asc',
+        });
+        if (retry.error) continue;
+        const rows = Array.isArray(retry.data) ? retry.data : [];
+        if (rows.length) {
+          data = rows;
+          break;
+        }
+      }
+    }
     const certs = Array.isArray(data) ? data : [];
     const withNames = await _withUploaderUsername(db, certs, 'uploaded_by');
     return ok({ certificates: withNames, limit, offset }, env);
@@ -1537,8 +1591,10 @@ async function handleCertificates(request, env, path) {
     const { data } = await db.from('certificates', { filters: { 'id.eq': certId }, select: '*', limit: 1 });
     const cert = Array.isArray(data) ? data[0] : data;
     if (!cert) return notFound('Certificate', env);
-    if (['user', 'technician'].includes(session.role) && session.customerId && cert.client_id !== session.customerId)
-      return forbidden(env);
+    if (['user', 'technician'].includes(session.role) && session.customerId) {
+      const aliases = await resolveClientAliases(db, session.customerId);
+      if (!aliases.includes(String(cert.client_id || ''))) return forbidden(env);
+    }
     if (['user', 'technician'].includes(session.role) && session.functional_location && cert.functional_location !== session.functional_location)
       return forbidden(env);
     const [withNames] = await _withUploaderUsername(db, [cert], 'uploaded_by');

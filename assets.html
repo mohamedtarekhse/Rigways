@@ -1606,10 +1606,14 @@ let ASSETS = []; // populated from API by loadAssets()
 const statusLabels = {
   operation: { en:'Operation', cls:'success' },
   stacked:   { en:'Stacked',   cls:'neutral' },
+  active:    { en:'Active',    cls:'success' },
+  maintenance: { en:'Maintenance', cls:'warning' },
+  inactive:  { en:'Inactive',  cls:'neutral' },
 };
 
 function getStatusBadge(status) {
-  const s = statusLabels[status] || statusLabels.inactive;
+  const key = String(status || '').toLowerCase();
+  const s = statusLabels[key] || { en: status || 'Unknown', cls:'neutral' };
   const lbl = s.en;
   return `<span class="sap-badge sap-badge--${s.cls}">${lbl}</span>`;
 }
@@ -3604,6 +3608,7 @@ async function loadAssets() {
       zone:          a.description       || '',
       zoneEquipment: a.description       || '',
       notes:         a.notes             || '',
+      status:        String(a.status || '').toLowerCase() || 'inactive',
       inspectionDate: inspectionMap.get(a.id) || '',
     }));
   } catch(e) {
