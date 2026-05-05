@@ -25,6 +25,62 @@ function extract(source, start, end) {
 }
 
 {
+  const code = extract(assetsHtml, 'function renderTable() {', 'function applyClientColVisibility()');
+  const elements = new Map();
+  const getElementById = (id) => {
+    if (!elements.has(id)) {
+      elements.set(id, {
+        value: '',
+        textContent: '',
+        innerHTML: '',
+        style: {},
+      });
+    }
+    return elements.get(id);
+  };
+  getElementById('searchInput').value = '';
+  getElementById('clientFilter').value = 'all';
+  getElementById('typeFilter').value = 'all';
+  getElementById('locationFilter').value = 'all';
+  getElementById('inspectionDateFilter').value = '';
+  const context = {
+    session: { role: 'user', customerId: 'C001' },
+    ASSETS: [{
+      assetId: 'AST-0001',
+      id: 'asset-1',
+      name: 'Top Drive',
+      type: 'Drilling Equipment',
+      serial: 'SN-1',
+      location: 'FL-C001-010',
+      client: '9c390bd2-2a6f-4d4f-a2c9-123456789abc',
+      zone: '',
+      status: 'active',
+      inspectionDate: '',
+    }],
+    activeStatusFilter: 'all',
+    currentPage: 1,
+    PAGE_SIZE: 25,
+    sortCol: 'name',
+    sortDir: 1,
+    filteredData: [],
+    h: (value) => String(value ?? ''),
+    getStatusBadge: (value) => value,
+    TYPE_COLORS: { 'Drilling Equipment': { color: '#000' }, Other: { color: '#000' } },
+    window: { _funcLocsCache: [] },
+    document: { getElementById },
+    renderPagination: () => {},
+    applyColVisibility: () => {},
+    applyClientColVisibility: () => {},
+    syncAssetsToStorage: () => {},
+  };
+  vm.runInNewContext(`${code}; this.renderTable = renderTable;`, context);
+  context.renderTable();
+
+  assert.equal(getElementById('tableCount').textContent, 1);
+  assert.equal(getElementById('emptyState').style.display, 'none');
+}
+
+{
   const from = certsHtml.lastIndexOf('function fmtCertId(cert)');
   const to = certsHtml.indexOf('function toggleColDropdown', from);
   assert.notEqual(from, -1, 'Missing certificate fmtCertId');

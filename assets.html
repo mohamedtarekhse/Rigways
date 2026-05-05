@@ -1646,9 +1646,7 @@ function renderTable() {
   let data = [...ASSETS];
 
   /* Client scope */
-  if (session.customerId && role !== 'admin' && role !== 'manager') {
-    data = data.filter(a => a.client === session.customerId);
-  } else if (clientF !== 'all') {
+  if (clientF !== 'all' && (role === 'admin' || role === 'manager')) {
     data = data.filter(a => a.client === clientF);
   }
 
@@ -3558,9 +3556,12 @@ function populateToolbarLocationFilter() {
   const clientF = document.getElementById('clientFilter')?.value || 'all';
   let locs = loadFuncLocs();
   if (role === 'user' || role === 'technician') {
-    locs = locs.filter(l => !session?.customerId || l.client === session.customerId);
     if (session?.functional_location) {
-      locs = locs.filter(l => l.name === session.functional_location || l.fl_id === session.functional_location);
+      const assigned = String(session.functional_location || '').trim().toLowerCase();
+      const scoped = locs.filter((l) =>
+        [l.name, l.fl_id, l.id].some((value) => String(value || '').trim().toLowerCase() === assigned)
+      );
+      if (scoped.length) locs = scoped;
     }
   } else if (clientF !== 'all') {
     locs = locs.filter(l => !l.client || l.client === clientF);
