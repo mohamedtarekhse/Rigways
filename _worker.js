@@ -304,6 +304,8 @@ async function handleAuth(request, env, path) {
     const jwtSecret = env.JWT_SECRET;
     if (!jwtSecret) return serverErr(env, 'JWT_SECRET is missing in Cloudflare dashboard');
 
+    const [enriched] = await _withEnrichedNames(db, [{ customer_id: user.customer_id, functional_location: user.functional_location }], { clientCol: 'customer_id' });
+
     const token = await signJwt({
       sub: user.id,
       username: user.username,
@@ -311,7 +313,9 @@ async function handleAuth(request, env, path) {
       name: user.name,
       nameAr: user.name_ar || '',
       customerId: user.customer_id || null,
+      customerName: enriched?.client_name || null,
       functional_location: user.functional_location || null,
+      functionalLocationName: enriched?.functional_location_name || null,
     }, jwtSecret, expiresIn);
 
     return ok({
@@ -324,7 +328,9 @@ async function handleAuth(request, env, path) {
         name: user.name,
         nameAr: user.name_ar || '',
         customerId: user.customer_id || null,
+        customerName: enriched?.client_name || null,
         functional_location: user.functional_location || null,
+        functionalLocationName: enriched?.functional_location_name || null,
       },
     }, env);
   }
@@ -423,7 +429,9 @@ async function handleUsers(request, env, path) {
     if (url.searchParams.get('active')) filters['is_active.is'] = url.searchParams.get('active') === 'true';
     const { data, error } = await db.from('users', { select: SAFE, filters, limit, offset, order: 'created_at.desc' });
     if (error) return serverErr(env);
-    return ok({ users: data || [], limit, offset }, env);
+    const users = data || [];
+    const enriched = await _withEnrichedNames(db, users, { clientCol: 'customer_id' });
+    return ok({ users: enriched, limit, offset }, env);
   }
 
   /* GET ONE */
@@ -432,7 +440,8 @@ async function handleUsers(request, env, path) {
     const { data } = await db.from('users', { filters: { 'id.eq': uid }, select: SAFE, limit: 1 });
     const user = Array.isArray(data) ? data[0] : data;
     if (!user) return notFound('User', env);
-    return ok(user, env);
+    const [enriched] = await _withEnrichedNames(db, [user], { clientCol: 'customer_id' });
+    return ok(enriched || user, env);
   }
 
   /* CREATE */
@@ -551,7 +560,9 @@ async function handleJobs(request, env, path) {
     if (!isAdminOrManager && session.customerId) filters['client_id.eq'] = session.customerId;
     const { data, error } = await db.from('jobs', { select: '*', filters, limit, offset, order: 'created_at.desc' });
     if (error) return serverErr(env, error.message || JSON.stringify(error));
-    return ok({ jobs: data || [], limit, offset }, env);
+    const jobs = data || [];
+    const enriched = await _withEnrichedNames(db, jobs);
+    return ok({ jobs: enriched, limit, offset }, env);
   }
 
   if (!jobId && !jobInspectorsId && method === 'POST') {
@@ -602,7 +613,8 @@ async function handleJobs(request, env, path) {
     const job = Array.isArray(data) ? data[0] : data;
     if (!job) return notFound('Job', env);
     if (!isAdminOrManager && session.customerId && job.client_id !== session.customerId) return forbidden(env);
-    return ok(job, env);
+    const [enriched] = await _withEnrichedNames(db, [job]);
+    return ok(enriched || job, env);
   }
 
   if (jobId && method === 'PATCH') {
@@ -937,7 +949,9 @@ async function handleAssets(request, env, path) {
         if (Array.isArray(data) && data.length) break;
       }
     }
-    return ok({ assets: data || [], limit, offset }, env);
+    const assets = data || [];
+    const enriched = await _withEnrichedNames(db, assets);
+    return ok({ assets: enriched, limit, offset }, env);
   }
 
   /* GET ONE */
@@ -953,7 +967,8 @@ async function handleAssets(request, env, path) {
       const aliases = await resolveFunctionalLocationAliases(db, session.functional_location, session.customerId);
       if (!aliases.includes(String(asset.functional_location || ''))) return forbidden(env);
     }
-    return ok(asset, env);
+    const [enriched] = await _withEnrichedNames(db, [asset]);
+    return ok(enriched || asset, env);
   }
 
   /* CREATE */
@@ -1560,8 +1575,9 @@ async function handleCertificates(request, env, path) {
     });
     if (error) return serverErr(env);
     const rows = Array.isArray(data) ? data : [];
-    const withNames = await _withUploaderUsername(db, rows, 'changed_by');
-    return ok({ history: withNames }, env);
+    const withUploader = await _withUploaderUsername(db, rows, 'changed_by');
+    const enriched = await _withEnrichedNames(db, withUploader);
+    return ok({ history: enriched }, env);
   }
 
   if (path === '/diag' && method === 'GET') {
@@ -1737,8 +1753,9 @@ async function handleCertificates(request, env, path) {
       }
     }
     const certs = Array.isArray(data) ? data : [];
-    const withNames = await _withUploaderUsername(db, certs, 'uploaded_by');
-    return ok({ certificates: withNames, limit, offset }, env);
+    const withUploader = await _withUploaderUsername(db, certs, 'uploaded_by');
+    const enriched = await _withEnrichedNames(db, withUploader);
+    return ok({ certificates: enriched, limit, offset }, env);
   }
 
   /* GET ONE */
@@ -1762,8 +1779,9 @@ async function handleCertificates(request, env, path) {
         if (!aliases.includes(String(asset?.functional_location || ''))) return forbidden(env);
       }
     }
-    const [withNames] = await _withUploaderUsername(db, [cert], 'uploaded_by');
-    return ok(withNames || cert, env);
+    const [withUploader] = await _withUploaderUsername(db, [cert], 'uploaded_by');
+    const [enriched] = await _withEnrichedNames(db, [withUploader || cert]);
+    return ok(enriched || withUploader || cert, env);
   }
 
   /* CREATE */
@@ -2418,6 +2436,46 @@ async function _withUploaderUsername(db, rows, field = 'uploaded_by') {
   }));
 }
 
+async function _withEnrichedNames(db, rows, options = {}) {
+  if (!Array.isArray(rows) || !rows.length) return [];
+  const clientCol = options.clientCol || 'client_id';
+  const locCol = options.locCol || 'functional_location';
+  const clientIds = [...new Set(rows.map(r => r?.[clientCol]).filter(Boolean))];
+  const locIds = [...new Set(rows.map(r => r?.[locCol]).filter(Boolean))];
+  const clientMap = new Map();
+  const locMap = new Map();
+
+  if (clientIds.length) {
+    // Try id first
+    const { data: c1 } = await db.from('clients', { select: 'id,name', filters: { 'id.in': clientIds } });
+    (c1 || []).forEach(c => clientMap.set(c.id, c.name));
+    // Then try client_id for legacy
+    const missing = clientIds.filter(id => !clientMap.has(id));
+    if (missing.length) {
+      const { data: c2 } = await db.from('clients', { select: 'client_id,name', filters: { 'client_id.in': missing } });
+      (c2 || []).forEach(c => clientMap.set(c.client_id, c.name));
+    }
+  }
+
+  if (locIds.length) {
+    // Try fl_id first
+    const { data: l1 } = await db.from('functional_locations', { select: 'fl_id,name', filters: { 'fl_id.in': locIds } });
+    (l1 || []).forEach(l => locMap.set(l.fl_id, l.name));
+    // Then try id
+    const missing = locIds.filter(id => !locMap.has(id));
+    if (missing.length) {
+      const { data: l2 } = await db.from('functional_locations', { select: 'id,name', filters: { 'id.in': missing } });
+      (l2 || []).forEach(l => locMap.set(l.id, l.name));
+    }
+  }
+
+  return rows.map(r => ({
+    ...r,
+    client_name: clientMap.get(r[clientCol]) || null,
+    functional_location_name: locMap.get(r[locCol]) || null
+  }));
+}
+
 async function _recordCertificateHistory(db, cert, session, action) {
   try {
     if (!cert?.id) return;
@@ -2789,7 +2847,9 @@ async function handleFunctionalLocations(request, env, path) {
     }
     const { data, error } = await db.from('functional_locations', { select: '*', filters, limit, offset, order: 'fl_id.asc' });
     if (error) return serverErr(env);
-    return ok({ functional_locations: data || [], limit, offset }, env);
+    const locs = data || [];
+    const enriched = await _withEnrichedNames(db, locs);
+    return ok({ functional_locations: enriched, limit, offset }, env);
   }
 
   if (flId && method === 'GET') {
@@ -2798,7 +2858,8 @@ async function handleFunctionalLocations(request, env, path) {
     const fl = Array.isArray(data) ? data[0] : data;
     if (!fl) return notFound('Functional Location', env);
     if (!isAdmin && !isManager && session.customerId !== fl.client_id) return forbidden(env);
-    return ok(fl, env);
+    const [enriched] = await _withEnrichedNames(db, [fl]);
+    return ok(enriched || fl, env);
   }
 
   /* Write operations: admin only */
