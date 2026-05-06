@@ -1623,14 +1623,44 @@ async function handleCertificates(request, env, path) {
     const days = parseInt(url.searchParams.get('days') || '30');
     const today = new Date().toISOString().split('T')[0];
     const cutoff = new Date(Date.now() + days * 86_400_000).toISOString().split('T')[0];
-    const filters = { 'approval_status.eq': 'approved', 'expiry_date.gte': today, 'expiry_date.lte': cutoff };
+    
+    const filters = { 'approval_status.in': ['approved', 'pending'] };
     if (['user', 'technician'].includes(session.role) && session.customerId)
       filters['client_id.eq'] = session.customerId;
     if (['user', 'technician'].includes(session.role) && session.functional_location)
       filters['functional_location.eq'] = session.functional_location;
-    const { data, error } = await db.from('certificates', { select: '*', filters, order: 'expiry_date.asc', limit: 200 });
+    
+    const { data, error } = await db.from('certificates', { select: '*', filters, order: 'expiry_date.asc', limit: 1000 });
     if (error) return serverErr(env);
-    return ok({ certificates: data || [], days }, env);
+    
+    const certs = data || [];
+    const certGroups = new Map();
+    certs.forEach(cert => {
+      if (!cert.asset_id) return;
+      const rawType = String(cert.cert_type || '');
+      const baseType = rawType.split(' — ')[0] || rawType;
+      const subType = cert.lifting_subtype || '';
+      const groupKey = `${cert.asset_id}|${baseType}|${subType}`;
+      if (!certGroups.has(groupKey)) certGroups.set(groupKey, { latestApproved: null, hasPending: false });
+      const group = certGroups.get(groupKey);
+      if (cert.approval_status === 'pending') group.hasPending = true;
+      else if (cert.approval_status === 'approved' && cert.expiry_date) {
+        if (!group.latestApproved || new Date(cert.expiry_date) > new Date(group.latestApproved.expiry_date)) {
+          group.latestApproved = cert;
+        }
+      }
+    });
+
+    const result = [];
+    certGroups.forEach(group => {
+      if (group.hasPending || !group.latestApproved) return;
+      const c = group.latestApproved;
+      if (c.expiry_date >= today && c.expiry_date <= cutoff) {
+        result.push(c);
+      }
+    });
+
+    return ok({ certificates: result, days }, env);
   }
 
   /* ── GET /api/certificates/stats — dashboard ── */

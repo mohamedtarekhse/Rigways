@@ -15,30 +15,56 @@ export async function handleCheckExpiry(env) {
   const in14d  = datePlusDays(14);
   const in30d  = datePlusDays(30);
 
-  // ── Fetch expired certificates ───────────────────
-  const { data: expiredCerts } = await db.from('certificates', {
-    filters: { 'approval_status.eq': 'approved', 'expiry_date.lt': today },
-    select: 'id,name,cert_number,expiry_date,uploaded_by,client_id',
-    limit: 500,
-    order: 'expiry_date.asc',
+  // ── Fetch all approved and pending certificates to apply suppression logic ──
+  const { data: allCerts } = await db.from('certificates', {
+    filters: { 'approval_status.in': ['approved', 'pending'] },
+    select: 'id,name,cert_number,expiry_date,uploaded_by,client_id,asset_id,cert_type,lifting_subtype,approval_status',
+    limit: 5000,
   });
-  const expired = Array.isArray(expiredCerts) ? expiredCerts : [];
+  const certs = Array.isArray(allCerts) ? allCerts : [];
 
-  // ── Fetch certificates expiring within 7 days ────
-  const { data: crit7 } = await db.from('certificates', {
-    filters: { 'approval_status.eq': 'approved', 'expiry_date.gte': today, 'expiry_date.lte': in7d },
-    select: 'id,name,cert_number,expiry_date,uploaded_by,client_id',
-    limit: 500,
-  });
-  const critical = Array.isArray(crit7) ? crit7 : [];
+  // Group by (asset_id, base_type, sub_type)
+  const certGroups = new Map();
+  certs.forEach(cert => {
+    if (!cert.asset_id) return;
+    const rawType = String(cert.cert_type || '');
+    const baseType = rawType.split(' — ')[0] || rawType;
+    const subType = cert.lifting_subtype || '';
+    const groupKey = `${cert.asset_id}|${baseType}|${subType}`;
 
-  // ── Fetch certificates expiring 8-30 days ────────
-  const { data: warn30 } = await db.from('certificates', {
-    filters: { 'approval_status.eq': 'approved', 'expiry_date.gt': in7d, 'expiry_date.lte': in30d },
-    select: 'id,name,cert_number,expiry_date,uploaded_by,client_id',
-    limit: 500,
+    if (!certGroups.has(groupKey)) {
+      certGroups.set(groupKey, { latestApproved: null, hasPending: false });
+    }
+    const group = certGroups.get(groupKey);
+
+    if (cert.approval_status === 'pending') {
+      group.hasPending = true;
+    } else if (cert.approval_status === 'approved' && cert.expiry_date) {
+      if (!group.latestApproved || new Date(cert.expiry_date) > new Date(group.latestApproved.expiry_date)) {
+        group.latestApproved = cert;
+      }
+    }
   });
-  const warning = Array.isArray(warn30) ? warn30 : [];
+
+  const expired = [];
+  const critical = [];
+  const warning = [];
+
+  certGroups.forEach(group => {
+    // If a renewal is pending, suppress all alerts for this asset/type
+    if (group.hasPending || !group.latestApproved) return;
+
+    const cert = group.latestApproved;
+    const expiryDate = cert.expiry_date;
+    
+    if (expiryDate < today) {
+      expired.push(cert);
+    } else if (expiryDate <= in7d) {
+      critical.push(cert);
+    } else if (expiryDate <= in30d) {
+      warning.push(cert);
+    }
+  });
 
   let pushCount = 0;
 
