@@ -87,6 +87,11 @@ function apiFetch(path, options = {}) {
   });
 }
 
+// Expose apiFetch globally for use in page-specific scripts
+if (typeof window !== 'undefined') {
+  window.apiFetch = apiFetch;
+}
+
 
 
 const SapClients = (() => {
