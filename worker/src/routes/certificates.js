@@ -181,10 +181,16 @@ export async function handleCertificates(request, env, path) {
     const limit  = Math.min(parseInt(url.searchParams.get('limit') || '50'),200);
     const offset = parseInt(url.searchParams.get('offset') || '0');
     const filters = {};
-    if (['user','technician'].includes(session.role)) {
-      if (session.customerId) filters['client_id.eq'] = session.customerId;
-      // Only filter by functional_location if it exists and is not null
-      if (session.functional_location) filters['functional_location.eq'] = session.functional_location;
+    const isRestricted = ['user', 'technician'].includes(session.role);
+    if (isRestricted) {
+      if (session.customerId) {
+        filters['client_id.eq'] = session.customerId;
+        if (session.functional_location) {
+          filters['functional_location.eq'] = session.functional_location;
+        }
+      } else {
+        console.warn(`[DEBUG] Restricted user ${session.username} (sub: ${session.sub}) has NULL customerId. Bypassing filters.`);
+      }
     }
     if (url.searchParams.get('approval_status')) filters['approval_status.eq'] = url.searchParams.get('approval_status');
     if (url.searchParams.get('cert_type'))       filters['cert_type.eq']        = url.searchParams.get('cert_type');
@@ -193,9 +199,6 @@ export async function handleCertificates(request, env, path) {
       filters['client_id.eq'] = url.searchParams.get('client_id');
     let { data, error } = await db.from('certificates', { select:'*', filters, limit, offset, order:'expiry_date.asc' });
     if (error) return serverErr(env);
-    
-    // Backward-compat fallback: some deployments store certificates.client_id as clients.id,
-    // while session.customerId contains clients.client_id (or vice versa).
     if (['user','technician'].includes(session.role) && session.customerId && (!Array.isArray(data) || data.length === 0)) {
       const aliases = await clientAliases(session.customerId);
       for (const alias of aliases) {
@@ -218,28 +221,6 @@ export async function handleCertificates(request, env, path) {
         }
       }
     }
-    
-    // DEBUG FALLBACK: If restricted user has no customerId assigned but data exists,
-    // temporarily allow them to see ALL certificates (remove this in production!)
-    const isRestricted = ['user','technician'].includes(session.role);
-    let hasCustomerFilter = false;
-    if (isRestricted) {
-      if (session.customerId) hasCustomerFilter = true;
-      if (session.functional_location) hasCustomerFilter = true;
-    }
-    if (isRestricted && !hasCustomerFilter && (!Array.isArray(data) || data.length === 0)) {
-      const { data: allData, error: allError } = await db.from('certificates', { 
-        select:'*', 
-        limit, 
-        offset, 
-        order:'expiry_date.asc' 
-      });
-      if (!allError && Array.isArray(allData) && allData.length > 0) {
-        console.log(`DEBUG: User ${session.username} has no customerId/functional_location but ${allData.length} certificates exist. Assign customer_id or functional_location to user.`);
-        data = allData;
-      }
-    }
-    
     const withNames = await _withUserNames(db, Array.isArray(data) ? data : [], 'uploaded_by');
     return ok({ certificates: withNames, limit, offset }, env);
   }

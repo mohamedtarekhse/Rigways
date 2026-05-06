@@ -885,10 +885,16 @@ async function handleAssets(request, env, path) {
     const offset = parseInt(url.searchParams.get('offset') || '0');
     const filters = {};
     const isRestricted = ['user', 'technician'].includes(session.role);
-    if (isRestricted && session.customerId)
-      filters['client_id.eq'] = session.customerId;
-    if (isRestricted && session.functional_location)
-      filters['functional_location.eq'] = session.functional_location;
+    if (isRestricted) {
+      if (session.customerId) {
+        filters['client_id.eq'] = session.customerId;
+        if (session.functional_location) {
+          filters['functional_location.eq'] = session.functional_location;
+        }
+      } else {
+        console.warn(`[DEBUG] User ${session.username} (sub: ${session.sub}) has NULL customerId. Showing all assets temporarily.`);
+      }
+    }
     if (url.searchParams.get('status')) filters['status.eq'] = url.searchParams.get('status');
     if (url.searchParams.get('type')) filters['asset_type.eq'] = url.searchParams.get('type');
     if (url.searchParams.get('client_id') && requireRole(session, ['admin', 'manager']))
@@ -1642,10 +1648,16 @@ async function handleCertificates(request, env, path) {
     const offset = parseInt(url.searchParams.get('offset') || '0');
     const filters = {};
     const isRestricted = ['user', 'technician'].includes(session.role);
-    if (isRestricted && session.customerId)
-      filters['client_id.eq'] = session.customerId;
-    if (isRestricted && session.functional_location)
-      filters['functional_location.eq'] = session.functional_location;
+    if (isRestricted) {
+      if (session.customerId) {
+        filters['client_id.eq'] = session.customerId;
+        if (session.functional_location) {
+          filters['functional_location.eq'] = session.functional_location;
+        }
+      } else {
+        console.warn(`[DEBUG] User ${session.username} (sub: ${session.sub}) has NULL customerId. Showing all certificates temporarily.`);
+      }
+    }
     if (url.searchParams.get('approval_status')) filters['approval_status.eq'] = url.searchParams.get('approval_status');
     if (url.searchParams.get('cert_type')) filters['cert_type.eq'] = url.searchParams.get('cert_type');
     if (url.searchParams.get('asset_id')) filters['asset_id.eq'] = url.searchParams.get('asset_id');
