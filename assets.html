@@ -3637,48 +3637,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const roleLabels = {admin:'Administrator',manager:'Manager',technician:'Technician',user:'Regular User'};
   document.getElementById('menuUserRole').textContent = roleLabels[role]||role;
 
-  /* Admin section */
-  if (role !== 'admin') {
-    document.getElementById('adminSection').style.display = 'none';
-    document.getElementById('adminClientsLink').style.display = 'none';
-  }
-  if (role !== 'admin' && role !== 'manager') {
-    const il = document.getElementById('inspectorsLink'); if (il) il.style.display = 'none';
-    const fl = document.getElementById('funcLocsLink'); if (fl) fl.style.display = 'none';
-    if (role === 'user') {
-      const cl = document.getElementById('adminClientsLink'); if (cl) cl.style.display = 'none';
-      const il2 = document.getElementById('inspectorsLink'); if (il2) il2.style.display = 'none';
-      const fl2 = document.getElementById('funcLocsLink'); if (fl2) fl2.style.display = 'none';
-      const adminDivider = document.getElementById('adminSection'); if (adminDivider) adminDivider.style.display = 'none';
-      const jl = document.getElementById('jobsLink'); if (jl) jl.style.display = 'none';
-      const fll = document.getElementById('filesLink'); if (fll) fll.style.display = 'none';
-      const nl = document.getElementById('notificationsLink'); if (nl) nl.style.display = 'none';
-      const nb = document.getElementById('notifBadge'); if (nb) nb.style.display = 'none';
-    }
-  }
-  if (role === 'manager') {
-    const as = document.getElementById('adminSection'); if (as) as.style.display = '';
-    const fl2 = document.getElementById('funcLocsLink'); if (fl2) fl2.style.display = 'none';
-  }
+  /* Navigation */
+  if (typeof SapNavigation !== 'undefined') SapNavigation.sync();
 
   /* Client filter visibility */
   if (role === 'admin' || role === 'manager') {
-    document.getElementById('clientFilter').style.display = 'inline-block';
+    const cf = document.getElementById('clientFilter');
+    if (cf) cf.style.display = 'inline-block';
   }
-  if (role === 'user') {
-    const locationFilter = document.getElementById('locationFilter');
-    if (locationFilter) {
-      locationFilter.value = 'all';
-      locationFilter.style.display = 'none';
-    }
-    const clientFilter = document.getElementById('clientFilter');
-    if (clientFilter) {
-      clientFilter.value = 'all';
-      clientFilter.style.display = 'none';
-    }
-  }
-  const importBtn = document.getElementById('importBtn');
-  if (importBtn && role !== 'admin') importBtn.style.display = 'none';
 
   /* Page subtitle */
   if (session.customerId) {
@@ -3686,32 +3652,35 @@ document.addEventListener('DOMContentLoaded', () => {
     if (session.functional_location) {
       sub += ` · ${session.functional_location}`;
     }
-    document.getElementById('pageSubtitle').textContent = sub;
+    const ps = document.getElementById('pageSubtitle');
+    if (ps) ps.textContent = sub;
   } else if (session.functional_location) {
-    document.getElementById('pageSubtitle').textContent = `Your assigned assets — Location ${session.functional_location}`;
+    const ps = document.getElementById('pageSubtitle');
+    if (ps) ps.textContent = `Your assigned assets — Location ${session.functional_location}`;
   }
 
   /* Header actions by role */
   const ha = document.getElementById('headerActions');
-  if (role === 'admin' || role === 'manager') {
-    ha.innerHTML = `<button class="btn btn-primary" onclick="openAddModal()">
-      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      <span>Add Asset</span>
-    </button>`;
-  }
-  if (role === 'technician') {
-    ha.innerHTML = `<span class="sap-badge sap-badge--info" style="font-size:12px;padding:6px 12px;">
-      Technician – Status updates require approval
-    </span>`;
-  }
-  if (role === 'user') {
-    ha.innerHTML = `<span class="sap-badge sap-badge--neutral" style="font-size:12px;padding:6px 12px;">
-      Read-Only View
-    </span>`;
+  if (ha) {
+    if (role === 'admin' || role === 'manager') {
+      ha.innerHTML = `<button class="btn btn-primary" onclick="openAddModal()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="15" height="15"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>Add Asset</span>
+      </button>`;
+    } else if (role === 'technician') {
+      ha.innerHTML = `<span class="sap-badge sap-badge--info" style="font-size:12px;padding:6px 12px;">
+        Technician – Status updates require approval
+      </span>`;
+    } else if (role === 'user') {
+      ha.innerHTML = `<span class="sap-badge sap-badge--neutral" style="font-size:12px;padding:6px 12px;">
+        Read-Only View
+      </span>`;
+    }
   }
 
   /* Notification badge */
-  if (role !== 'user') document.getElementById('notifBadge').style.display = 'block';
+  const nb = document.getElementById('notifBadge');
+  if (nb && role !== 'user') nb.style.display = 'block';
 
   loadColState();
   // Load clients and functional locations in parallel, then load assets

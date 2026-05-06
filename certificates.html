@@ -3454,28 +3454,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const rl = {admin:'Administrator',manager:'Manager',technician:'Technician',user:'Regular User'};
   document.getElementById('menuUserRole').textContent = rl[role]||role;
 
-  if (role !== 'admin') {
-    document.getElementById('adminSection').style.display = 'none';
-    document.getElementById('adminDashboardLink').style.display = 'none';
-    document.getElementById('adminClientsLink').style.display = 'none';
+  /* Navigation */
+  if (typeof SapNavigation !== 'undefined') SapNavigation.sync();
+
+  if (role === 'admin' || role === 'manager') {
+    const cf = document.getElementById('clientFilter');
+    if (cf) cf.style.display = 'inline-block';
   }
-  if (role !== 'admin' && role !== 'manager') {
-    const il = document.getElementById('inspectorsLink'); if (il) il.style.display = 'none';
-    const fl = document.getElementById('funcLocsLink'); if (fl) fl.style.display = 'none';
-    if (role === 'user') {
-      const nl = document.getElementById('notificationsLink'); if (nl) nl.style.display = 'none';
-      const nb = document.getElementById('notifBadge'); if (nb) nb.style.display = 'none';
-    }
-  }
-  if (role === 'manager') {
-    const as = document.getElementById('adminSection'); if (as) as.style.display = '';
-    const fl2 = document.getElementById('funcLocsLink'); if (fl2) fl2.style.display = 'none';
-  }
-  if (role === 'admin' || role === 'manager') document.getElementById('clientFilter').style.display = 'inline-block';
-  if (role !== 'user') document.getElementById('notifBadge').style.display = 'block';
+  const nb = document.getElementById('notifBadge');
+  if (nb && role !== 'user') nb.style.display = 'block';
   if (role === 'user') {
-    const colSelectorWrap = document.getElementById('colSelectorWrap');
-    if (colSelectorWrap) colSelectorWrap.style.display = 'none';
+    const csw = document.getElementById('colSelectorWrap');
+    if (csw) csw.style.display = 'none';
   }
 
   /* Subtitle */

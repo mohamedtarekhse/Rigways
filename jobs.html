@@ -494,24 +494,11 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     if (readOnlyBanner) readOnlyBanner.style.display = '';
   }
 
-  if (session.role !== 'admin') document.getElementById('adminClientsLink').style.display = 'none';
+  if (typeof SapNavigation !== 'undefined') SapNavigation.sync();
+
   if (session.role !== 'admin') {
     const settingsBtn = document.getElementById('settingsBtn');
     if (settingsBtn) settingsBtn.style.display = 'none';
-  }
-  // Hide nav links for technician and user roles - they can only see Assets and Certificates
-  if (session.role === 'technician' || session.role === 'user') {
-    document.getElementById('adminClientsLink').style.display = 'none';
-    document.getElementById('inspectorsLink').style.display = 'none';
-    document.getElementById('funcLocsLink').style.display = 'none';
-    const nl = document.getElementById('notificationsLink'); if (nl) nl.style.display = 'none';
-    const jl = document.getElementById('jobsLink'); if (jl) jl.style.display = 'none';
-    const nb = document.getElementById('notifBadge'); if (nb) nb.style.display = 'none';
-  } else if (session.role !== 'admin' && session.role !== 'manager') {
-    document.getElementById('inspectorsLink').style.display = 'none';
-    document.getElementById('funcLocsLink').style.display = 'none';
-  } else if (session.role === 'manager') {
-    document.getElementById('funcLocsLink').style.display = 'none';
   }
 
   if (jobsReadOnly) {

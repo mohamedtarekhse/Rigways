@@ -1754,6 +1754,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Only admin and manager can access Inspectors page - redirect technicians and users to Assets
   if (!['admin','manager'].includes(session.role)) return location.href='assets.html';
+  if (typeof SapNavigation !== 'undefined') SapNavigation.sync();
 
   const role = session.role;
   const lang = session.lang || localStorage.getItem('sap_lang') || 'en';
@@ -1773,24 +1774,9 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  /* Admin section nav */
-  if (role !== 'admin') {
-    document.getElementById('adminSection').style.display = 'none';
-    document.getElementById('adminClientsLink').style.display = 'none';
-    const fl = document.getElementById('funcLocsLink'); if (fl) fl.style.display = 'none';
-    if (role !== 'manager') {
-      const il = document.getElementById('inspectorsLink'); if (il) il.style.display = 'none';
-    }
-    if (role === 'user') {
-      const jl = document.getElementById('jobsLink'); if (jl) jl.style.display = 'none';
-      const fll = document.getElementById('filesLink'); if (fll) fll.style.display = 'none';
-      const nl = document.getElementById('notificationsLink'); if (nl) nl.style.display = 'none';
-      const nb = document.getElementById('notifBadge'); if (nb) nb.style.display = 'none';
-    }
-  }
-
   /* Notification badge */
-  if (role !== 'user') document.getElementById('notifBadge').style.display = 'block';
+  const nBadge = document.getElementById('notifBadge');
+  if (nBadge && role !== 'user') nBadge.style.display = 'block';
 
   /* Header actions */
   const ha = document.getElementById('headerActions');

@@ -1252,6 +1252,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Only admin can access Clients page - redirect all others to Assets
   if (session.role !== 'admin') return location.href='assets.html';
+  if (typeof SapNavigation !== 'undefined') SapNavigation.sync();
 
   const role = session.role;
   const lang = 'en';

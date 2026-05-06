@@ -678,7 +678,8 @@ async function handleLogin(e) {
     showToast('success', 'Signed In',
       `Welcome, ${h(data.user.name)} — ${roleLabel[data.user.role] || data.user.role}`);
 
-    setTimeout(() => { window.location.href = 'assets.html'; }, 900);
+    const home = (typeof SapNavigation !== 'undefined') ? SapNavigation.getLandingPage(data.user.role) : 'assets.html';
+    setTimeout(() => { window.location.href = home; }, 900);
 
   } catch {
     errorBox.classList.add('show');
@@ -714,7 +715,9 @@ function showToast(type, title, msg) {
 /* ── Init ── */
 (function() {
   if (sessionStorage.getItem('sap_session')) {
-    window.location.href = 'assets.html';
+    const s = JSON.parse(sessionStorage.getItem('sap_session'));
+    const home = (typeof SapNavigation !== 'undefined') ? SapNavigation.getLandingPage(s.role) : 'assets.html';
+    window.location.href = home;
     return;
   }
   // EN-only mode

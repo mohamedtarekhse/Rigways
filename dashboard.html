@@ -239,6 +239,7 @@ async function enableUser(id){
 document.addEventListener('DOMContentLoaded', async () => {
   const s = SapSession.guard(['admin']);
   if (!s) return;
+  if (typeof SapNavigation !== 'undefined') SapNavigation.sync();
   document.getElementById('u_client').addEventListener('change', fillFunctionalLocationOptions);
   await Promise.all([loadClients(), loadFunctionalLocations()]);
   await loadUsers();

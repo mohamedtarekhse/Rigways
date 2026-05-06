@@ -820,20 +820,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('menuUserRole').textContent=rl[role]||role;
   if(role!=='user') document.getElementById('notifBadge').style.display='block';
 
-  /* Nav visibility */
-  if(role!=='admin'){
-    document.getElementById('adminDivider').style.display='none';
-    document.getElementById('adminClientsLink').style.display='none';
-  }
-  if(role!=='admin'&&role!=='manager'){
-    document.getElementById('inspectorsLink').style.display='none';
-    if (role === 'user') {
-      const jl = document.getElementById('jobsLink'); if (jl) jl.style.display = 'none';
-      const fl = document.getElementById('filesLink'); if (fl) fl.style.display = 'none';
-      const nl = document.getElementById('notificationsLink'); if (nl) nl.style.display = 'none';
-      const nb = document.getElementById('notifBadge'); if (nb) nb.style.display = 'none';
-    }
-  }
+  /* Navigation */
+  if (typeof SapNavigation !== 'undefined') SapNavigation.sync();
   /* funcLocsLink stays visible for all who can see this page */
 
   /* Hide edit controls for non-admin */

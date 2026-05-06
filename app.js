@@ -54,13 +54,15 @@ const SAP_CONFIG = {
 
   /* Navigation items (ordered) - Technicians and Users can only see Assets and Certificates */
   NAV: [
-    { id:'assets',        href:'assets.html',        iconKey:'asset',  en:'Assets',        ar:'الأصول',       roles:['admin','manager','technician','user'] },
+    { id:'dashboard',     href:'dashboard.html',     iconKey:'grid',   en:'Admin Dashboard',ar:'لوحة المشرف',  roles:['admin'], landing:true },
+    { id:'assets',        href:'assets.html',        iconKey:'asset',  en:'Assets',        ar:'الأصول',       roles:['admin','manager','technician','user'], landing:true },
     { id:'certificates',  href:'certificates.html',  iconKey:'cert',   en:'Certificates',  ar:'الشهادات',     roles:['admin','manager','technician','user'] },
     { id:'jobs',          href:'jobs.html',          iconKey:'chart',  en:'Jobs',          ar:'الوظائف',      roles:['admin','manager'] },
+    { id:'clients',       href:'clients.html',       iconKey:'users',  en:'Clients',       ar:'العملاء',      roles:['admin'] },
+    { id:'inspectors',    href:'inspectors.html',    iconKey:'inspector', en:'Inspectors',    ar:'المفتشين',     roles:['admin','manager'] },
+    { id:'locations',     href:'functional-locations.html', iconKey:'loc', en:'Func. Locations', ar:'المواقع', roles:['admin'] },
     { id:'files',         href:'files.html',         iconKey:'asset',  en:'Files',         ar:'الملفات',      roles:['admin'] },
     { id:'notifications', href:'notifications.html', iconKey:'notif',  en:'Notifications', ar:'الإشعارات',    roles:['admin','manager'] },
-    { id:'dashboard',     href:'dashboard.html',     iconKey:'users',  en:'Admin Dashboard',ar:'لوحة المشرف',  roles:['admin'] },
-    { id:'clients',       href:'clients.html',       iconKey:'users',  en:'Clients',       ar:'العملاء',      roles:['admin'] },
   ],
 };
 
@@ -249,7 +251,8 @@ const SapSession = (() => {
       SapToast.show('error',
         SapLang.t('Access Denied', 'غير مصرح'),
         SapLang.t('You do not have permission to view this page.', 'ليس لديك صلاحية للوصول إلى هذه الصفحة.'));
-      setTimeout(() => { window.location.href = 'assets.html'; }, 1500);
+      const home = SapNavigation.getLandingPage(s.role);
+      setTimeout(() => { window.location.href = home; }, 1500);
       return null;
     }
     return s;
@@ -379,52 +382,74 @@ const SapSidebar = (() => {
   }
 
   /**
-   * Highlight the nav item matching the current page.
-   */
-  function _markActive() {
-    const page = window.location.pathname.split('/').pop() || 'assets.html';
-    document.querySelectorAll('.sap-nav-item').forEach(item => {
-      const href = item.getAttribute('href') || '';
-      const match = href === page || href.endsWith('/' + page);
-      item.classList.toggle('active', match);
-    });
-  }
-
-  /**
    * Build the sidebar nav dynamically for the current role.
-   * Call this from pages that use JS-generated nav.
    */
   function buildNav(role) {
-    const container = document.getElementById('sidebarNav');
-    if (!container) return;
+    SapNavigation.sync();
+  }
+
+  return { init, toggle, buildNav };
+})();
+
+/* ================================================================
+   4b. NAVIGATION SYNC
+================================================================ */
+const SapNavigation = (() => {
+  function getLandingPage(role) {
+    // Admin goes to dashboard, others to assets
+    const landing = SAP_CONFIG.NAV.find(n => n.landing && n.roles.includes(role));
+    if (role === 'admin') {
+       const dash = SAP_CONFIG.NAV.find(n => n.id === 'dashboard');
+       if (dash) return dash.href;
+    }
+    return landing ? landing.href : 'assets.html';
+  }
+
+  function sync() {
+    const s = SapSession.get();
+    if (!s) return;
+    const role = s.role;
+    
+    // Support both ID-based and class-based nav containers
+    const containers = [
+      document.getElementById('sidebarNav'),
+      document.getElementById('navbar'),
+      document.querySelector('.sap-navbar__inner')
+    ].filter(Boolean);
+
+    if (containers.length === 0) return;
 
     const ICONS = {
       grid:  '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
       asset: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
       cert:  '<path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>',
       notif: '<path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>',
-      chart: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+      chart: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
       users: '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>',
+      inspector: '<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M9 12l2 2 4-4"/>',
+      loc: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>'
     };
 
-    const page = window.location.pathname.split('/').pop() || 'assets.html';
+    const curPage = window.location.pathname.split('/').pop() || 'index.html';
+    
     const html = SAP_CONFIG.NAV
       .filter(item => item.roles.includes(role))
       .map(item => {
-        const active = item.href === page;
-        const isAdmin = item.id === 'clients';
-        const prefix  = isAdmin
-          ? `<div class="sap-sidebar__section-title" data-en="ADMINISTRATION" data-ar="الإدارة">${SapLang.t('ADMINISTRATION','الإدارة')}</div>`
-          : '';
-        return `${prefix}<a href="${item.href}" class="sap-nav-item${active?' active':''}">
-          <div class="sap-nav-item__icon">
-            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${ICONS[item.iconKey]||ICONS.grid}</svg>
-          </div>
-          <span class="sap-nav-item__label" data-en="${item.en}" data-ar="${item.ar}">${SapLang.isAr()?item.ar:item.en}</span>
+        const active = item.href === curPage;
+        const icon = ICONS[item.iconKey] || ICONS.grid;
+        return `<a href="${item.href}" class="sap-nav-item${active?' active':''}" id="nav_${item.id}">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${icon}</svg>
+          <span>${item.en}</span>
         </a>`;
       }).join('');
-    container.innerHTML = html;
+
+    containers.forEach(c => {
+      c.innerHTML = html;
+    });
   }
+
+  return { getLandingPage, sync };
+})();
 
   return { init, toggle, buildNav };
 })();
@@ -1070,118 +1095,7 @@ const SapEventBus = (() => {
 /* ================================================================
    14. AUTO-INIT
 ================================================================ */
-function ensureJobsNavForRole(role) {
-  if (!['admin', 'manager'].includes(role)) {
-    document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
-      inner.querySelector('a[href="jobs.html"]')?.remove();
-      inner.querySelector('a[href="notifications.html"]')?.remove();
-    });
-    return;
-  }
-  document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
-    if (inner.querySelector('a[href="jobs.html"]')) return;
-    const a = document.createElement('a');
-    a.href = 'jobs.html';
-    a.className = 'sap-nav-item';
-    if (location.pathname.endsWith('/jobs.html')) a.classList.add('active');
-    a.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Jobs</span>';
-    const notifications = inner.querySelector('a[href="notifications.html"]');
-    if (notifications) inner.insertBefore(a, notifications);
-    else inner.appendChild(a);
-  });
-}
 
-function ensureFilesNavForRole(role) {
-  if (role !== 'admin') {
-    document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
-      inner.querySelector('a[href="files.html"]')?.remove();
-    });
-    return;
-  }
-  document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
-    if (inner.querySelector('a[href="files.html"]')) return;
-    const a = document.createElement('a');
-    a.href = 'files.html';
-    a.className = 'sap-nav-item sap-nav-item--admin';
-    if (location.pathname.endsWith('/files.html')) a.classList.add('active');
-    a.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Files</span>';
-    const clients = inner.querySelector('a[href="clients.html"]');
-    if (clients) inner.insertBefore(a, clients);
-    else inner.appendChild(a);
-  });
-}
-
-function ensureDashboardNavForRole(role) {
-  if (role !== 'admin') return;
-  document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
-    if (inner.querySelector('a[href="dashboard.html"]')) return;
-    const a = document.createElement('a');
-    a.href = 'dashboard.html';
-    a.className = 'sap-nav-item sap-nav-item--admin';
-    if (location.pathname.endsWith('/dashboard.html')) a.classList.add('active');
-    a.innerHTML = '<svg fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" viewBox=\"0 0 24 24\"><path d=\"M3 3h7v7H3z\"/><path d=\"M14 3h7v7h-7z\"/><path d=\"M14 14h7v7h-7z\"/><path d=\"M3 14h7v7H3z\"/></svg><span>Admin Dashboard</span>';
-    const clients = inner.querySelector('a[href="clients.html"]');
-    if (clients) inner.insertBefore(a, clients);
-    else inner.appendChild(a);
-  });
-}
-
-
-
-
-function normalizeNavbarStructure(role) {
-  const preferred = [
-    'assets.html',
-    'certificates.html',
-    'jobs.html',
-    'notifications.html',
-    'dashboard.html',
-    'files.html',
-    'clients.html',
-    'inspectors.html',
-    'functional-locations.html',
-  ];
-  const adminSet = new Set(['dashboard.html','files.html','clients.html','inspectors.html','functional-locations.html']);
-  const allowedByRole = {
-    admin: new Set(['assets.html','certificates.html','jobs.html','notifications.html','dashboard.html','files.html','clients.html','inspectors.html','functional-locations.html']),
-    manager: new Set(['assets.html','certificates.html','jobs.html','notifications.html']),
-    technician: new Set(['assets.html','certificates.html']),
-    user: new Set(['assets.html','certificates.html']),
-  };
-  const allowed = allowedByRole[role] || allowedByRole.user;
-
-  document.querySelectorAll('.sap-navbar__inner').forEach(inner => {
-    const links = [...inner.querySelectorAll('a.sap-nav-item')];
-    if (!links.length) return;
-
-    links.forEach(a => {
-      const href = a.getAttribute('href') || '';
-      if (!allowed.has(href)) a.remove();
-    });
-
-    const scopedLinks = links.filter(a => allowed.has(a.getAttribute('href') || ''));
-    const byHref = new Map(scopedLinks.map(a => [a.getAttribute('href') || '', a]));
-    const ordered = preferred.map(h => byHref.get(h)).filter(Boolean);
-    const leftovers = scopedLinks.filter(a => !preferred.includes(a.getAttribute('href') || ''));
-    const finalLinks = [...ordered, ...leftovers];
-
-    const hasAdminLink = finalLinks.some(a => adminSet.has(a.getAttribute('href') || ''));
-
-    inner.innerHTML = '';
-    let dividerAdded = false;
-    finalLinks.forEach(a => {
-      const href = a.getAttribute('href') || '';
-      if (!dividerAdded && hasAdminLink && adminSet.has(href) && role === 'admin') {
-        const divider = document.createElement('div');
-        divider.className = 'sap-navbar__divider';
-        divider.id = 'adminSection';
-        inner.appendChild(divider);
-        dividerAdded = true;
-      }
-      inner.appendChild(a);
-    });
-  });
-}
 
 function applyPageBodyClass() {
   const page = (window.location.pathname.split('/').pop() || '').toLowerCase();
@@ -1249,10 +1163,7 @@ function applyPlanBMobileLayout() {
 
     /* ── Sidebar ── */
     SapSidebar.init();
-    ensureJobsNavForRole(session.role);
-    ensureFilesNavForRole(session.role);
-    ensureDashboardNavForRole(session.role);
-    normalizeNavbarStructure(session.role);
+    SapNavigation.sync();
 
     /* ── Role visibility ── */
     SapRoles.applyVisibility(session.role);
