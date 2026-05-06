@@ -801,11 +801,65 @@ input, select, textarea { font-family: inherit; }
 
 .sap-table tbody tr {
   border-bottom: 1px solid var(--sap-table-border);
-  transition: background var(--transition);
+  transition: background var(--transition), opacity var(--transition);
+  position: relative;
 }
 .sap-table tbody tr:hover { background: var(--sap-table-row-hover); }
 .sap-table tbody tr:nth-child(even) { background: var(--sap-table-stripe); }
 .sap-table tbody tr:nth-child(even):hover { background: var(--sap-table-row-hover); }
+
+/* User Status Row Styling */
+.sap-table tbody tr[data-status="disabled"] {
+  background: #f9fafb;
+  opacity: 0.7;
+}
+.sap-table tbody tr[data-status="disabled"] td.email-cell {
+  text-decoration: line-through;
+  color: var(--sap-text-secondary);
+}
+.sap-table tbody tr[data-status="active"] {
+  background: #ffffff;
+  opacity: 1;
+}
+/* Left border accent for status */
+.sap-table tbody tr[data-status="active"]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--sap-success);
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.sap-table tbody tr[data-status="disabled"]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--sap-neutral);
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.sap-table tbody tr:hover::before {
+  opacity: 1;
+}
+
+/* Quick action buttons on row hover */
+.sap-table .quick-actions {
+  display: none;
+  gap: 4px;
+}
+.sap-table tbody tr:hover .quick-actions {
+  display: inline-flex;
+}
+.sap-table .quick-actions .btn {
+  padding: 4px 8px;
+  font-size: 11px;
+}
 
 .sap-table td {
   padding: 10px var(--sp-md);
@@ -829,6 +883,96 @@ input, select, textarea { font-family: inherit; }
 }
 .sap-table__empty svg { width: 48px; height: 48px; margin: 0 auto var(--sp-md); opacity: .3; }
 .sap-table__empty p { font-size: 14px; }
+
+/* ============================================================
+   EMPTY STATE DESIGN (Engaging, Centered)
+   ============================================================ */
+.sap-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--sp-2xl) * 2) var(--sp-xl);
+  text-align: center;
+  background: linear-gradient(180deg, #fafbfc 0%, #f5f6f7 100%);
+  border-radius: var(--sap-card-radius);
+  border: 1px dashed var(--sap-input-border);
+}
+.sap-empty-state__illustration {
+  width: 120px;
+  height: 120px;
+  margin-bottom: var(--sp-lg);
+  position: relative;
+}
+.sap-empty-state__illustration svg {
+  width: 100%;
+  height: 100%;
+}
+.sap-empty-state__headline {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--sap-text-primary);
+  margin-bottom: var(--sp-sm);
+}
+.sap-empty-state__subtitle {
+  font-size: 14px;
+  color: var(--sap-text-secondary);
+  margin-bottom: var(--sp-lg);
+  max-width: 400px;
+}
+.sap-empty-state__action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  animation: emptyStatePulse 2s infinite;
+}
+@keyframes emptyStatePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+.sap-empty-state__tips {
+  margin-top: var(--sp-xl);
+  width: 100%;
+  max-width: 500px;
+}
+.sap-empty-state__tips summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--sap-brand);
+  font-weight: 500;
+  padding: var(--sp-sm) 0;
+  list-style: none;
+}
+.sap-empty-state__tips summary::-webkit-details-marker {
+  display: none;
+}
+.sap-empty-state__tips summary::before {
+  content: '▶';
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 10px;
+  transition: transform 0.2s ease;
+}
+.sap-empty-state__tips[open] summary::before {
+  transform: rotate(90deg);
+}
+.sap-empty-state__tips-content {
+  background: #fff;
+  border: 1px solid var(--sap-table-border);
+  border-radius: 4px;
+  padding: var(--sp-md);
+  margin-top: var(--sp-sm);
+  text-align: left;
+}
+.sap-empty-state__tips-content ul {
+  margin: 0;
+  padding-left: var(--sp-md);
+}
+.sap-empty-state__tips-content li {
+  font-size: 12px;
+  color: var(--sap-text-secondary);
+  margin-bottom: 6px;
+}
 
 /* ---------- Pagination ------------------------------------- */
 .sap-pagination {
@@ -1128,6 +1272,106 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
 .sap-field-error { font-size: 11px; color: var(--sap-error); display: flex; align-items: center; gap: 3px; }
 .sap-field-hint { font-size: 11px; color: var(--sap-text-secondary); }
 
+/* Form Validation Feedback Styles */
+.sap-input-wrapper {
+  position: relative;
+}
+.sap-input-wrapper .sap-input-validation-icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+.sap-input-wrapper.has-success .sap-input-validation-icon.success {
+  opacity: 0.6;
+  color: var(--sap-success);
+}
+.sap-input-wrapper.has-error .sap-input-validation-icon.error {
+  opacity: 1;
+  color: var(--sap-error);
+}
+/* Shake animation for invalid fields */
+@keyframes shakeField {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+.sap-field.has-error .sap-input,
+.sap-field.has-error .sap-select {
+  animation: shakeField 0.4s ease;
+}
+
+/* Password Strength Meter */
+.sap-password-strength {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sap-password-strength__bar {
+  flex: 1;
+  height: 4px;
+  background: #e8eaed;
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+.sap-password-strength__fill {
+  height: 100%;
+  width: 0%;
+  transition: width 0.3s ease, background-color 0.3s ease;
+  border-radius: 2px;
+}
+.sap-password-strength__fill--weak {
+  width: 33%;
+  background: var(--sap-error);
+}
+.sap-password-strength__fill--medium {
+  width: 66%;
+  background: var(--sap-warning);
+}
+.sap-password-strength__fill--strong {
+  width: 100%;
+  background: var(--sap-success);
+}
+.sap-password-strength__label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  min-width: 45px;
+  text-align: right;
+}
+.sap-password-strength__label--weak { color: var(--sap-error); }
+.sap-password-strength__label--medium { color: var(--sap-warning); }
+.sap-password-strength__label--strong { color: var(--sap-success); }
+
+/* Username Availability Check */
+.sap-username-status {
+  font-size: 11px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sap-username-status--checking {
+  color: var(--sap-text-secondary);
+}
+.sap-username-status--available {
+  color: var(--sap-success);
+}
+.sap-username-status--taken {
+  color: var(--sap-error);
+}
+.sap-username-status svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* File Upload */
 .sap-file-upload {
   border: 2px dashed var(--sap-input-border);
@@ -1188,6 +1432,64 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
 .sap-badge--neutral::before { background: var(--sap-neutral); }
 .sap-badge--pending { background: #fff8e1; color: #f57f17; border: 1px solid #ffe082; }
 .sap-badge--pending::before { background: #f57f17; }
+
+/* ============================================================
+   TOGGLE SWITCH (Animated Status Toggle)
+   ============================================================ */
+.sap-toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+.sap-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.sap-toggle-switch__slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: var(--sap-neutral);
+  transition: background-color 0.3s ease;
+  border-radius: 24px;
+  border: 1px solid rgba(0,0,0,0.1);
+}
+.sap-toggle-switch__slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+.sap-toggle-switch input:checked + .sap-toggle-switch__slider {
+  background-color: var(--sap-success);
+  border-color: var(--sap-success);
+}
+.sap-toggle-switch input:checked + .sap-toggle-switch__slider:before {
+  transform: translateX(20px);
+}
+.sap-toggle-switch input:focus-visible + .sap-toggle-switch__slider {
+  outline: 2px solid var(--sap-brand);
+  outline-offset: 2px;
+}
+.sap-toggle-switch input:disabled + .sap-toggle-switch__slider {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.sap-toggle-switch--loading .sap-toggle-switch__slider {
+  animation: pulse-bg 1.5s infinite;
+}
+@keyframes pulse-bg {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
 
 /* ============================================================
    MODAL / DIALOG
@@ -1395,6 +1697,63 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
   margin: 0 auto;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Small spinner for buttons (16px) */
+.sap-spinner--sm {
+  width: 16px; height: 16px;
+  border-width: 2px;
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 6px 0 0;
+}
+
+/* Button loading state styles */
+.btn-loading {
+  position: relative;
+  pointer-events: none;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+.btn-loading .btn-text {
+  opacity: 0;
+}
+.btn-loading .btn-spinner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-loading .btn-success-icon,
+.btn-loading .btn-error-icon {
+  display: none;
+}
+/* Success state after save */
+.btn-success-state {
+  background: var(--sap-success) !important;
+  border-color: var(--sap-success) !important;
+}
+.btn-success-state .btn-spinner {
+  display: none;
+}
+.btn-success-state .btn-success-icon {
+  display: inline-flex;
+  color: #fff;
+}
+/* Error state after failure */
+.btn-error-state {
+  background: var(--sap-error) !important;
+  border-color: var(--sap-error) !important;
+}
+.btn-error-state .btn-spinner {
+  display: none;
+}
+.btn-error-state .btn-error-icon {
+  display: inline-flex;
+  color: #fff;
+}
 
 .sap-skeleton {
   background: linear-gradient(90deg, #f0f1f2 25%, #e5e6e8 50%, #f0f1f2 75%);
