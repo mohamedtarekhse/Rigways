@@ -666,6 +666,7 @@ let NOTIFICATIONS = [];
 let FILTER_CLIENT_NAMES = [];
 let FILTER_LOCATIONS = [];
 let FILTER_LOCATIONS_BY_CLIENT = new Map();
+let FUNC_LOC_NAME_BY_ID = new Map();
 
 
 /* ═══════════════════════════════════════════════════════
@@ -802,17 +803,19 @@ async function loadFilterSources() {
       // Build map of client name → functional locations for filtering
       FILTER_LOCATIONS_BY_CLIENT = new Map();
       // Build map of functional location ID → name for display purposes
-      FUNC_LOC_NAME_BY_ID = new Map();
+      FUNC_LOC_NAME_BY_ID.clear();
       flList.forEach(l => {
         const clientId = String(l.client_id || '').trim();
         const clientName = (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(clientId) : clientId;
         const locName = String(l.name || l.functional_location || l.location || '').trim();
-        const locId = String(l.fl_id || l.id || '').trim();
         if (!locName) return;
+        
         if (!FILTER_LOCATIONS_BY_CLIENT.has(clientName)) FILTER_LOCATIONS_BY_CLIENT.set(clientName, new Set());
         FILTER_LOCATIONS_BY_CLIENT.get(clientName).add(locName);
-        // Store mapping from ID to name
-        if (locId) FUNC_LOC_NAME_BY_ID.set(locId, locName);
+        
+        // Store mapping from BOTH fl_id and UUID to name
+        if (l.fl_id) FUNC_LOC_NAME_BY_ID.set(String(l.fl_id).trim(), locName);
+        if (l.id) FUNC_LOC_NAME_BY_ID.set(String(l.id).trim(), locName);
       });
     }
   } catch (e) {}
@@ -1367,7 +1370,11 @@ async function loadNotifications() {
     const allAssets = ((as.data || as).assets || []);
     const assetsList = Array.isArray(allAssets) ? allAssets : [];
     const assetNumberById = new Map(assetsList.map(a => [a.id, a.asset_number || a.id]));
-    const assetLocById = new Map(assetsList.map(a => [a.id, a.functional_location || a.location || '']));
+    const assetLocById = new Map(assetsList.map(a => {
+      const locId = a.functional_location || a.location || '';
+      const locName = FUNC_LOC_NAME_BY_ID.get(String(locId).trim()) || locId;
+      return [a.id, locName];
+    }));
 
     // Today for expiry math
     const todayMs = new Date().setHours(0,0,0,0);
@@ -1458,7 +1465,7 @@ async function loadNotifications() {
         clientName: (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(n.client_id || '') : (n.client_id || ''),
         certId:    n.ref_type === 'certificate' ? n.ref_id : null,
         jobNumber: '',
-        functionalLocation: '',
+        functionalLocation: n.ref_type === 'certificate' ? (assetLocById.get((Array.isArray(allCerts) ? allCerts : []).find(c => c.id === n.ref_id)?.asset_id) || '') : '',
         read:      n.is_read,
         isRead:    n.is_read,
         dismissed: false,
