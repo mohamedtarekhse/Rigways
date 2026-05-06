@@ -147,13 +147,12 @@ function renderUsers(){
   const body = document.getElementById('usersBody');
   body.innerHTML = USERS.map(u => {
     const active = !!u.is_active;
-    const flDisplay = u.functional_location_name || u.functional_location || '—';
     return `<tr>
       <td>${h(u.username)}</td>
       <td>${h(u.name)}</td>
       <td>${h(u.role)}</td>
       <td>${h(u.customer_id||'—')}</td>
-      <td>${h(flDisplay)}</td>
+      <td>${h(u.functional_location||'—')}</td>
       <td><span class="sap-badge ${active?'sap-badge--success':'sap-badge--danger'}">${active?'Active':'Disabled'}</span></td>
       <td>
         <button class="btn btn-ghost btn-sm" onclick="editUser('${u.id}')">Edit</button>
