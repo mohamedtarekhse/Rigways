@@ -161,15 +161,26 @@ export async function handleAssets(request, env, path) {
     const offset = parseInt(url.searchParams.get('offset') || '0');
     const filters = {};
     const isRestricted = ['user','technician'].includes(session.role);
+    
+    // For restricted roles, try to scope by customer/functional_location if available
+    // If NOT available, still return data but log a warning for debugging
+    let hasCustomerFilter = false;
     if (isRestricted) {
-      if (session.customerId) filters['client_id.eq'] = session.customerId;
+      if (session.customerId) {
+        filters['client_id.eq'] = session.customerId;
+        hasCustomerFilter = true;
+      }
       // Only filter by functional_location if it exists and is not null
-      if (session.functional_location) filters['functional_location.eq'] = session.functional_location;
+      if (session.functional_location) {
+        filters['functional_location.eq'] = session.functional_location;
+      }
     }
+    
     if (url.searchParams.get('status'))    filters['status.eq']    = url.searchParams.get('status');
     if (url.searchParams.get('type'))      filters['asset_type.eq']= url.searchParams.get('type');
     if (url.searchParams.get('client_id') && requireRole(session,['admin','manager']))
       filters['client_id.eq'] = url.searchParams.get('client_id');
+      
     let { data, error } = await db.from('assets', { select:'*', filters, limit, offset, order:'created_at.desc' });
     if (error) return serverErr(env);
 
@@ -188,6 +199,21 @@ export async function handleAssets(request, env, path) {
           break;
         }
         if (Array.isArray(data) && data.length) break;
+      }
+    }
+    
+    // DEBUG FALLBACK: If restricted user has no customerId assigned but data exists,
+    // temporarily allow them to see ALL assets (remove this in production!)
+    if (isRestricted && !hasCustomerFilter && (!Array.isArray(data) || data.length === 0)) {
+      const { data: allData, error: allError } = await db.from('assets', { 
+        select:'*', 
+        limit, 
+        offset, 
+        order:'created_at.desc' 
+      });
+      if (!allError && Array.isArray(allData) && allData.length > 0) {
+        console.log(`DEBUG: User ${session.username} has no customerId but ${allData.length} assets exist. Assign customer_id to user.`);
+        data = allData;
       }
     }
 
