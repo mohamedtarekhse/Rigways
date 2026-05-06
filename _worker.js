@@ -2946,7 +2946,9 @@ async function handleNotifications(request, env, path) {
     if (url.searchParams.get('unread') === 'true') filters['is_read.is'] = false;
     const { data, error } = await db.from('notifications', { select: '*', filters, limit, offset, order: 'created_at.desc' });
     if (error) return serverErr(env);
-    return ok({ notifications: data || [], limit, offset }, env);
+    const notifs = data || [];
+    const enriched = await _withEnrichedNames(db, notifs);
+    return ok({ notifications: enriched, limit, offset }, env);
   }
 
   /* MARK READ */
