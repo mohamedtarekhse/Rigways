@@ -1423,15 +1423,29 @@ function renderTable() {
   if (typeF !== 'all') data = data.filter(c => c.certType === typeF);
 
   /* Search */
-  if (search) data = data.filter(c =>
-    (c.name||'').toLowerCase().includes(search)   ||
-    (c.certId||'').toLowerCase().includes(search) || fmtCertId(c).toLowerCase().includes(search) ||
-    (c.issuedBy||'').toLowerCase().includes(search) ||
-    (c.certType||'').toLowerCase().includes(search) ||
-    (c.jobNumber||'').toLowerCase().includes(search) ||
-    (c.liftingSubtype||'').toLowerCase().includes(search) ||
-    (c.functionalLocationName||'').toLowerCase().includes(search)
-  );
+  if (search) data = data.filter(c => {
+    // Collect all searchable strings for this row
+    const searchTerms = [
+      c.name,
+      c.certId,
+      fmtCertId(c),
+      c.issuedBy,
+      c.certType,
+      c.jobNumber,
+      c.liftingSubtype,
+      c.functionalLocationName,
+      c.client,
+      c.client_name,
+      c.assetId,
+      c.assetDescription,
+      c.approvalStatus,
+      c.expiryDate,
+      c.notes,
+      CLIENTS_MAP[c.client]
+    ].filter(Boolean).map(v => String(v).toLowerCase());
+    
+    return searchTerms.some(term => term.includes(search));
+  });
 
   /* Sort */
   data.sort((a, b) => {
