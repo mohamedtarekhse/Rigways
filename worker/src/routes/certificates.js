@@ -5,7 +5,6 @@ import { ok, created, badReq, unauth, forbidden, notFound, serverErr } from '../
 import { validate, pick, compact }           from '../utils/validate.js';
 import { sendPushToUser, sendPushToRoles }   from '../lib/web-push.js';
 import { isStorageConfigured, putStorageObject } from '../lib/storage.js';
-import { buildFunctionalLocationAliases }    from '../lib/functional-location.js';
 
 const TYPES    = ['CAT III','CAT IV','ORIGINAL COC','LOAD TEST','LIFTING','NDT','TUBULAR'];
 const STATUSES = ['pending','approved','rejected'];
@@ -80,45 +79,6 @@ export async function handleCertificates(request, env, path) {
   }
 
   const db     = createSupabase(env);
-  async function clientAliases(rawClientId) {
-    const key = String(rawClientId || '').trim();
-    if (!key) return [];
-    const out = new Set([key]);
-    const queries = [{ 'id.eq': key }, { 'client_id.eq': key }];
-    for (const filters of queries) {
-      const { data } = await db.from('clients', { filters, select:'id,client_id', limit:1 });
-      const row = Array.isArray(data) ? data[0] : data;
-      if (row?.id) out.add(String(row.id));
-      if (row?.client_id) out.add(String(row.client_id));
-    }
-    return Array.from(out);
-  }
-
-  async function functionalLocationAliases(rawLocation, rawClientId) {
-    const key = String(rawLocation || '').trim();
-    if (!key) return [];
-    const filtersToTry = [
-      { 'fl_id.eq': key },
-      { 'name.eq': key },
-      { 'id.eq': key },
-    ];
-    const clients = await clientAliases(rawClientId);
-    for (const clientId of clients) {
-      if (!clientId) continue;
-      filtersToTry.push({ 'fl_id.eq': key, 'client_id.eq': clientId });
-      filtersToTry.push({ 'name.eq': key, 'client_id.eq': clientId });
-    }
-    const rows = [];
-    for (const filters of filtersToTry) {
-      const { data } = await db.from('functional_locations', {
-        filters,
-        select:'id,fl_id,name,client_id',
-        limit:10,
-      });
-      for (const row of Array.isArray(data) ? data : []) rows.push(row);
-    }
-    return buildFunctionalLocationAliases(key, rows);
-  }
 
   if (path === '/certificates/history/export' && method === 'GET') {
     if (!requireRole(session, ['admin','manager','technician'])) return forbidden(env);
@@ -199,28 +159,6 @@ export async function handleCertificates(request, env, path) {
       filters['client_id.eq'] = url.searchParams.get('client_id');
     let { data, error } = await db.from('certificates', { select:'*', filters, limit, offset, order:'expiry_date.asc' });
     if (error) return serverErr(env);
-    if (['user','technician'].includes(session.role) && session.customerId && (!Array.isArray(data) || data.length === 0)) {
-      const aliases = await clientAliases(session.customerId);
-      for (const alias of aliases) {
-        if (!alias || alias === session.customerId) continue;
-        const fRetry = { ...filters, 'client_id.eq': alias };
-        // Only filter by functional_location if it exists and is not null
-        if (session.functional_location) fRetry['functional_location.eq'] = session.functional_location;
-        const retry = await db.from('certificates', {
-          select:'*',
-          filters: fRetry,
-          limit,
-          offset,
-          order:'expiry_date.asc',
-        });
-        if (retry.error) continue;
-        const rows = Array.isArray(retry.data) ? retry.data : [];
-        if (rows.length) {
-          data = rows;
-          break;
-        }
-      }
-    }
     const withNames = await _withUserNames(db, Array.isArray(data) ? data : [], 'uploaded_by');
     return ok({ certificates: withNames, limit, offset }, env);
   }
@@ -231,8 +169,7 @@ export async function handleCertificates(request, env, path) {
     const cert = Array.isArray(data) ? data[0] : data;
     if (!cert) return notFound('Certificate', env);
     if (['user','technician'].includes(session.role) && session.customerId) {
-      const aliases = await clientAliases(session.customerId);
-      if (!aliases.includes(String(cert.client_id || ''))) return forbidden(env);
+      if (cert.client_id !== session.customerId) return forbidden(env);
       // Also verify functional_location matches if user has one assigned
       if (session.functional_location && cert.functional_location !== session.functional_location) {
         return forbidden(env);
@@ -266,8 +203,7 @@ export async function handleCertificates(request, env, path) {
     const asset = Array.isArray(aRows) ? aRows[0] : aRows;
     if (!asset) return notFound('Asset', env);
     if (session.role === 'technician' && session.customerId) {
-      const aliases = await clientAliases(session.customerId);
-      if (!aliases.includes(String(asset.client_id || ''))) return forbidden(env);
+      if (asset.client_id !== session.customerId) return forbidden(env);
       // Also verify functional_location matches if technician has one assigned
       if (session.functional_location && asset.functional_location !== session.functional_location) {
         return forbidden(env);
