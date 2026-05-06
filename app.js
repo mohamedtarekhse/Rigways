@@ -1197,6 +1197,22 @@ function applyPlanBMobileLayout() {
       btn.onclick = () => SapSession.logout();
     });
 
+    /* ── Enhanced form field interactions for visual feedback ── */
+    // Add focus state classes to parent .sap-field when input is focused
+    document.addEventListener('focusin', (e) => {
+      if (e.target.matches('.sap-input, .sap-select, .sap-textarea')) {
+        const field = e.target.closest('.sap-field');
+        if (field) field.classList.add('has-focus');
+      }
+    });
+    
+    document.addEventListener('focusout', (e) => {
+      if (e.target.matches('.sap-input, .sap-select, .sap-textarea')) {
+        const field = e.target.closest('.sap-field');
+        if (field) field.classList.remove('has-focus');
+      }
+    });
+
     /* ── Close modals on overlay click ── */
     document.querySelectorAll('.sap-modal-overlay').forEach(overlay => {
       overlay.addEventListener('click', e => {

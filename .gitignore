@@ -1,55 +1,12 @@
-# Examples
-
-## Project with artifacts
-```
-# Compiled and build artifacts
-*.pyc
-__pycache__/
-*.o
-*.obj
-dist/
-build/
-target/
-
+```gitignore
 # Dependencies
-.venv/
-venv/
 node_modules/
-.packages/
 
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-*.swo
+# Editors
+.vscode/
 
 # Environment
 .env
 .env.local
-.env.*
-
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Compressed files
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
+*.env.*
 ```
