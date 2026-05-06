@@ -1382,41 +1382,52 @@ async function loadNotifications() {
     // ── Derive expiry notifications from certificate data ──────────────
     const expiryNotifs = [];
 
-    // Certs expiring within 30 days
-    (Array.isArray(allCerts) ? allCerts : []).forEach(cert => {
+    // Filter to only keep the LATEST approved certificate for each Asset + Type combination
+    const certsArray = Array.isArray(allCerts) ? allCerts : [];
+    const latestCertsMap = new Map(); // key: asset_id|name -> cert
+    
+    certsArray.forEach(cert => {
       if (!cert?.expiry_date || cert.approval_status !== 'approved') return;
-      const expiryMs = new Date(cert.expiry_date).setHours(0,0,0,0);
-      const days     = Math.ceil((expiryMs - todayMs) / 86400000);
-      if (days < 0 || days > 30) return;
-      const priority = days <= 7 ? 'critical' : days <= 14 ? 'high' : 'medium';
-      const assetLabel = assetNumberById.get(cert.asset_id) || cert.asset_id || '—';
-      const funcLoc = assetLocById.get(cert.asset_id) || '';
-      expiryNotifs.push({
-        id:        'exp-' + cert.id,
-        type:      'expiry',
-        titleEn:   `Certificate Expiring: ${h(cert.name || cert.cert_number || cert.id)}`,
-        descEn:    `Expires on ${h(cert.expiry_date)} — ${days} day${days !== 1 ? 's' : ''} remaining. Asset: ${h(assetLabel)}`,
-        priority,
-        daysLeft:  days,
-        client:    cert.client_id,
-        clientName: (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(cert.client_id) : (cert.client_id || ''),
-        certId:    cert.cert_number || cert.id,
-        jobNumber: cert.notes || '',
-        read:      false,
-        is_read:   false,
-        isRead:    false,
-        dismissed: false,
-        time:      h(cert.expiry_date),
-        link:      'certificates.html',
-        functionalLocation: funcLoc,
-      });
+      const key = `${cert.asset_id}|${cert.name}`;
+      const existing = latestCertsMap.get(key);
+      // Keep the one with the furthest expiry date
+      if (!existing || new Date(cert.expiry_date) > new Date(existing.expiry_date)) {
+        latestCertsMap.set(key, cert);
+      }
     });
+    const latestApprovedCerts = Array.from(latestCertsMap.values());
 
-    // Certs already expired (approved but past expiry date)
-    allCerts.forEach(cert => {
-      if (!cert?.expiry_date || cert.approval_status !== 'approved') return;
+    // Certs expiring within 30 days (Only checking the latest ones)
+    latestApprovedCerts.forEach(cert => {
       const expiryMs = new Date(cert.expiry_date).setHours(0,0,0,0);
       const days     = Math.ceil((expiryMs - todayMs) / 86400000);
+      
+      if (days >= 0 && days <= 30) {
+        const priority = days <= 7 ? 'critical' : days <= 14 ? 'high' : 'medium';
+        const assetLabel = assetNumberById.get(cert.asset_id) || cert.asset_id || '—';
+        const funcLoc = assetLocById.get(cert.asset_id) || '';
+        expiryNotifs.push({
+          id:        'exp-' + cert.id,
+          type:      'expiry',
+          titleEn:   `Certificate Expiring: ${h(cert.name || cert.cert_number || cert.id)}`,
+          descEn:    `Expires on ${h(cert.expiry_date)} — ${days} day${days !== 1 ? 's' : ''} remaining. Asset: ${h(assetLabel)}`,
+          priority,
+          daysLeft:  days,
+          client:    cert.client_id,
+          clientName: (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(cert.client_id) : (cert.client_id || ''),
+          certId:    cert.cert_number || cert.id,
+          jobNumber: cert.notes || '',
+          read:      false,
+          is_read:   false,
+          isRead:    false,
+          dismissed: false,
+          time:      h(cert.expiry_date),
+          link:      'certificates.html',
+          functionalLocation: funcLoc,
+        });
+      }
+      
+      // Certs already expired (approved but past expiry date)
       if (days < 0) {
         const assetLabel = assetNumberById.get(cert.asset_id) || cert.asset_id || '—';
         const funcLoc = assetLocById.get(cert.asset_id) || '';
