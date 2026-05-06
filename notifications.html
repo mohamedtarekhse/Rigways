@@ -801,13 +801,18 @@ async function loadFilterSources() {
       FILTER_LOCATIONS = [...new Set(flList.map(l => String(l.name || l.functional_location || l.location || '').trim()).filter(Boolean))];
       // Build map of client name → functional locations for filtering
       FILTER_LOCATIONS_BY_CLIENT = new Map();
+      // Build map of functional location ID → name for display purposes
+      FUNC_LOC_NAME_BY_ID = new Map();
       flList.forEach(l => {
         const clientId = String(l.client_id || '').trim();
         const clientName = (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(clientId) : clientId;
         const locName = String(l.name || l.functional_location || l.location || '').trim();
+        const locId = String(l.fl_id || l.id || '').trim();
         if (!locName) return;
         if (!FILTER_LOCATIONS_BY_CLIENT.has(clientName)) FILTER_LOCATIONS_BY_CLIENT.set(clientName, new Set());
         FILTER_LOCATIONS_BY_CLIENT.get(clientName).add(locName);
+        // Store mapping from ID to name
+        if (locId) FUNC_LOC_NAME_BY_ID.set(locId, locName);
       });
     }
   } catch (e) {}
