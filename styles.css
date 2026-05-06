@@ -474,18 +474,51 @@ input, select, textarea { font-family: inherit; }
   transition: all var(--transition);
   white-space: nowrap;
   text-decoration: none;
+  position: relative;
+  overflow: hidden;
 }
 .btn svg { width: 15px; height: 15px; flex-shrink: 0; }
 .btn:hover { text-decoration: none; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Button ripple effect on active */
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%);
+  transform: scale(0);
+  opacity: 0;
+  transition: transform 0.4s ease, opacity 0.3s ease;
+  pointer-events: none;
+}
+.btn:active:not(:disabled)::after {
+  transform: scale(2);
+  opacity: 1;
+  transition: transform 0s, opacity 0s;
+}
 
 /* Primary */
 .btn-primary {
   background: var(--sap-brand);
   color: #fff;
   border-color: var(--sap-brand);
+  box-shadow: 0 1px 2px rgba(0,112,242,0.2);
 }
-.btn-primary:hover:not(:disabled) { background: var(--sap-brand-dark); border-color: var(--sap-brand-dark); }
+.btn-primary:hover:not(:disabled) { 
+  background: var(--sap-brand-dark); 
+  border-color: var(--sap-brand-dark);
+  box-shadow: 0 2px 4px rgba(0,112,242,0.3);
+  transform: translateY(-1px);
+}
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0,112,242,0.15);
+}
+.btn-primary:focus-visible {
+  outline: 2px solid var(--sap-brand-light);
+  outline-offset: 2px;
+}
 
 /* Secondary */
 .btn-secondary {
@@ -493,7 +526,14 @@ input, select, textarea { font-family: inherit; }
   color: var(--sap-brand);
   border-color: var(--sap-brand);
 }
-.btn-secondary:hover:not(:disabled) { background: var(--sap-brand-light); }
+.btn-secondary:hover:not(:disabled) { 
+  background: var(--sap-brand-light);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,112,242,0.15);
+}
+.btn-secondary:active:not(:disabled) {
+  transform: translateY(0);
+}
 
 /* Ghost */
 .btn-ghost {
@@ -501,21 +541,36 @@ input, select, textarea { font-family: inherit; }
   color: var(--sap-text-secondary);
   border-color: var(--sap-input-border);
 }
-.btn-ghost:hover:not(:disabled) { background: var(--sap-page-bg); color: var(--sap-text-primary); }
+.btn-ghost:hover:not(:disabled) { 
+  background: var(--sap-page-bg); 
+  color: var(--sap-text-primary);
+  transform: translateY(-1px);
+}
 
 /* Danger */
 .btn-danger {
   background: var(--sap-error);
   color: #fff;
   border-color: var(--sap-error);
+  box-shadow: 0 1px 2px rgba(187,0,0,0.2);
 }
-.btn-danger:hover:not(:disabled) { background: #990000; }
+.btn-danger:hover:not(:disabled) { 
+  background: #990000;
+  box-shadow: 0 2px 4px rgba(187,0,0,0.3);
+  transform: translateY(-1px);
+}
 
 /* Success */
 .btn-success {
   background: var(--sap-success);
   color: #fff;
   border-color: var(--sap-success);
+  box-shadow: 0 1px 2px rgba(24,137,24,0.2);
+}
+.btn-success:hover:not(:disabled) {
+  background: #147a14;
+  box-shadow: 0 2px 4px rgba(24,137,24,0.3);
+  transform: translateY(-1px);
 }
 
 /* Warning */
@@ -523,6 +578,11 @@ input, select, textarea { font-family: inherit; }
   background: var(--sap-warning);
   color: #fff;
   border-color: var(--sap-warning);
+}
+.btn-warning:hover:not(:disabled) {
+  background: #cc5500;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(231,101,0,0.3);
 }
 
 /* Icon only */
@@ -981,12 +1041,38 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
    ============================================================ */
 .sap-form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: var(--sp-md) var(--sp-lg);
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px var(--sp-lg);
+  transition: grid-template-columns 0.3s ease;
 }
 .sap-form-grid--2col { grid-template-columns: repeat(2, 1fr); }
 .sap-form-grid--3col { grid-template-columns: repeat(3, 1fr); }
 .sap-form-grid .span-full { grid-column: 1 / -1; }
+
+/* Field group backgrounds for visual separation */
+.sap-field-group {
+  padding: var(--sp-lg);
+  margin: 0 calc(var(--sp-lg) * -1) var(--sp-lg);
+  background: #ffffff;
+  transition: background-color 0.3s ease;
+}
+.sap-field-group:nth-child(odd) {
+  background: #fafbfc;
+}
+.sap-field-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sap-text-primary);
+  margin-bottom: var(--sp-md);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+}
+.sap-field-group-title svg {
+  width: 16px;
+  height: 16px;
+  color: var(--sap-brand);
+}
 
 .sap-field { display: flex; flex-direction: column; gap: 5px; }
 
@@ -994,9 +1080,11 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
   font-size: 12px;
   font-weight: 600;
   color: var(--sap-text-secondary);
+  transition: color var(--transition);
 }
 .sap-label .required { color: var(--sap-error); margin-left: 2px; }
 
+/* Enhanced input interactions with visual feedback */
 .sap-input, .sap-select, .sap-textarea {
   height: var(--sap-input-height);
   border: 1px solid var(--sap-input-border);
@@ -1006,8 +1094,14 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
   font-size: 13px;
   color: var(--sap-text-primary);
   outline: none;
-  transition: border-color var(--transition), box-shadow var(--transition);
+  transition: border-color var(--transition), box-shadow var(--transition), background-color var(--transition);
   width: 100%;
+}
+.sap-input:hover:not(:disabled):not(:focus), 
+.sap-select:hover:not(:disabled):not(:focus), 
+.sap-textarea:hover:not(:disabled):not(:focus) {
+  border-color: #a9b0b8;
+  background-color: #fafbfc;
 }
 .sap-textarea {
   height: auto;
@@ -1018,9 +1112,18 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
 .sap-input:focus, .sap-select:focus, .sap-textarea:focus {
   border-color: var(--sap-input-focus);
   box-shadow: 0 0 0 2px rgba(0,112,242,.15);
+  background-color: #fff;
 }
 .sap-input.error, .sap-select.error { border-color: var(--sap-error); }
 .sap-input:disabled, .sap-select:disabled { background: #f5f6f7; cursor: not-allowed; color: var(--sap-text-disabled); }
+
+/* Enhanced field states for better accessibility */
+.sap-field.has-focus .sap-label {
+  color: var(--sap-brand);
+}
+.sap-field.has-error .sap-label {
+  color: var(--sap-error);
+}
 
 .sap-field-error { font-size: 11px; color: var(--sap-error); display: flex; align-items: center; gap: 3px; }
 .sap-field-hint { font-size: 11px; color: var(--sap-text-secondary); }
@@ -1301,6 +1404,23 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
 }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
+/* Skeleton variants for form fields */
+.sap-skeleton--text {
+  height: 14px;
+  width: 60%;
+  margin-bottom: 8px;
+}
+.sap-skeleton--input {
+  height: var(--sap-input-height);
+  width: 100%;
+  margin-bottom: 8px;
+}
+.sap-skeleton--label {
+  height: 12px;
+  width: 40%;
+  margin-bottom: 6px;
+}
+
 /* ============================================================
    LOGIN PAGE
    ============================================================ */
@@ -1497,6 +1617,13 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
 /* ============================================================
    RESPONSIVE
    ============================================================ */
+@media (max-width: 1024px) {
+  /* Tablet: 2 columns with wider inputs */
+  .sap-form-grid--3col {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 900px) {
   .sap-login-visual { display: none; }
   .sap-login-panel { width: 100%; min-height: 100vh; }
@@ -1603,7 +1730,14 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
 
   /* Forms & Details */
   .sap-detail-grid { grid-template-columns: 1fr; gap: var(--sp-md); }
-  .sap-form-grid { grid-template-columns: 1fr; gap: var(--sp-md); }
+  .sap-form-grid { 
+    grid-template-columns: 1fr; 
+    gap: 20px; 
+  }
+  .sap-field-group {
+    margin: 0 calc(var(--sp-sm) * -1) var(--sp-md);
+    padding: var(--sp-md);
+  }
 
   /* Modals - Take up full screen */
   .sap-modal-overlay.open .sap-modal {
