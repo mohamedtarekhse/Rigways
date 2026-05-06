@@ -67,79 +67,25 @@
     <div class="sap-card mb-md">
       <div class="sap-card__head"><div class="sap-card__title">Add / Edit User</div></div>
       <div class="sap-card__body">
-        <form id="userForm" class="sap-form-grid sap-form-grid--3col" novalidate>
+        <form id="userForm" class="sap-form-grid sap-form-grid--3col">
           <input type="hidden" id="u_id" />
-          <div class="sap-field">
-            <label class="sap-label" for="u_username">Username <span class="required">*</span></label>
-            <div class="sap-input-wrapper">
-              <input id="u_username" class="sap-input" required autocomplete="username" />
-              <svg class="sap-input-validation-icon success" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
-              <svg class="sap-input-validation-icon error" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
-            </div>
-            <div class="sap-username-status" id="usernameStatus" style="display:none;"></div>
-          </div>
-          <div class="sap-field">
-            <label class="sap-label" for="u_name">Name <span class="required">*</span></label>
-            <div class="sap-input-wrapper">
-              <input id="u_name" class="sap-input" required />
-              <svg class="sap-input-validation-icon success" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
-              <svg class="sap-input-validation-icon error" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
-            </div>
-          </div>
-          <div class="sap-field">
-            <label class="sap-label" for="u_password">Password <span id="pwdHint"><span class="required">*</span></span></label>
-            <div class="sap-input-wrapper">
-              <input id="u_password" type="password" class="sap-input" minlength="8" autocomplete="new-password" />
-              <svg class="sap-input-validation-icon success" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
-              <svg class="sap-input-validation-icon error" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
-            </div>
-            <div class="sap-password-strength" id="passwordStrength" style="display:none;">
-              <div class="sap-password-strength__bar">
-                <div class="sap-password-strength__fill" id="passwordStrengthFill"></div>
-              </div>
-              <span class="sap-password-strength__label" id="passwordStrengthLabel"></span>
-            </div>
-          </div>
-          <div class="sap-field">
-            <label class="sap-label" for="u_role">Role <span class="required">*</span></label>
+          <div class="sap-field"><label class="sap-label">Username *</label><input id="u_username" class="sap-input" required /></div>
+          <div class="sap-field"><label class="sap-label">Name *</label><input id="u_name" class="sap-input" required /></div>
+          <div class="sap-field"><label class="sap-label">Password <span id="pwdHint">*</span></label><input id="u_password" type="password" class="sap-input" minlength="8" /></div>
+          <div class="sap-field"><label class="sap-label">Role *</label>
             <select id="u_role" class="sap-select" required>
-              <option value="">Select role...</option>
               <option value="user">User</option>
               <option value="technician">Technician</option>
               <option value="manager">Manager</option>
               <option value="admin">Admin</option>
             </select>
           </div>
-          <div class="sap-field">
-            <label class="sap-label" for="u_client">Client</label>
-            <select id="u_client" class="sap-select">
-              <option value="">Unassigned</option>
-            </select>
-          </div>
-          <div class="sap-field">
-            <label class="sap-label" for="u_fl">Functional Location</label>
-            <select id="u_fl" class="sap-select">
-              <option value="">Unassigned</option>
-            </select>
-          </div>
-          <div class="sap-field">
-            <label class="sap-label" for="u_active">Active</label>
-            <select id="u_active" class="sap-select">
-              <option value="true">Active</option>
-              <option value="false">Disabled</option>
-            </select>
-          </div>
+          <div class="sap-field"><label class="sap-label">Client</label><select id="u_client" class="sap-select"></select></div>
+          <div class="sap-field"><label class="sap-label">Functional Location</label><select id="u_fl" class="sap-select"><option value="">Unassigned</option></select></div>
+          <div class="sap-field"><label class="sap-label">Active</label><select id="u_active" class="sap-select"><option value="true">Active</option><option value="false">Disabled</option></select></div>
         </form>
         <div class="mt-md" style="display:flex;gap:8px;">
-          <button class="btn btn-primary" id="saveUserBtn" onclick="saveUser()">
-            <span class="btn-text">Save User</span>
-            <span class="btn-spinner" style="display:none;">
-              <svg class="sap-spinner sap-spinner--sm" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="2" fill="none" stroke-dasharray="30" stroke-linecap="round"/></svg>
-              <span>Saving...</span>
-            </span>
-            <svg class="btn-success-icon" style="display:none;" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" width="16" height="16"><path d="M5 13l4 4L19 7"/></svg>
-            <svg class="btn-error-icon" style="display:none;" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" width="16" height="16"><path d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
+          <button class="btn btn-primary" id="saveUserBtn" onclick="saveUser()">Save User</button>
           <button class="btn btn-ghost" onclick="resetUserForm()">Clear</button>
         </div>
       </div>
@@ -148,32 +94,12 @@
     <div class="sap-card">
       <div class="sap-card__head" style="display:flex;justify-content:space-between;align-items:center;">
         <div class="sap-card__title">Users</div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <button class="btn btn-ghost btn-sm" id="bulkActionBtn" onclick="toggleBulkActions()" style="display:none;">
-            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-            <span>Bulk Action</span>
-          </button>
-          <button class="btn btn-ghost btn-sm" onclick="loadUsers()">
-            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="14" height="14"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-            Refresh
-          </button>
-        </div>
+        <button class="btn btn-ghost btn-sm" onclick="loadUsers()">Refresh</button>
       </div>
       <div class="sap-card__body" style="padding:0;">
         <div class="sap-table-wrapper">
           <table class="sap-table">
-            <thead>
-              <tr>
-                <th style="width:40px;"><input type="checkbox" id="selectAllUsers" onchange="toggleSelectAllUsers()" style="display:none;"/></th>
-                <th>Username</th>
-                <th>Name</th>
-                <th>Role</th>
-                <th>Client</th>
-                <th>Functional Location</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Client</th><th>Functional Location</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody id="usersBody"></tbody>
           </table>
         </div>
@@ -185,10 +111,8 @@
 let USERS = [];
 let CLIENTS = [];
 let FLS = [];
-let SELECTED_USERS = new Set();
-let usernameCheckTimeout = null;
 
-function h(v){return String(v||'').replace(/[&<>'\"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[m]));}
+function h(v){return String(v||'').replace(/[&<>'"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[m]));}
 
 async function loadClients(){
   const res = await apiFetch('/api/clients?limit=500');
@@ -221,146 +145,21 @@ async function loadUsers(){
 
 function renderUsers(){
   const body = document.getElementById('usersBody');
-  if (USERS.length === 0) {
-    body.innerHTML = `<tr><td colspan="8" style="padding:0;"><div class="sap-empty-state">
-      <div class="sap-empty-state__illustration">
-        <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style="stop-color:#e8f3ff;stop-opacity:1" />
-              <stop offset="100%" style="stop-color:#d1e8ff;stop-opacity:1" />
-            </linearGradient>
-          </defs>
-          <circle cx="40" cy="45" r="20" fill="url(#grad1)"/>
-          <circle cx="80" cy="45" r="20" fill="url(#grad1)"/>
-          <circle cx="60" cy="75" r="25" fill="url(#grad1)"/>
-          <rect x="52" y="65" width="16" height="20" rx="2" fill="#fff"/>
-          <path d="M60 70v10M55 75h10" stroke="#0070f2" stroke-width="3" stroke-linecap="round"/>
-        </svg>
-      </div>
-      <div class="sap-empty-state__headline">No Users Yet</div>
-      <div class="sap-empty-state__subtitle">Get started by creating your first user account</div>
-      <button class="btn btn-primary sap-empty-state__action" onclick="document.getElementById('u_username').focus()">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="18" height="18"><path d="M12 5v14M5 12h14"/></svg>
-        Create User
-      </button>
-      <details class="sap-empty-state__tips">
-        <summary>Quick Start Tips</summary>
-        <div class="sap-empty-state__tips-content">
-          <ul>
-            <li>Start by entering a unique username and full name</li>
-            <li>Choose an appropriate role (User, Technician, Manager, or Admin)</li>
-            <li>Assign to a Client and Functional Location if needed</li>
-            <li>Password must be at least 8 characters long</li>
-          </ul>
-        </div>
-      </details>
-    </div></td></tr>`;
-    return;
-  }
   body.innerHTML = USERS.map(u => {
     const active = !!u.is_active;
-    const isSelected = SELECTED_USERS.has(u.id);
-    return `<tr data-status="${active ? 'active' : 'disabled'}" data-user-id="${u.id}">
-      <td style="width:40px;">
-        <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleUserSelection('${u.id}')" style="width:16px;height:16px;"/>
-      </td>
-      <td class="${active ? '' : 'email-cell'}">${h(u.username)}</td>
+    return `<tr>
+      <td>${h(u.username)}</td>
       <td>${h(u.name)}</td>
       <td>${h(u.role)}</td>
       <td>${h(u.customer_id||'—')}</td>
       <td>${h(u.functional_location||'—')}</td>
-      <td>
-        <label class="sap-toggle-switch" title="${active ? 'Active' : 'Disabled'}">
-          <input type="checkbox" ${active ? 'checked' : ''} onchange="toggleUserStatus('${u.id}', this.checked)" ${!active ? '' : ''}/>
-          <span class="sap-toggle-switch__slider"></span>
-        </label>
-      </td>
+      <td><span class="sap-badge ${active?'sap-badge--success':'sap-badge--danger'}">${active?'Active':'Disabled'}</span></td>
       <td>
         <button class="btn btn-ghost btn-sm" onclick="editUser('${u.id}')">Edit</button>
-        <span class="quick-actions">
-          ${active 
-            ? `<button class="btn btn-danger btn-sm" onclick="disableUser('${u.id}')" title="Disable user">Disable</button>` 
-            : `<button class="btn btn-success btn-sm" onclick="enableUser('${u.id}')" title="Enable user">Enable</button>`}
-        </span>
+        ${active ? `<button class="btn btn-danger btn-sm" onclick="disableUser('${u.id}')">Disable</button>` : `<button class="btn btn-success btn-sm" onclick="enableUser('${u.id}')">Enable</button>`}
       </td>
     </tr>`;
-  }).join('');
-  
-  // Show/hide bulk action button
-  document.getElementById('selectAllUsers').style.display = USERS.length > 0 ? 'block' : 'none';
-  updateBulkActionButton();
-}
-
-function toggleUserSelection(userId) {
-  if (SELECTED_USERS.has(userId)) {
-    SELECTED_USERS.delete(userId);
-  } else {
-    SELECTED_USERS.add(userId);
-  }
-  updateBulkActionButton();
-}
-
-function toggleSelectAllUsers() {
-  const checkbox = document.getElementById('selectAllUsers');
-  if (checkbox.checked) {
-    USERS.forEach(u => SELECTED_USERS.add(u.id));
-  } else {
-    SELECTED_USERS.clear();
-  }
-  renderUsers();
-}
-
-function updateBulkActionButton() {
-  const btn = document.getElementById('bulkActionBtn');
-  if (SELECTED_USERS.size > 0) {
-    btn.style.display = 'inline-flex';
-    btn.querySelector('span').textContent = `${SELECTED_USERS.size} Selected`;
-  } else {
-    btn.style.display = 'none';
-  }
-}
-
-function toggleBulkActions() {
-  if (SELECTED_USERS.size === 0) return;
-  const action = confirm(`Perform bulk action on ${SELECTED_USERS.size} users?\n\nOK to Enable selected users\nCancel to Disable selected users`);
-  bulkSetStatus(action);
-}
-
-async function bulkSetStatus(enable) {
-  const btn = document.getElementById('bulkActionBtn');
-  setButtonLoading(btn, true, 'Applying...');
-  
-  try {
-    for (const userId of SELECTED_USERS) {
-      await apiFetch(`/api/users/${userId}`, { 
-        method: 'PATCH', 
-        body: JSON.stringify({ is_active: enable }) 
-      });
-    }
-    SapToast.success('Success', `${SELECTED_USERS.size} users ${enable ? 'enabled' : 'disabled'}.`);
-    SELECTED_USERS.clear();
-    await loadUsers();
-  } catch (err) {
-    SapToast.error('Error', 'Failed to update some users.');
-  } finally {
-    setButtonLoading(btn, false);
-  }
-}
-
-async function toggleUserStatus(userId, isActive) {
-  const res = await apiFetch(`/api/users/${userId}`, { 
-    method: 'PATCH', 
-    body: JSON.stringify({ is_active: isActive }) 
-  });
-  const data = await res.json();
-  if (!data.success) {
-    SapToast.error('Error', (data.data||data).error || 'Could not update status');
-    renderUsers(); // Revert UI
-    return;
-  }
-  SapToast.success('Updated', `User status changed to ${isActive ? 'Active' : 'Disabled'}.`);
-  await loadUsers();
+  }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--sap-text-secondary);">No users found</td></tr>';
 }
 
 function resetUserForm(){
@@ -374,19 +173,7 @@ function resetUserForm(){
   document.getElementById('u_fl').value = '';
   document.getElementById('u_active').value = 'true';
   document.getElementById('u_username').disabled = false;
-  document.getElementById('pwdHint').innerHTML = '<span class="required">*</span>';
-  clearValidationStates();
-  hidePasswordStrength();
-  hideUsernameStatus();
-}
-
-function clearValidationStates() {
-  document.querySelectorAll('.sap-input-wrapper').forEach(wrapper => {
-    wrapper.classList.remove('has-success', 'has-error');
-  });
-  document.querySelectorAll('.sap-field').forEach(field => {
-    field.classList.remove('has-error');
-  });
+  document.getElementById('pwdHint').textContent = '*';
 }
 
 function editUser(id){
@@ -401,261 +188,35 @@ function editUser(id){
   fillFunctionalLocationOptions();
   document.getElementById('u_fl').value = u.functional_location || '';
   document.getElementById('u_active').value = String(!!u.is_active);
-  document.getElementById('pwdHint').innerHTML = '<span>(optional)</span>';
-  clearValidationStates();
-  hidePasswordStrength();
-  hideUsernameStatus();
-}
-
-function setButtonLoading(button, isLoading, loadingText = 'Saving...') {
-  const spinner = button.querySelector('.btn-spinner');
-  const text = button.querySelector('.btn-text');
-  const successIcon = button.querySelector('.btn-success-icon');
-  const errorIcon = button.querySelector('.btn-error-icon');
-  
-  if (isLoading) {
-    button.classList.add('btn-loading');
-    button.disabled = true;
-    if (spinner) {
-      spinner.style.display = 'inline-flex';
-      spinner.querySelector('span').textContent = loadingText;
-    }
-  } else {
-    button.classList.remove('btn-loading');
-    button.disabled = false;
-    if (spinner) spinner.style.display = 'none';
-    if (successIcon) successIcon.style.display = 'none';
-    if (errorIcon) errorIcon.style.display = 'none';
-  }
-}
-
-function setButtonSuccess(button) {
-  button.classList.add('btn-success-state');
-  const successIcon = button.querySelector('.btn-success-icon');
-  if (successIcon) successIcon.style.display = 'inline-flex';
-}
-
-function setButtonError(button) {
-  button.classList.add('btn-error-state');
-  const errorIcon = button.querySelector('.btn-error-icon');
-  if (errorIcon) errorIcon.style.display = 'inline-flex';
+  document.getElementById('pwdHint').textContent = '(optional)';
 }
 
 async function saveUser(){
-  const btn = document.getElementById('saveUserBtn');
-  
-  // Validate form
-  let isValid = true;
-  const username = document.getElementById('u_username').value.trim();
-  const name = document.getElementById('u_name').value.trim();
-  const password = document.getElementById('u_password').value;
   const id = document.getElementById('u_id').value;
-  
-  // Check required fields
-  if (!username) {
-    showFieldError('u_username', 'Username is required');
-    isValid = false;
-  } else {
-    showFieldSuccess('u_username');
-  }
-  
-  if (!name) {
-    showFieldError('u_name', 'Name is required');
-    isValid = false;
-  } else {
-    showFieldSuccess('u_name');
-  }
-  
-  if (!id && !password) {
-    showFieldError('u_password', 'Password is required for new users');
-    isValid = false;
-  } else if (password && password.length < 8) {
-    showFieldError('u_password', 'Password must be at least 8 characters');
-    isValid = false;
-  } else if (password) {
-    showFieldSuccess('u_password');
-  }
-  
-  if (!isValid) return;
-  
   const payload = {
-    name: name,
+    name: document.getElementById('u_name').value.trim(),
     role: document.getElementById('u_role').value,
     customer_id: document.getElementById('u_client').value || null,
     functional_location: document.getElementById('u_fl').value || null,
     is_active: document.getElementById('u_active').value === 'true',
   };
-  if (password) payload.password = password;
+  const pwd = document.getElementById('u_password').value;
+  if (pwd) payload.password = pwd;
 
   if (!id) {
-    payload.username = username;
+    payload.username = document.getElementById('u_username').value.trim();
+    payload.password = pwd;
+    if (!payload.username || !payload.name || !payload.password) return SapToast.error('Validation','Username, name and password are required.');
   }
-
-  setButtonLoading(btn, true);
 
   const url = id ? `/api/users/${id}` : '/api/users';
   const method = id ? 'PATCH' : 'POST';
-  
-  try {
-    const res = await apiFetch(url, { method, body: JSON.stringify(payload) });
-    const data = await res.json();
-    if (!data.success) {
-      setButtonError(btn);
-      SapToast.error('Save Failed', (data.data||data).error || 'Could not save user');
-      setTimeout(() => {
-        btn.classList.remove('btn-error-state');
-        setButtonLoading(btn, false);
-      }, 1500);
-      return;
-    }
-    
-    setButtonSuccess(btn);
-    SapToast.success('Saved', id ? 'User updated.' : 'User created.');
-    
-    setTimeout(() => {
-      btn.classList.remove('btn-success-state');
-      setButtonLoading(btn, false);
-      resetUserForm();
-      loadUsers();
-    }, 1000);
-  } catch (err) {
-    setButtonError(btn);
-    SapToast.error('Error', 'Network error occurred');
-    setTimeout(() => {
-      btn.classList.remove('btn-error-state');
-      setButtonLoading(btn, false);
-    }, 1500);
-  }
-}
-
-function showFieldError(fieldId, message) {
-  const field = document.getElementById(fieldId).closest('.sap-field');
-  const wrapper = field.querySelector('.sap-input-wrapper');
-  const input = document.getElementById(fieldId);
-  
-  field.classList.add('has-error');
-  wrapper.classList.add('has-error');
-  wrapper.classList.remove('has-success');
-  input.classList.add('error');
-  
-  // Remove existing error message
-  const existingError = field.querySelector('.sap-field-error');
-  if (existingError) existingError.remove();
-  
-  // Add error message
-  const errorEl = document.createElement('div');
-  errorEl.className = 'sap-field-error';
-  errorEl.innerHTML = `<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>${message}`;
-  field.appendChild(errorEl);
-}
-
-function showFieldSuccess(fieldId) {
-  const field = document.getElementById(fieldId).closest('.sap-field');
-  const wrapper = field.querySelector('.sap-input-wrapper');
-  const input = document.getElementById(fieldId);
-  
-  field.classList.remove('has-error');
-  wrapper.classList.add('has-success');
-  wrapper.classList.remove('has-error');
-  input.classList.remove('error');
-  
-  // Remove existing error message
-  const existingError = field.querySelector('.sap-field-error');
-  if (existingError) existingError.remove();
-}
-
-function checkPasswordStrength(password) {
-  const strengthEl = document.getElementById('passwordStrength');
-  const fillEl = document.getElementById('passwordStrengthFill');
-  const labelEl = document.getElementById('passwordStrengthLabel');
-  
-  if (!password) {
-    hidePasswordStrength();
-    return;
-  }
-  
-  strengthEl.style.display = 'flex';
-  
-  let score = 0;
-  if (password.length >= 8) score++;
-  if (password.length >= 12) score++;
-  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
-  if (/\d/.test(password)) score++;
-  if (/[^a-zA-Z0-9]/.test(password)) score++;
-  
-  fillEl.className = 'sap-password-strength__fill';
-  labelEl.className = 'sap-password-strength__label';
-  
-  if (score <= 2) {
-    fillEl.classList.add('sap-password-strength__fill--weak');
-    labelEl.classList.add('sap-password-strength__label--weak');
-    labelEl.textContent = 'Weak';
-  } else if (score <= 4) {
-    fillEl.classList.add('sap-password-strength__fill--medium');
-    labelEl.classList.add('sap-password-strength__label--medium');
-    labelEl.textContent = 'Medium';
-  } else {
-    fillEl.classList.add('sap-password-strength__fill--strong');
-    labelEl.classList.add('sap-password-strength__label--strong');
-    labelEl.textContent = 'Strong';
-  }
-}
-
-function hidePasswordStrength() {
-  document.getElementById('passwordStrength').style.display = 'none';
-}
-
-function showUsernameStatus(status, message) {
-  const el = document.getElementById('usernameStatus');
-  el.style.display = 'flex';
-  el.className = 'sap-username-status';
-  
-  let icon = '';
-  if (status === 'checking') {
-    el.classList.add('sap-username-status--checking');
-    icon = '<svg class="sap-spinner sap-spinner--sm" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="2" fill="none" stroke-dasharray="30" stroke-linecap="round"/></svg>';
-  } else if (status === 'available') {
-    el.classList.add('sap-username-status--available');
-    icon = '<svg fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>';
-  } else if (status === 'taken') {
-    el.classList.add('sap-username-status--taken');
-    icon = '<svg fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>';
-  }
-  
-  el.innerHTML = icon + message;
-}
-
-function hideUsernameStatus() {
-  document.getElementById('usernameStatus').style.display = 'none';
-}
-
-function debounceUsernameCheck() {
-  const username = document.getElementById('u_username').value.trim().toLowerCase();
-  const id = document.getElementById('u_id').value;
-  
-  if (usernameCheckTimeout) clearTimeout(usernameCheckTimeout);
-  
-  if (!username || username.length < 3) {
-    hideUsernameStatus();
-    return;
-  }
-  
-  showUsernameStatus('checking', 'Checking availability...');
-  
-  usernameCheckTimeout = setTimeout(async () => {
-    try {
-      // Check if username exists in current users list (excluding current user when editing)
-      const exists = USERS.some(u => u.username.toLowerCase() === username && u.id !== id);
-      
-      if (exists) {
-        showUsernameStatus('taken', 'Username is already taken');
-      } else {
-        showUsernameStatus('available', 'Username is available');
-      }
-    } catch (err) {
-      hideUsernameStatus();
-    }
-  }, 500);
+  const res = await apiFetch(url, { method, body: JSON.stringify(payload) });
+  const data = await res.json();
+  if (!data.success) return SapToast.error('Save Failed', (data.data||data).error || 'Could not save user');
+  SapToast.success('Saved', id ? 'User updated.' : 'User created.');
+  resetUserForm();
+  await loadUsers();
 }
 
 async function disableUser(id){
@@ -679,32 +240,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const s = SapSession.guard(['admin']);
   if (!s) return;
   if (typeof SapNavigation !== 'undefined') SapNavigation.sync();
-  
-  // Add event listeners for validation
-  document.getElementById('u_username').addEventListener('blur', function() {
-    const val = this.value.trim();
-    if (val) {
-      showFieldSuccess('u_username');
-      debounceUsernameCheck();
-    }
-  });
-  document.getElementById('u_username').addEventListener('input', debounceUsernameCheck);
-  
-  document.getElementById('u_name').addEventListener('blur', function() {
-    if (this.value.trim()) showFieldSuccess('u_name');
-  });
-  
-  document.getElementById('u_password').addEventListener('input', function() {
-    checkPasswordStrength(this.value);
-    if (this.value) showFieldSuccess('u_password');
-  });
-  
-  document.getElementById('u_role').addEventListener('change', function() {
-    if (this.value) showFieldSuccess('u_role');
-  });
-  
   document.getElementById('u_client').addEventListener('change', fillFunctionalLocationOptions);
-  
   await Promise.all([loadClients(), loadFunctionalLocations()]);
   await loadUsers();
   resetUserForm();

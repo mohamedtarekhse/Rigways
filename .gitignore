@@ -1,1 +1,12 @@
-Nothing should be ignored based on the provided file changes. The changes only include source files (dashboard.html, styles.css) without any build artifacts, dependencies, or temporary files that would warrant adding ignore rules.
+```gitignore
+# Dependencies
+node_modules/
+
+# Editors
+.vscode/
+
+# Environment
+.env
+.env.local
+*.env.*
+```
