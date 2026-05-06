@@ -442,6 +442,11 @@
       <div class="sap-user-menu__name" id="menuUserName">Admin</div>
       <div class="sap-user-menu__role" id="menuUserRole">Administrator</div>
     </div>
+    <div class="sap-user-menu__item" onclick="window.location.href='assets.html'">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span>Assets</span>
+    </div>
+    <div class="sap-user-menu__sep"></div>
     <div class="sap-user-menu__item sap-user-menu__item--danger" onclick="logout()">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
       <span>Sign Out</span>
@@ -1663,23 +1668,13 @@ function renderTable() {
   if (inspDateF) data = data.filter(a => (a.inspectionDate || '') === inspDateF);
 
   /* Search */
-  if (search) data = data.filter(a => {
-    const terms = [
-      a.name,
-      a.assetId,
-      a.serial,
-      a.location,
-      a.type,
-      a.manufacturer,
-      a.model,
-      a.description,
-      a.notes,
-      a.client,
-      CLIENTS_MAP[a.client],
-      window._funcLocsCache?.find(l => l.id === a.location)?.name || ''
-    ].filter(Boolean).map(v => String(v).toLowerCase());
-    return terms.some(t => t.includes(search));
-  });
+  if (search) data = data.filter(a =>
+    a.name.toLowerCase().includes(search) ||
+    a.assetId.toLowerCase().includes(search) ||
+    a.serial.toLowerCase().includes(search) ||
+    a.location.toLowerCase().includes(search) ||
+    a.type.toLowerCase().includes(search)
+  );
 
   /* Sort */
   data.sort((a, b) => {

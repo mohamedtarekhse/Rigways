@@ -383,6 +383,11 @@
       <div class="sap-user-menu__name" id="menuUserName">Admin</div>
       <div class="sap-user-menu__role" id="menuUserRole">Administrator</div>
     </div>
+    <div class="sap-user-menu__item" onclick="window.location.href='dashboard.html'">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span>Dashboard</span>
+    </div>
+    <div class="sap-user-menu__sep"></div>
     <div class="sap-user-menu__item sap-user-menu__item--danger" onclick="logout()">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
       <span>Sign Out</span>
@@ -1418,32 +1423,15 @@ function renderTable() {
   if (typeF !== 'all') data = data.filter(c => c.certType === typeF);
 
   /* Search */
-  if (search) data = data.filter(c => {
-    // Collect all searchable strings for this row
-    const searchTerms = [
-      c.name,
-      c.certId,
-      fmtCertId(c),
-      c.issuedBy,
-      c.certType,
-      c.jobNumber,
-      c.liftingSubtype,
-      c.functionalLocationName,
-      c.client,
-      c.client_name,
-      c.assetId,
-      c.assetDescription,
-      c.approvalStatus,
-      c.expiryDate,
-      c.notes,
-      c.inspector_id,
-      c.related_standard,
-      CLIENTS_MAP[c.client],
-      (window._assetMap && window._assetMap[c.asset_id]) || ''
-    ].filter(Boolean).map(v => String(v).toLowerCase());
-    
-    return searchTerms.some(term => term.includes(search));
-  });
+  if (search) data = data.filter(c =>
+    (c.name||'').toLowerCase().includes(search)   ||
+    (c.certId||'').toLowerCase().includes(search) || fmtCertId(c).toLowerCase().includes(search) ||
+    (c.issuedBy||'').toLowerCase().includes(search) ||
+    (c.certType||'').toLowerCase().includes(search) ||
+    (c.jobNumber||'').toLowerCase().includes(search) ||
+    (c.liftingSubtype||'').toLowerCase().includes(search) ||
+    (c.functionalLocationName||'').toLowerCase().includes(search)
+  );
 
   /* Sort */
   data.sort((a, b) => {

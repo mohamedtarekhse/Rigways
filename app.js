@@ -451,6 +451,9 @@ const SapNavigation = (() => {
   return { getLandingPage, sync };
 })();
 
+  return { init, toggle, buildNav };
+})();
+
 /* ================================================================
    5. SHELL MANAGER
 ================================================================ */
