@@ -1,43 +1,55 @@
+# Examples
+
+## Project with artifacts
+```
 # Compiled and build artifacts
 *.pyc
 __pycache__/
+*.o
+*.obj
+dist/
+build/
+target/
 
 # Dependencies
 .venv/
 venv/
 node_modules/
+.packages/
 
 # Logs and temp files
 *.log
 *.tmp
 *.swp
+*.swo
 
 # Environment
 .env
 .env.local
-*.env.*
+.env.*
 
 # Editors
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# OS generated files
+# OS
 .DS_Store
 Thumbs.db
 
-# Coverage reports
+# Coverage
 coverage/
 htmlcov/
 .coverage
 
-# Distribution / packaging
-dist/
-build/
-*.egg-info/
-
-# MyPy cache
-.mypy_cache/
-__pycache__/
-
-# Pytest cache
-.pytest_cache/
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+```
