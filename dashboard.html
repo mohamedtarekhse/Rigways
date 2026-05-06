@@ -3,11 +3,173 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin Dashboard - User Management</title>
+  <title>Operations Dashboard - Rigways ACM</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="app.js"></script>
   <style>
     .rigways-shell-logo { height:22px; width:auto; filter:brightness(0) invert(1); }
+    .ops-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(280px, .7fr);
+      gap: var(--sp-md);
+      margin-bottom: var(--sp-md);
+    }
+    .ops-hero__panel {
+      background: #fff;
+      border: var(--sap-card-border);
+      border-radius: var(--sap-card-radius);
+      box-shadow: var(--sap-card-shadow);
+      padding: var(--sp-lg);
+    }
+    .ops-title-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--sp-md);
+      margin-bottom: var(--sp-md);
+    }
+    .ops-title-row h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.2;
+      color: var(--sap-text-primary);
+    }
+    .ops-subtitle {
+      margin-top: 6px;
+      color: var(--sap-text-secondary);
+      font-size: 13px;
+      max-width: 760px;
+    }
+    .ops-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .ops-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      gap: var(--sp-sm);
+    }
+    .ops-kpi {
+      border: 1px solid var(--sap-table-border);
+      border-radius: var(--sap-card-radius);
+      padding: 12px;
+      background: #fafbfc;
+      min-height: 92px;
+    }
+    .ops-kpi__label {
+      color: var(--sap-text-secondary);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .ops-kpi__value {
+      margin-top: 8px;
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--sap-text-primary);
+    }
+    .ops-kpi__meta {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--sap-text-secondary);
+    }
+    .ops-focus-list,
+    .ops-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .ops-focus-item,
+    .ops-list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--sap-table-border);
+      border-radius: var(--sap-card-radius);
+      background: #fff;
+      text-decoration: none;
+      color: inherit;
+    }
+    .ops-focus-item:hover,
+    .ops-list-item:hover {
+      border-color: var(--sap-brand);
+      background: var(--sap-brand-light);
+    }
+    .ops-focus-item__title,
+    .ops-list-item__title {
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--sap-text-primary);
+    }
+    .ops-focus-item__meta,
+    .ops-list-item__meta {
+      margin-top: 2px;
+      font-size: 12px;
+      color: var(--sap-text-secondary);
+    }
+    .ops-focus-item__count {
+      min-width: 44px;
+      text-align: right;
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--sap-brand);
+    }
+    .ops-grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--sp-md);
+      margin-bottom: var(--sp-md);
+    }
+    .ops-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sp-sm);
+      padding: var(--sp-md) var(--sp-lg);
+      border-bottom: var(--sap-card-border);
+    }
+    .ops-card-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--sap-text-primary);
+    }
+    .ops-empty {
+      padding: var(--sp-lg);
+      text-align: center;
+      color: var(--sap-text-secondary);
+      font-size: 13px;
+    }
+    .ops-admin-section {
+      margin-top: var(--sp-xl);
+    }
+    .ops-section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sp-sm);
+      margin-bottom: var(--sp-sm);
+    }
+    .ops-section-title h2 {
+      margin: 0;
+      font-size: 18px;
+      color: var(--sap-text-primary);
+    }
+    @media (max-width: 1100px) {
+      .ops-hero,
+      .ops-grid-2 { grid-template-columns: 1fr; }
+      .ops-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .ops-title-row { flex-direction: column; }
+      .ops-actions { width: 100%; justify-content: stretch; }
+      .ops-actions .btn { flex: 1; justify-content: center; }
+      .ops-kpi-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -59,10 +221,108 @@
   </nav>
 
   <main class="sap-main">
-    <div class="sap-page-head mb-md">
-      <h1>Admin Dashboard</h1>
-      <div class="sap-page-sub">Create users, map users to Client + Functional Location, and disable login access.</div>
-    </div>
+    <section class="ops-hero">
+      <div class="ops-hero__panel">
+        <div class="ops-title-row">
+          <div>
+            <h1>Operations Dashboard</h1>
+            <div class="ops-subtitle">A daily command center for certificates, assets, jobs, files, and functional locations.</div>
+          </div>
+          <div class="ops-actions">
+            <button class="btn btn-primary btn-sm" onclick="window.location.href='certificates.html'">Review Certificates</button>
+            <button class="btn btn-secondary btn-sm" onclick="window.location.href='jobs.html'">Open Jobs</button>
+            <button class="btn btn-ghost btn-sm" onclick="loadOperationsDashboard()">Refresh</button>
+          </div>
+        </div>
+        <div class="ops-kpi-grid">
+          <div class="ops-kpi">
+            <div class="ops-kpi__label">Assets</div>
+            <div class="ops-kpi__value" id="dashAssetsTotal">--</div>
+            <div class="ops-kpi__meta" id="dashAssetsMeta">Loading fleet status</div>
+          </div>
+          <div class="ops-kpi">
+            <div class="ops-kpi__label">Certificates</div>
+            <div class="ops-kpi__value" id="dashCertsTotal">--</div>
+            <div class="ops-kpi__meta" id="dashCertsMeta">Loading compliance status</div>
+          </div>
+          <div class="ops-kpi">
+            <div class="ops-kpi__label">Open Jobs</div>
+            <div class="ops-kpi__value" id="dashJobsOpen">--</div>
+            <div class="ops-kpi__meta" id="dashJobsMeta">Loading job status</div>
+          </div>
+          <div class="ops-kpi">
+            <div class="ops-kpi__label">Files</div>
+            <div class="ops-kpi__value" id="dashFilesTotal">--</div>
+            <div class="ops-kpi__meta" id="dashFilesMeta">Loading recent uploads</div>
+          </div>
+        </div>
+      </div>
+      <div class="ops-hero__panel">
+        <div class="ops-card-title" style="margin-bottom:12px;">Needs Attention</div>
+        <div class="ops-focus-list" id="attentionList">
+          <div class="ops-empty">Loading attention queue...</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ops-grid-2">
+      <div class="sap-card">
+        <div class="ops-card-head">
+          <div class="ops-card-title">Expiring Certificates</div>
+          <button class="btn btn-ghost btn-sm" onclick="window.location.href='certificates.html'">View All</button>
+        </div>
+        <div class="sap-card__body">
+          <div class="ops-list" id="expiringCertsList">
+            <div class="ops-empty">Loading certificates...</div>
+          </div>
+        </div>
+      </div>
+      <div class="sap-card">
+        <div class="ops-card-head">
+          <div class="ops-card-title">Active Jobs</div>
+          <button class="btn btn-ghost btn-sm" onclick="window.location.href='jobs.html'">View Board</button>
+        </div>
+        <div class="sap-card__body">
+          <div class="ops-list" id="openJobsList">
+            <div class="ops-empty">Loading jobs...</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ops-grid-2">
+      <div class="sap-card">
+        <div class="ops-card-head">
+          <div class="ops-card-title">Functional Location Snapshot</div>
+          <button class="btn btn-ghost btn-sm" onclick="window.location.href='functional-locations.html'">Open Locations</button>
+        </div>
+        <div class="sap-card__body">
+          <div class="ops-list" id="locationsList">
+            <div class="ops-empty">Loading locations...</div>
+          </div>
+        </div>
+      </div>
+      <div class="sap-card">
+        <div class="ops-card-head">
+          <div class="ops-card-title">Recent Files</div>
+          <button class="btn btn-ghost btn-sm" onclick="window.location.href='files.html'">Open Explorer</button>
+        </div>
+        <div class="sap-card__body">
+          <div class="ops-list" id="recentFilesList">
+            <div class="ops-empty">Loading files...</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ops-admin-section">
+      <div class="ops-section-title">
+        <div>
+          <h2>Admin Console</h2>
+          <div class="sap-page-sub">Create users, map users to Client + Functional Location, and disable login access.</div>
+        </div>
+      </div>
+    </section>
 
     <div class="sap-card mb-md">
       <div class="sap-card__head"><div class="sap-card__title">Add / Edit User</div></div>
@@ -113,6 +373,180 @@ let CLIENTS = [];
 let FLS = [];
 
 function h(v){return String(v||'').replace(/[&<>'"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[m]));}
+function n(v){ return Number.isFinite(Number(v)) ? Number(v) : 0; }
+function setText(id, value){ const el = document.getElementById(id); if (el) el.textContent = value; }
+function unwrap(raw, key){
+  if (!raw) return key ? [] : {};
+  const data = raw.data || raw;
+  return key ? (data[key] || raw[key] || []) : data;
+}
+function fmtDate(value){
+  if (!value) return 'No date';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' });
+}
+async function jsonOrEmpty(path){
+  const res = await apiFetch(path);
+  if (!res.ok) throw new Error(path + ' failed');
+  return res.json();
+}
+function renderAttention(stats){
+  const certs = stats.certs || {};
+  const jobs = stats.jobs || {};
+  const files = stats.files || [];
+  const items = [
+    {
+      title: 'Certificates expiring in 30 days',
+      meta: 'Review renewals before they block field work',
+      count: n(certs.expiring),
+      href: 'certificates.html'
+    },
+    {
+      title: 'Expired certificates',
+      meta: 'Prioritize assets that cannot be released',
+      count: n(certs.expired),
+      href: 'certificates.html'
+    },
+    {
+      title: 'Pending approvals',
+      meta: 'Approve or reject uploaded certificates',
+      count: n(certs.pending),
+      href: 'certificates.html'
+    },
+    {
+      title: 'Active jobs',
+      meta: 'Follow open work through to closure',
+      count: n(jobs.active),
+      href: 'jobs.html'
+    },
+    {
+      title: 'File scan warnings',
+      meta: 'Check uploads that are pending scan or flagged',
+      count: files.filter(f => String(f.scan_status || '').toLowerCase() !== 'clean').length,
+      href: 'files.html'
+    }
+  ].sort((a,b) => b.count - a.count);
+  const box = document.getElementById('attentionList');
+  box.innerHTML = items.map(item => `
+    <a class="ops-focus-item" href="${item.href}">
+      <div>
+        <div class="ops-focus-item__title">${h(item.title)}</div>
+        <div class="ops-focus-item__meta">${h(item.meta)}</div>
+      </div>
+      <div class="ops-focus-item__count">${item.count}</div>
+    </a>
+  `).join('');
+}
+function renderExpiringCerts(certs){
+  const box = document.getElementById('expiringCertsList');
+  const rows = certs.slice(0, 6);
+  if (!rows.length) {
+    box.innerHTML = '<div class="ops-empty">No certificates expiring in the next 30 days.</div>';
+    return;
+  }
+  box.innerHTML = rows.map(c => {
+    const title = c.certificate_number || c.cert_number || c.cert_id || c.name || 'Certificate';
+    const asset = c.asset_number || c.asset_id || c.assetId || 'No asset linked';
+    return `<a class="ops-list-item" href="certificates.html">
+      <div>
+        <div class="ops-list-item__title">${h(title)}</div>
+        <div class="ops-list-item__meta">${h(asset)} · expires ${h(fmtDate(c.expiry_date || c.expiryDate))}</div>
+      </div>
+      <span class="sap-badge sap-badge--warning">Expiring</span>
+    </a>`;
+  }).join('');
+}
+function renderOpenJobs(jobs){
+  const box = document.getElementById('openJobsList');
+  const active = jobs.filter(j => !['closed','cancelled','deleted'].includes(String(j.status || '').toLowerCase())).slice(0, 6);
+  if (!active.length) {
+    box.innerHTML = '<div class="ops-empty">No active jobs right now.</div>';
+    return;
+  }
+  box.innerHTML = active.map(j => `
+    <a class="ops-list-item" href="jobs.html?job=${encodeURIComponent(j.id || '')}">
+      <div>
+        <div class="ops-list-item__title">${h(j.job_number || j.jobNumber || 'Job')}</div>
+        <div class="ops-list-item__meta">${h(j.client_name || j.client_id || 'No client')} · ${h(j.functional_location_name || j.functional_location || 'No location')}</div>
+      </div>
+      <span class="sap-badge sap-badge--info">${h(j.status || 'open')}</span>
+    </a>
+  `).join('');
+}
+function renderLocations(locs){
+  const box = document.getElementById('locationsList');
+  const rows = locs.slice(0, 5);
+  if (!rows.length) {
+    box.innerHTML = '<div class="ops-empty">No functional locations found.</div>';
+    return;
+  }
+  box.innerHTML = rows.map(loc => `
+    <a class="ops-list-item" href="functional-locations.html">
+      <div>
+        <div class="ops-list-item__title">${h(loc.name || loc.fl_id || loc.id || 'Location')}</div>
+        <div class="ops-list-item__meta">${h(loc.fl_id || loc.code || loc.type || 'Functional location')} · ${h(loc.client_name || loc.client_id || 'No client')}</div>
+      </div>
+      <span class="sap-badge sap-badge--neutral">${h(loc.type || 'Location')}</span>
+    </a>
+  `).join('');
+}
+function renderRecentFiles(files){
+  const box = document.getElementById('recentFilesList');
+  const rows = files.slice(0, 6);
+  if (!rows.length) {
+    box.innerHTML = '<div class="ops-empty">No recent files found.</div>';
+    return;
+  }
+  box.innerHTML = rows.map(file => {
+    const scan = String(file.scan_status || 'pending').toLowerCase();
+    const badge = scan === 'clean' ? 'sap-badge--success' : scan === 'infected' ? 'sap-badge--error' : 'sap-badge--warning';
+    return `<a class="ops-list-item" href="files.html">
+      <div>
+        <div class="ops-list-item__title">${h(file.file_name || file.filename || 'File')}</div>
+        <div class="ops-list-item__meta">${h(file.job_number || 'No job')} · ${h(fmtDate(file.uploaded_at || file.created_at))}</div>
+      </div>
+      <span class="sap-badge ${badge}">${h(scan)}</span>
+    </a>`;
+  }).join('');
+}
+async function loadOperationsDashboard(){
+  const [assetsRes, certsRes, jobsRes, expiringRes, jobsListRes, filesRes, locsRes] = await Promise.allSettled([
+    jsonOrEmpty('/api/assets/stats'),
+    jsonOrEmpty('/api/certificates/stats'),
+    jsonOrEmpty('/api/jobs/stats'),
+    jsonOrEmpty('/api/certificates/expiring?days=30'),
+    jsonOrEmpty('/api/jobs?limit=6'),
+    jsonOrEmpty('/api/files'),
+    jsonOrEmpty('/api/functional-locations?limit=6')
+  ]);
+
+  const assets = assetsRes.status === 'fulfilled' ? unwrap(assetsRes.value) : {};
+  const certs = certsRes.status === 'fulfilled' ? unwrap(certsRes.value) : {};
+  const jobs = jobsRes.status === 'fulfilled' ? unwrap(jobsRes.value) : {};
+  const expiring = expiringRes.status === 'fulfilled' ? unwrap(expiringRes.value, 'certificates') : [];
+  const jobsList = jobsListRes.status === 'fulfilled' ? unwrap(jobsListRes.value, 'jobs') : [];
+  const files = filesRes.status === 'fulfilled' ? unwrap(filesRes.value, 'files') : [];
+  const locs = locsRes.status === 'fulfilled' ? (unwrap(locsRes.value, 'functional_locations').length ? unwrap(locsRes.value, 'functional_locations') : unwrap(locsRes.value)) : [];
+
+  setText('dashAssetsTotal', n(assets.total));
+  setText('dashAssetsMeta', `${n(assets.active || assets.operation)} active · ${n(assets.inactive || assets.stacked)} inactive`);
+  setText('dashCertsTotal', n(certs.total));
+  setText('dashCertsMeta', `${n(certs.expiring)} expiring · ${n(certs.expired)} expired`);
+  setText('dashJobsOpen', n(jobs.active));
+  setText('dashJobsMeta', `${n(jobs.technicianDone)} ready to close · ${n(jobs.closed)} closed`);
+  setText('dashFilesTotal', files.length);
+  setText('dashFilesMeta', `${files.filter(f => String(f.scan_status || '').toLowerCase() === 'clean').length} scanned clean`);
+
+  renderAttention({ certs, jobs, files });
+  renderExpiringCerts(expiring);
+  renderOpenJobs(jobsList);
+  renderLocations(Array.isArray(locs) ? locs : []);
+  renderRecentFiles(files);
+
+  if ([assetsRes, certsRes, jobsRes, expiringRes, jobsListRes, filesRes, locsRes].some(r => r.status === 'rejected')) {
+    SapToast.show('warning', 'Dashboard Partially Loaded', 'Some widgets could not load. The available data is shown.', 3500);
+  }
+}
 
 async function loadClients(){
   const res = await apiFetch('/api/clients?limit=500');
@@ -241,7 +675,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!s) return;
   if (typeof SapNavigation !== 'undefined') SapNavigation.sync();
   document.getElementById('u_client').addEventListener('change', fillFunctionalLocationOptions);
-  await Promise.all([loadClients(), loadFunctionalLocations()]);
+  await Promise.all([loadOperationsDashboard(), loadClients(), loadFunctionalLocations()]);
   await loadUsers();
   resetUserForm();
 });

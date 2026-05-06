@@ -82,10 +82,85 @@
     }
     .inspector-chip button:hover { background: rgba(10,79,156,.12); }
     .jobs-actions { display:flex; gap:6px; flex-wrap:wrap; }
+    .jobs-board {
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:12px;
+      margin-top:12px;
+    }
+    .jobs-lane {
+      border:1px solid var(--sap-table-border);
+      border-radius:8px;
+      background:#fff;
+      min-height:150px;
+      overflow:hidden;
+    }
+    .jobs-lane__head {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      padding:10px 12px;
+      background:#fafbfc;
+      border-bottom:1px solid var(--sap-table-border);
+    }
+    .jobs-lane__title {
+      font-size:12px;
+      font-weight:800;
+      color:var(--sap-text-primary);
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+    .jobs-lane__count {
+      min-width:24px;
+      height:22px;
+      padding:0 7px;
+      border-radius:11px;
+      background:var(--sap-brand-light);
+      color:var(--sap-brand);
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font-size:12px;
+      font-weight:800;
+    }
+    .jobs-lane__body { padding:8px; display:flex; flex-direction:column; gap:8px; }
+    .jobs-board-card {
+      border:1px solid var(--sap-table-border);
+      border-radius:7px;
+      padding:9px;
+      background:#fff;
+      cursor:pointer;
+    }
+    .jobs-board-card:hover {
+      border-color:var(--sap-brand);
+      background:var(--sap-brand-light);
+    }
+    .jobs-board-card__title {
+      font-size:13px;
+      font-weight:800;
+      color:var(--sap-text-primary);
+      margin-bottom:4px;
+    }
+    .jobs-board-card__meta {
+      font-size:11px;
+      color:var(--sap-text-secondary);
+      line-height:1.4;
+    }
+    .jobs-filter-strip {
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+      align-items:center;
+      padding:10px 12px;
+      border-bottom:1px solid var(--sap-table-border);
+      background:#fafbfc;
+    }
     .btn-sm { padding:4px 8px; font-size:12px; }
     .sap-btn-danger { background:#d32f2f; color:#fff; border:1px solid #b71c1c; }
     .sap-btn-danger:hover { background:#b71c1c; }
     @media (max-width: 768px) {
+      .jobs-board { grid-template-columns:1fr; }
       .jobs-create-card,
       #jobsCreateCard {
         padding: 16px;
@@ -207,7 +282,25 @@
     <button class="btn btn-primary jobs-create-btn" onclick="createJob()">Create Job</button>
   </div>
 
+  <div class="sap-card" style="margin-top:12px;">
+    <div class="sap-card__header">
+      <div class="sap-card__title">Work Board</div>
+      <div class="sap-card__subtitle">Scan jobs by status before opening the detailed list.</div>
+    </div>
+    <div class="sap-card__body">
+      <div class="jobs-board" id="jobsBoard"></div>
+    </div>
+  </div>
+
   <div class="sap-card jobs-table-card" style="margin-top:12px;">
+    <div class="jobs-filter-strip" id="jobsFilterStrip">
+      <span class="saved-view-label">List</span>
+      <button class="saved-view-btn active" data-filter="all" onclick="setJobFilter('all')">All</button>
+      <button class="saved-view-btn" data-filter="open" onclick="setJobFilter('open')">Open</button>
+      <button class="saved-view-btn" data-filter="technician_done" onclick="setJobFilter('technician_done')">Ready</button>
+      <button class="saved-view-btn" data-filter="closed" onclick="setJobFilter('closed')">Closed</button>
+      <button class="saved-view-btn" data-filter="reopened" onclick="setJobFilter('reopened')">Reopened</button>
+    </div>
     <div class="sap-table-wrapper">
     <table class="sap-table">
       <thead><tr><th>Job Number</th><th>Client</th><th>Functional Location</th><th>Scope</th><th>Status</th><th>Actions</th></tr></thead>
@@ -224,6 +317,8 @@ let FUNCTIONAL_LOCATIONS = [];
 let CLIENTS = [];
 let INSPECTORS = [];
 let SELECTED_INSPECTOR_IDS = [];
+let JOBS = [];
+let activeJobFilter = 'all';
 function getSession(){ return (typeof SapSession!=='undefined') ? SapSession.get() : JSON.parse(sessionStorage.getItem('sap_session')||'null'); }
 function logout(){ if (typeof SapSession !== 'undefined') return SapSession.logout(); sessionStorage.removeItem('sap_session'); location.href='/'; }
 function toggleUserMenu(){ document.getElementById('userMenu')?.classList.toggle('open'); }
@@ -278,6 +373,24 @@ function onJobClientChange() {
   const rows = FUNCTIONAL_LOCATIONS.filter(fl => String(fl.client_id || '') === String(clientId));
   sel.innerHTML = '<option value="">Select functional location…</option>' +
     rows.map(fl => `<option value="${fl.fl_id}">${fl.fl_id} — ${fl.name}</option>`).join('');
+}
+function applyJobDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const client = params.get('client');
+  const location = params.get('location');
+  if (client) {
+    const clientSel = document.getElementById('jobClientSelect');
+    if (clientSel) clientSel.value = client;
+    onJobClientChange();
+  }
+  if (location) {
+    const locSel = document.getElementById('jobFunctionalLocationSelect');
+    const loc = FUNCTIONAL_LOCATIONS.find(fl =>
+      String(fl.fl_id || '').toLowerCase() === location.toLowerCase() ||
+      String(fl.name || '').toLowerCase() === location.toLowerCase()
+    );
+    if (locSel && loc) locSel.value = loc.fl_id;
+  }
 }
 
 async function loadInspectorsDropdown() {
@@ -388,12 +501,60 @@ function formatJobStatus(status) {
   return '<span class="sap-badge sap-badge--success">Open</span>';
 }
 
-async function loadJobs(){
-  const res = await apiFetch('/api/jobs?limit=200');
-  const raw = await res.json();
-  const jobs = (raw.data||raw).jobs || [];
+function jobBucket(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'technician_done' || s === 'done') return 'technician_done';
+  if (s === 'closed') return 'closed';
+  if (s === 'reopened') return 'reopened';
+  return 'open';
+}
+
+function renderJobsBoard(jobs) {
+  const lanes = [
+    { key:'open', title:'Open' },
+    { key:'technician_done', title:'Ready' },
+    { key:'reopened', title:'Reopened' },
+    { key:'closed', title:'Closed' }
+  ];
+  const board = document.getElementById('jobsBoard');
+  if (!board) return;
+  board.innerHTML = lanes.map(lane => {
+    const rows = jobs.filter(j => jobBucket(j.status) === lane.key);
+    const cards = rows.slice(0, 4).map(j => `
+      <div class="jobs-board-card" onclick="setJobFilter('${lane.key}')">
+        <div class="jobs-board-card__title">${j.job_number || 'Job'}</div>
+        <div class="jobs-board-card__meta">${clientDisplayName(j.client_id)} · ${functionalLocationDisplayName(j.functional_location)}</div>
+        <div class="jobs-board-card__meta">${j.scope || j.title || 'No scope'}</div>
+      </div>
+    `).join('');
+    return `<div class="jobs-lane">
+      <div class="jobs-lane__head">
+        <div class="jobs-lane__title">${lane.title}</div>
+        <button class="jobs-lane__count" onclick="setJobFilter('${lane.key}')">${rows.length}</button>
+      </div>
+      <div class="jobs-lane__body">${cards || '<div class="ops-empty" style="padding:12px;">No jobs</div>'}</div>
+    </div>`;
+  }).join('');
+}
+
+function updateJobFilterButtons() {
+  document.querySelectorAll('#jobsFilterStrip .saved-view-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.filter === activeJobFilter);
+  });
+}
+
+function setJobFilter(filter) {
+  activeJobFilter = filter;
+  updateJobFilterButtons();
+  renderJobsTable();
+}
+
+function renderJobsTable() {
   const isAdmin = session && session.role === 'admin';
-  document.getElementById('jobsBody').innerHTML = jobs.map(j => {
+  const rows = activeJobFilter === 'all'
+    ? JOBS
+    : JOBS.filter(j => jobBucket(j.status) === activeJobFilter);
+  document.getElementById('jobsBody').innerHTML = rows.map(j => {
     const actionsHtml = jobsReadOnly
       ? '<span class="sap-badge sap-badge--neutral">View only</span>'
       : `<div class="jobs-actions" style="display:flex;gap:4px;flex-wrap:wrap;">
@@ -411,11 +572,19 @@ async function loadJobs(){
       <td>${j.job_number||''}</td>
       <td>${clientDisplayName(j.client_id)}</td>
       <td>${functionalLocationDisplayName(j.functional_location)}</td>
-      <td>${j.scope||''}</td>
+      <td>${j.scope || j.title || ''}</td>
       <td>${formatJobStatus(j.status)}</td>
       <td>${actionsHtml}</td>
     </tr>`;
-  }).join('');
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--sap-text-secondary);">No jobs in this view</td></tr>';
+}
+
+async function loadJobs(){
+  const res = await apiFetch('/api/jobs?limit=200');
+  const raw = await res.json();
+  JOBS = (raw.data||raw).jobs || [];
+  renderJobsBoard(JOBS);
+  renderJobsTable();
 }
 
 async function createJob(){
@@ -505,6 +674,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     await loadJobs();
   } else {
     await Promise.all([loadClientsDropdown(), loadFunctionalLocations(), loadInspectorsDropdown()]);
+    applyJobDeepLink();
     await loadJobs();
     setupInspectorPicker();
   }

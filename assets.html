@@ -514,6 +514,14 @@
 
   <!-- Table card -->
   <div class="sap-card sap-card--toolbar-dropdown">
+    <div class="saved-view-strip" id="assetSavedViews">
+      <span class="saved-view-label">Views</span>
+      <button class="saved-view-btn active" data-view="all" onclick="setAssetSavedView('all')"><span class="saved-view-btn__dot"></span>All</button>
+      <button class="saved-view-btn" data-view="operation" onclick="setAssetSavedView('operation')"><span class="saved-view-btn__dot"></span>Operation</button>
+      <button class="saved-view-btn" data-view="stacked" onclick="setAssetSavedView('stacked')"><span class="saved-view-btn__dot"></span>Stacked</button>
+      <button class="saved-view-btn" data-view="needsData" onclick="setAssetSavedView('needsData')"><span class="saved-view-btn__dot"></span>Needs Data</button>
+      <button class="saved-view-btn" data-view="locationFocus" onclick="setAssetSavedView('locationFocus')"><span class="saved-view-btn__dot"></span>By Location</button>
+    </div>
     <!-- Single compact toolbar: checkbox · status pills · filters · search · actions -->
     <div class="sap-toolbar" style="gap:6px; flex-wrap:wrap; padding:6px 12px; border-bottom:1px solid var(--sap-table-border);">
 
@@ -1452,6 +1460,8 @@ let currentPage = 1;
 let PAGE_SIZE = Number(localStorage.getItem('sap_assets_page_size') || 25);
 if (![25,50,100].includes(PAGE_SIZE)) PAGE_SIZE = 25;
 let activeStatusFilter = 'all';
+let activeAssetSavedView = 'all';
+let assetDeepLinkApplied = false;
 let filteredData = [];
 
 /* Session helpers — use SapSession from app.js when available */
@@ -1667,6 +1677,12 @@ function renderTable() {
   /* Inspection date filter */
   if (inspDateF) data = data.filter(a => (a.inspectionDate || '') === inspDateF);
 
+  if (activeAssetSavedView === 'needsData') {
+    data = data.filter(a => !a.serial || !a.location || a.location === 'Unassigned' || a.location === '—');
+  } else if (activeAssetSavedView === 'locationFocus') {
+    data = data.filter(a => a.location && a.location !== 'Unassigned' && a.location !== '—');
+  }
+
   /* Search */
   if (search) data = data.filter(a =>
     a.name.toLowerCase().includes(search) ||
@@ -1862,7 +1878,71 @@ function filterStatus(val, el) {
   currentPage = 1; renderTable();
 }
 
-function applyFilters() { currentPage = 1; renderTable(); }
+function applyFilters() {
+  activeAssetSavedView = 'custom';
+  updateAssetSavedViewButtons();
+  currentPage = 1; renderTable();
+}
+function updateAssetSavedViewButtons() {
+  document.querySelectorAll('#assetSavedViews .saved-view-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === activeAssetSavedView);
+  });
+}
+function setStatusFilterValue(status) {
+  activeStatusFilter = status;
+  const boxes = document.querySelectorAll('#statusDropdown input[type="checkbox"]');
+  boxes.forEach(cb => cb.checked = cb.dataset.status === status || (status === 'all' && cb.dataset.status === 'all'));
+  const label = status === 'all' ? 'All' : status.charAt(0).toUpperCase() + status.slice(1);
+  const labelEl = document.getElementById('statusFilterLabel');
+  if (labelEl) labelEl.textContent = label;
+}
+function setAssetSavedView(view) {
+  activeAssetSavedView = view;
+  document.getElementById('searchInput').value = '';
+  document.getElementById('inspectionDateFilter').value = '';
+  document.getElementById('typeFilter').value = 'all';
+  if (view === 'operation') setStatusFilterValue('operation');
+  else if (view === 'stacked') setStatusFilterValue('stacked');
+  else setStatusFilterValue('all');
+  if (view !== 'locationFocus') {
+    const loc = document.getElementById('locationFilter');
+    if (loc) loc.value = 'all';
+  }
+  updateAssetSavedViewButtons();
+  currentPage = 1;
+  renderTable();
+}
+function applyAssetDeepLink() {
+  if (assetDeepLinkApplied) return;
+  const params = new URLSearchParams(window.location.search);
+  const location = params.get('location');
+  const client = params.get('client');
+  const status = params.get('status');
+  if (!location && !client && !status) return;
+  assetDeepLinkApplied = true;
+  if (client) {
+    const cf = document.getElementById('clientFilter');
+    if (cf) {
+      cf.value = client;
+      populateToolbarLocationFilter();
+    }
+  }
+  if (location) {
+    const loc = document.getElementById('locationFilter');
+    if (loc) {
+      const match = [...loc.options].find(o =>
+        o.value.toLowerCase() === location.toLowerCase() ||
+        o.textContent.toLowerCase() === location.toLowerCase()
+      );
+      if (match) loc.value = match.value;
+    }
+  }
+  if (status) setStatusFilterValue(status);
+  activeAssetSavedView = location ? 'locationFocus' : 'custom';
+  updateAssetSavedViewButtons();
+  currentPage = 1;
+  renderTable();
+}
 function onClientToolbarFilterChange() {
   populateToolbarLocationFilter();
   applyFilters();
@@ -2395,7 +2475,7 @@ function buildCertLog(assetId) {
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:13px;height:13px;"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
           Certificate Log
         </span>
-        <a href="certificates.html" style="font-size:11px;font-weight:600;color:var(--sap-brand);">Manage →</a>
+        <a href="certificates.html?asset=${encodeURIComponent(assetId)}" style="font-size:11px;font-weight:600;color:var(--sap-brand);">Manage →</a>
       </div>
       ${summaryBar}
       <div style="overflow-x:auto;border:1px solid var(--sap-table-border);border-radius:6px;">
@@ -2502,6 +2582,8 @@ function openDrawer(id) {
   const isTech    = role === 'technician';
   df.innerHTML = `
     <button class="btn btn-ghost" onclick="closeDrawer()">Close</button>
+    <button class="btn btn-ghost" onclick="window.location.href='certificates.html?asset=${encodeURIComponent(a.assetId)}'">Certificates</button>
+    <button class="btn btn-ghost" onclick="window.location.href='jobs.html?client=${encodeURIComponent(a.client || '')}&location=${encodeURIComponent(a.location || '')}'">Jobs</button>
     ${isTech ? `<button class="btn btn-warning" onclick="closeDrawer();openStatusModal('${a.assetId}')">Request Status Change</button>` : ''}
     ${canEdit ? `<button class="btn btn-secondary" onclick="closeDrawer();openEditModal('${a.assetId}')">Edit</button>` : ''}
     ${canDelete ? `<button class="btn btn-danger" onclick="closeDrawer();openDeleteModal('${a.assetId}')">Delete</button>` : ''}
@@ -3565,8 +3647,11 @@ function populateToolbarLocationFilter() {
   if (clientF !== 'all') {
     locs = locs.filter(l => !l.client || l.client === clientF);
   }
-  const names = [...new Set(locs.map(l => l.name).filter(Boolean))].sort((a,b) => a.localeCompare(b));
-  sel.innerHTML = '<option value="all">All Locations</option>' + names.map(n => `<option value="${n}">${n}</option>`).join('');
+  const rows = locs
+    .filter(l => l.id || l.name)
+    .sort((a,b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
+  sel.innerHTML = '<option value="all">All Locations</option>' +
+    rows.map(l => `<option value="${l.id || l.name}">${l.name || l.id}</option>`).join('');
   sel.value = [...sel.options].some(o => o.value === current) ? current : 'all';
 }
 
@@ -3614,6 +3699,7 @@ async function loadAssets() {
     ASSETS = [];
   }
   renderTable();
+  applyAssetDeepLink();
   syncAssetsToStorage();
 }
 

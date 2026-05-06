@@ -578,9 +578,17 @@ function renderTable(data) {
               ? `<span style="font-size:15px;font-weight:800;color:var(--sap-brand);">${n}</span>`
               : `<span style="font-size:13px;font-weight:600;color:var(--sap-text-disabled);">0</span>`;
           })()}
-          <a href="assets.html" class="asset-pill" title="View assets at ${loc.name}">
+          <a href="assets.html?client=${encodeURIComponent(loc.client || '')}&location=${encodeURIComponent(loc.id)}" class="asset-pill" title="View assets at ${loc.name}">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-            View
+            Assets
+          </a>
+          <a href="certificates.html?location=${encodeURIComponent(loc.name)}" class="asset-pill" title="View certificates at ${loc.name}">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806"/></svg>
+            Certs
+          </a>
+          <a href="jobs.html?client=${encodeURIComponent(loc.client || '')}&location=${encodeURIComponent(loc.id)}" class="asset-pill" title="View jobs at ${loc.name}">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            Jobs
           </a>
         </div>
       </td>
@@ -614,13 +622,21 @@ function renderCards(data) {
       <div class="loc-card__footer">
         <div style="display:flex;align-items:center;gap:6px;">
           ${(() => {
-            const n = countAssetsForLoc(loc.name);
+            const n = countAssetsForLoc(loc.id);
             return `<span style="font-size:14px;font-weight:800;color:var(--sap-brand);">${n}</span>
                     <span style="font-size:11px;color:var(--sap-text-secondary);font-weight:500;">${n===1?'asset':'assets'}</span>`;
           })()}
-          <a href="assets.html" class="asset-pill" style="margin-left:4px;" title="View assets">
+          <a href="assets.html?client=${encodeURIComponent(loc.client || '')}&location=${encodeURIComponent(loc.id)}" class="asset-pill" style="margin-left:4px;" title="View assets">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-            View
+            Assets
+          </a>
+          <a href="certificates.html?location=${encodeURIComponent(loc.name)}" class="asset-pill" title="View certificates">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806"/></svg>
+            Certs
+          </a>
+          <a href="jobs.html?client=${encodeURIComponent(loc.client || '')}&location=${encodeURIComponent(loc.id)}" class="asset-pill" title="View jobs">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            Jobs
           </a>
         </div>
         ${canEdit ? `<div style="display:flex;gap:4px;">

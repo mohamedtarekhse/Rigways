@@ -445,6 +445,15 @@
 
   <!-- Table card -->
   <div class="sap-card sap-card--toolbar-dropdown">
+    <div class="saved-view-strip" id="certSavedViews">
+      <span class="saved-view-label">Views</span>
+      <button class="saved-view-btn active" data-view="all" onclick="setCertSavedView('all')"><span class="saved-view-btn__dot"></span>All</button>
+      <button class="saved-view-btn" data-view="expiring" onclick="setCertSavedView('expiring')"><span class="saved-view-btn__dot"></span>Expiring</button>
+      <button class="saved-view-btn" data-view="expired" onclick="setCertSavedView('expired')"><span class="saved-view-btn__dot"></span>Expired</button>
+      <button class="saved-view-btn" data-view="pending" onclick="setCertSavedView('pending')"><span class="saved-view-btn__dot"></span>Pending</button>
+      <button class="saved-view-btn" data-view="noCertificate" onclick="setCertSavedView('noCertificate')"><span class="saved-view-btn__dot"></span>No File</button>
+      <button class="saved-view-btn" data-view="justUploaded" onclick="setCertSavedView('justUploaded')"><span class="saved-view-btn__dot"></span>New Uploads</button>
+    </div>
     <!-- Single compact toolbar -->
     <div class="sap-toolbar" style="gap:6px; flex-wrap:wrap; padding:6px 12px; border-bottom:1px solid var(--sap-table-border);">
 
@@ -966,7 +975,9 @@ let currentPage = 1;
 let PAGE_SIZE = Number(localStorage.getItem('sap_cert_page_size') || 25);
 if (![25,50,100].includes(PAGE_SIZE)) PAGE_SIZE = 25;
 let activeStatusFilter = 'all';
+let activeCertSavedView = 'all';
 let filteredData = [];
+let deepLinkApplied = false;
 let selectedFile = null;
 let deleteTargetId = null;
 let rejectTargetId = null;
@@ -1640,7 +1651,63 @@ function filterStatus(val, el) {
   el.classList.add('active');
   currentPage = 1; renderTable();
 }
-function applyFilters() { currentPage = 1; renderTable(); }
+function applyFilters() {
+  activeCertSavedView = 'custom';
+  updateCertSavedViewButtons();
+  currentPage = 1; renderTable();
+}
+function updateCertSavedViewButtons() {
+  document.querySelectorAll('#certSavedViews .saved-view-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === activeCertSavedView);
+  });
+}
+function setCertStatusFilterValue(status) {
+  activeStatusFilter = status;
+  window.activeMultipleStatuses = null;
+  const boxes = document.querySelectorAll('#statusDropdown input[type="checkbox"]');
+  boxes.forEach(cb => cb.checked = cb.dataset.status === status || (status === 'all' && cb.dataset.status === 'all'));
+  const labelMap = {
+    all: 'All',
+    expiring: 'Expiring',
+    expired: 'Expired',
+    pending: 'Pending',
+    noCertificate: 'No Certificate',
+    justUploaded: 'Just Uploaded'
+  };
+  const labelEl = document.getElementById('statusFilterLabel');
+  if (labelEl) labelEl.textContent = labelMap[status] || status;
+}
+function setCertSavedView(view) {
+  activeCertSavedView = view;
+  document.getElementById('searchInput').value = '';
+  document.getElementById('uploadDateFilter').value = '';
+  document.getElementById('typeFilter').value = 'all';
+  setCertStatusFilterValue(view === 'all' ? 'all' : view);
+  updateCertSavedViewButtons();
+  currentPage = 1;
+  renderTable();
+}
+function applyCertificateDeepLink() {
+  if (deepLinkApplied) return;
+  const params = new URLSearchParams(window.location.search);
+  const asset = params.get('asset');
+  const job = params.get('job');
+  const location = params.get('location');
+  const status = params.get('status');
+  if (!asset && !job && !location && !status) return;
+  deepLinkApplied = true;
+  if (asset || job || location) {
+    const search = document.getElementById('searchInput');
+    if (search) search.value = asset || job || location;
+  }
+  if (status) {
+    setCertStatusFilterValue(status);
+    activeCertSavedView = status;
+    updateCertSavedViewButtons();
+  }
+  currentPage = 1;
+  renderTable();
+}
 
 function onClientFilterChange() {
   populateLocationFilter();
@@ -3436,6 +3503,7 @@ async function loadCerts() {
     CERTS.forEach(cert => { if (cert.file_url) window._certUrls[cert.id] = cert.file_url; });
   } catch(e) { CERTS = []; }
   renderTable();
+  applyCertificateDeepLink();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
