@@ -26,7 +26,7 @@
     .loc-type-badge--rig{background:#e8f3ff;color:#0070f2;border:1px solid #90caf9;}
     .loc-type-badge--workshop{background:#fff3e0;color:#e76500;border:1px solid #ffcc80;}
     .loc-type-badge--other{background:#f5f6f7;color:#6a6d70;border:1px solid #e8eaed;}
-    .loc-id-chip{font-family:monospace;font-size:11px;font-weight:700;background:var(--sap-page-bg);border:1px solid var(--sap-table-border);border-radius:4px;padding:2px 6px;color:var(--sap-brand);}
+.loc-id-chip{font-size:12px;font-weight:700;background:var(--sap-page-bg);border:1px solid var(--sap-table-border);border-radius:4px;padding:2px 6px;color:var(--sap-brand);}
     .client-dot-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--sap-page-bg);border:1px solid var(--sap-table-border);}
     .client-dot-badge::before{content:'';width:7px;height:7px;border-radius:50%;flex-shrink:0;}
     .cell-check{width:36px;text-align:center;}
@@ -39,7 +39,7 @@
     .loc-card:hover{box-shadow:0 6px 20px rgba(0,0,0,.1);transform:translateY(-2px);}
     .loc-card__accent{height:3px;}
     .loc-card__body{padding:var(--sp-md) var(--sp-lg);}
-    .loc-card__id{font-family:monospace;font-size:11px;font-weight:700;color:var(--sap-brand);margin-bottom:4px;}
+.loc-card__id{font-size:11px;font-weight:700;color:var(--sap-brand);margin-bottom:4px;}
     .loc-card__name{font-size:16px;font-weight:800;color:var(--sap-text-primary);margin-bottom:4px;}
     .loc-card__desc{font-size:12px;color:var(--sap-text-secondary);margin-bottom:8px;min-height:16px;}
     .loc-card__footer{display:flex;align-items:center;justify-content:space-between;padding:var(--sp-sm) var(--sp-lg);background:#fafbfc;border-top:var(--sap-card-border);}
@@ -213,8 +213,8 @@
         <table class="sap-table">
           <thead><tr>
             <th class="cell-check" id="thCheck"><input type="checkbox" class="sap-checkbox" onchange="toggleSelectAll(this)"/></th>
-            <th onclick="sortBy('id')" style="cursor:pointer;">Location ID <span class="sort-icon">↕</span></th>
             <th onclick="sortBy('name')" style="cursor:pointer;">Location Name <span class="sort-icon">↕</span></th>
+            <th onclick="sortBy('id')" style="cursor:pointer;">Code <span class="sort-icon">↕</span></th>
             <th onclick="sortBy('type')" style="cursor:pointer;">Type <span class="sort-icon">↕</span></th>
             <th onclick="sortBy('client')" style="cursor:pointer;" id="thClient">Client <span class="sort-icon">↕</span></th>
             <th>Description</th>
@@ -369,7 +369,9 @@ function loadAssets() {
 }
 
 function countAssetsForLoc(locId) {
-  return loadAssets().filter(a => a.location === locId).length;
+  const loc = (_locsCache || DEFAULT_FUNC_LOCS || []).find(l => l.id === locId || l.name === locId);
+  const names = new Set([locId, loc?.id, loc?.name].filter(Boolean).map(v => String(v).toLowerCase()));
+  return loadAssets().filter(a => names.has(String(a.location || '').toLowerCase())).length;
 }
 let CLIENT_COLORS = {};
 let _clientsCache = null;
@@ -557,10 +559,10 @@ function renderTable(data) {
 
     return `<tr onmouseenter="showRow(this)" onmouseleave="hideRow(this)">
       <td class="cell-check">${canEdit ? `<input type="checkbox" class="sap-checkbox" data-id="${loc.id}" onchange="updateMassBar()"/>` : ''}</td>
-      <td><span class="loc-id-chip">${loc.id}</span></td>
+      <td><span class="loc-id-chip">${loc.name}</span></td>
       <td>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-          <div style="font-weight:700;font-size:13px;">${loc.name}</div>
+          <div style="font-family:monospace;font-size:12px;color:var(--sap-text-secondary);">${loc.id}</div>
           ${canEdit ? `<div class="row-actions" style="display:none;gap:3px;align-items:center;flex-shrink:0;">
             <button class="btn btn-secondary btn-icon" onclick="openEditModal('${loc.id}')" style="width:26px;height:26px;"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
             <button class="btn btn-danger btn-icon" onclick="openDeleteModal('${loc.id}')" style="width:26px;height:26px;"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button>
@@ -578,7 +580,7 @@ function renderTable(data) {
               ? `<span style="font-size:15px;font-weight:800;color:var(--sap-brand);">${n}</span>`
               : `<span style="font-size:13px;font-weight:600;color:var(--sap-text-disabled);">0</span>`;
           })()}
-          <a href="assets.html?client=${encodeURIComponent(loc.client || '')}&location=${encodeURIComponent(loc.id)}" class="asset-pill" title="View assets at ${loc.name}">
+          <a href="assets.html?client=${encodeURIComponent(loc.client || '')}&location=${encodeURIComponent(loc.name)}" class="asset-pill" title="View assets at ${loc.name}">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
             Assets
           </a>
@@ -609,7 +611,7 @@ function renderCards(data) {
     return `<div class="loc-card">
       <div class="loc-card__accent" style="background:${cfg.accent};"></div>
       <div class="loc-card__body">
-        <div class="loc-card__id">${loc.id}</div>
+        <div class="loc-card__id">Code ${loc.id}</div>
         <div class="loc-card__name">${loc.name}</div>
         <div class="loc-card__desc">${loc.desc||'No description provided'}</div>
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
@@ -626,7 +628,7 @@ function renderCards(data) {
             return `<span style="font-size:14px;font-weight:800;color:var(--sap-brand);">${n}</span>
                     <span style="font-size:11px;color:var(--sap-text-secondary);font-weight:500;">${n===1?'asset':'assets'}</span>`;
           })()}
-          <a href="assets.html?client=${encodeURIComponent(loc.client || '')}&location=${encodeURIComponent(loc.id)}" class="asset-pill" style="margin-left:4px;" title="View assets">
+          <a href="assets.html?client=${encodeURIComponent(loc.client || '')}&location=${encodeURIComponent(loc.name)}" class="asset-pill" style="margin-left:4px;" title="View assets">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
             Assets
           </a>

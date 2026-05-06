@@ -312,6 +312,9 @@ export async function handleCertificates(request, env, path) {
     if (error) return serverErr(env);
     const cert = Array.isArray(data) ? data[0] : data;
     await _recordCertificateHistory(db, cert, session, 'create');
+    if (cert.approval_status === 'approved') {
+      await _reconcileRenewalNotifications(db, cert);
+    }
 
     // Notify managers/admins about pending certs
     if (cert.approval_status === 'pending') {
@@ -375,6 +378,9 @@ export async function handleCertificates(request, env, path) {
         url: '/certificates.html',
         tag: 'cert-review-' + certId,
       }).catch(() => {});
+    }
+    if (body.approval_status === 'approved') {
+      await _reconcileRenewalNotifications(db, updated || existing);
     }
 
     return ok(updated || existing, env);
@@ -484,4 +490,72 @@ async function _notifyUser(db, userId, type, title, body, refType, refId) {
   try {
     await db.insert('notifications', { user_id: userId, type, title, body, ref_type: refType, ref_id: refId, is_read: false });
   } catch(e) { console.warn('Notify failed:', e); }
+}
+
+async function _reconcileRenewalNotifications(db, newCert) {
+  try {
+    if (!newCert?.id || !newCert.asset_id || !newCert.cert_type || !newCert.expiry_date) return;
+    const today = new Date().toISOString().split('T')[0];
+    const in30d = new Date(Date.now() + 30 * 86_400_000).toISOString().split('T')[0];
+    const { data: oldRows } = await db.from('certificates', {
+      filters: {
+        'asset_id.eq': newCert.asset_id,
+        'cert_type.eq': newCert.cert_type,
+        'approval_status.eq': 'approved',
+        'id.neq': newCert.id,
+        'expiry_date.lte': in30d,
+      },
+      select: 'id,name,cert_number,cert_type,expiry_date,uploaded_by,asset_id',
+      limit: 50,
+      order: 'expiry_date.desc',
+    });
+    const oldCerts = (Array.isArray(oldRows) ? oldRows : []).filter(oldCert =>
+      String(newCert.expiry_date) > String(oldCert.expiry_date) &&
+      String(newCert.expiry_date) >= today
+    );
+    if (!oldCerts.length) return;
+
+    const now = new Date().toISOString();
+    for (const oldCert of oldCerts) {
+      await db.update('notifications', { is_read: true, read_at: now }, {
+        filters: {
+          'ref_id.eq': oldCert.id,
+          'type.in': ['cert_expired', 'cert_expiring_critical', 'cert_expiring_warning'],
+          'is_read.is': false,
+        }
+      }).catch(() => {});
+      const recipients = await _notificationRecipients(db, oldCert);
+      const title = 'Certificate Renewal Detected';
+      const body = `"${oldCert.name || oldCert.cert_number}" was replaced by "${newCert.name || newCert.cert_number}" for the same asset and certificate type.`;
+      for (const userId of recipients) {
+        await _insertNotificationOnce(db, userId, 'cert_renewed', title, body, newCert.id);
+      }
+    }
+  } catch(e) { console.warn('Renewal notification reconciliation failed:', e); }
+}
+
+async function _notificationRecipients(db, cert) {
+  const recipients = new Set();
+  const { data: users } = await db.from('users', {
+    filters: { 'role.in': ['admin', 'manager'], 'is_active.is': true },
+    select: 'id',
+    limit: 500,
+  });
+  for (const user of Array.isArray(users) ? users : []) {
+    if (user.id) recipients.add(user.id);
+  }
+  if (cert.uploaded_by) recipients.add(cert.uploaded_by);
+  return [...recipients];
+}
+
+async function _insertNotificationOnce(db, userId, type, title, body, refId) {
+  if (!userId || !refId) return 0;
+  const { data: existing } = await db.from('notifications', {
+    filters: { 'user_id.eq': userId, 'type.eq': type, 'ref_id.eq': refId, 'is_read.is': false },
+    select: 'id',
+    limit: 1,
+  });
+  if (Array.isArray(existing) && existing.length) return 0;
+  await db.insert('notifications', { user_id: userId, type, title, body, ref_type: 'certificate', ref_id: refId, is_read: false });
+  return 1;
 }

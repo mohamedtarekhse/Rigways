@@ -1665,7 +1665,10 @@ function renderTable() {
   if (role !== 'admin' && role !== 'manager') {
     // Users and technicians should not be filtered by location
   } else if (locF !== 'all') {
-    data = data.filter(a => a.location === locF);
+    data = data.filter(a => {
+      const locName = window._funcLocsCache?.find(l => l.id === a.location)?.name || a.location;
+      return a.location === locF || locName === locF;
+    });
   }
 
   /* Status filter */
@@ -3651,7 +3654,7 @@ function populateToolbarLocationFilter() {
     .filter(l => l.id || l.name)
     .sort((a,b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
   sel.innerHTML = '<option value="all">All Locations</option>' +
-    rows.map(l => `<option value="${l.id || l.name}">${l.name || l.id}</option>`).join('');
+    rows.map(l => `<option value="${l.name || l.id}">${l.name || l.id}</option>`).join('');
   sel.value = [...sel.options].some(o => o.value === current) ? current : 'all';
 }
 

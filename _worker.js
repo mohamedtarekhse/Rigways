@@ -1827,6 +1827,9 @@ async function handleCertificates(request, env, path) {
     if (error) return serverErr(env);
     const cert = Array.isArray(data) ? data[0] : data;
     await _recordCertificateHistory(db, cert, session, 'create');
+    if (cert.approval_status === 'approved') {
+      await _reconcileRenewalNotifications(db, cert);
+    }
 
     // Notify managers/admins about pending certs
     if (cert.approval_status === 'pending') await _notifyApprovers(db, env, session, cert);
@@ -1896,6 +1899,9 @@ async function handleCertificates(request, env, path) {
         'certificate', certId,
         [session.sub]
       );
+    }
+    if (body.approval_status === 'approved') {
+      await _reconcileRenewalNotifications(db, updated || existing);
     }
 
     // Instant notification for manual expiry status change
@@ -2399,6 +2405,71 @@ async function _notifyRoles(db, env, roles, type, title, body, refType, refId, e
   } catch (e) {
     console.warn('_notifyRoles failed:', e);
   }
+}
+
+async function _reconcileRenewalNotifications(db, newCert) {
+  try {
+    if (!newCert?.id || !newCert.asset_id || !newCert.cert_type || !newCert.expiry_date) return;
+    const today = new Date().toISOString().split('T')[0];
+    const in30d = new Date(Date.now() + 30 * 86_400_000).toISOString().split('T')[0];
+    const { data: oldRows } = await db.from('certificates', {
+      filters: {
+        'asset_id.eq': newCert.asset_id,
+        'cert_type.eq': newCert.cert_type,
+        'approval_status.eq': 'approved',
+        'id.neq': newCert.id,
+        'expiry_date.lte': in30d,
+      },
+      select: 'id,name,cert_number,cert_type,expiry_date,uploaded_by,asset_id',
+      limit: 50,
+      order: 'expiry_date.desc',
+    });
+    const oldCerts = (Array.isArray(oldRows) ? oldRows : []).filter(oldCert =>
+      String(newCert.expiry_date) > String(oldCert.expiry_date) &&
+      String(newCert.expiry_date) >= today
+    );
+    if (!oldCerts.length) return;
+    const now = new Date().toISOString();
+    for (const oldCert of oldCerts) {
+      await db.update('notifications', { is_read: true, read_at: now }, {
+        filters: {
+          'ref_id.eq': oldCert.id,
+          'type.in': ['cert_expired', 'cert_expiring_critical', 'cert_expiring_warning'],
+          'is_read.is': false,
+        }
+      }).catch(() => {});
+      const recipients = await _notificationRecipientsForRenewal(db, oldCert);
+      const title = 'Certificate Renewal Detected';
+      const body = `"${oldCert.name || oldCert.cert_number}" was replaced by "${newCert.name || newCert.cert_number}" for the same asset and certificate type.`;
+      for (const userId of recipients) {
+        await _insertNotificationOnceForRenewal(db, userId, 'cert_renewed', title, body, newCert.id);
+      }
+    }
+  } catch (e) { console.warn('Renewal notification reconciliation failed:', e); }
+}
+
+async function _notificationRecipientsForRenewal(db, cert) {
+  const recipients = new Set();
+  const { data: users } = await db.from('users', {
+    filters: { 'role.in': ['admin', 'manager'], 'is_active.is': true },
+    select: 'id',
+    limit: 500,
+  });
+  for (const user of Array.isArray(users) ? users : []) if (user.id) recipients.add(user.id);
+  if (cert.uploaded_by) recipients.add(cert.uploaded_by);
+  return [...recipients];
+}
+
+async function _insertNotificationOnceForRenewal(db, userId, type, title, body, refId) {
+  if (!userId || !refId) return 0;
+  const { data: existing } = await db.from('notifications', {
+    filters: { 'user_id.eq': userId, 'type.eq': type, 'ref_id.eq': refId, 'is_read.is': false },
+    select: 'id',
+    limit: 1,
+  });
+  if (Array.isArray(existing) && existing.length) return 0;
+  await db.insert('notifications', { user_id: userId, type, title, body, ref_type: 'certificate', ref_id: refId, is_read: false });
+  return 1;
 }
 
 async function _withUploaderUsername(db, rows, field = 'uploaded_by') {
@@ -3470,17 +3541,28 @@ async function handleCheckExpiry(env) {
   const in7d = datePlusDays(7);
   const in14d = datePlusDays(14);
   const in30d = datePlusDays(30);
+  const certSelect = 'id,name,cert_number,cert_type,expiry_date,uploaded_by,client_id,asset_id,created_at';
+  const { data: approvedCertsRaw } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved' }, select: certSelect, limit: 5000, order: 'expiry_date.desc' });
+  const approvedCerts = Array.isArray(approvedCertsRaw) ? approvedCertsRaw : [];
 
-  const { data: expired } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved', 'expiry_date.lt': today }, select: 'id,name,cert_number,expiry_date,uploaded_by,client_id', limit: 500 });
-  const { data: crit7 } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved', 'expiry_date.gte': today, 'expiry_date.lte': in7d }, select: 'id,name,cert_number,expiry_date,uploaded_by,client_id', limit: 500 });
-  const { data: warn30 } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved', 'expiry_date.gt': in7d, 'expiry_date.lte': in30d }, select: 'id,name,cert_number,expiry_date,uploaded_by,client_id', limit: 500 });
+  const { data: expired } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved', 'expiry_date.lt': today }, select: certSelect, limit: 500, order: 'expiry_date.asc' });
+  const { data: crit7 } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved', 'expiry_date.gte': today, 'expiry_date.lte': in7d }, select: certSelect, limit: 500 });
+  const { data: warn30 } = await db.from('certificates', { filters: { 'approval_status.eq': 'approved', 'expiry_date.gt': in7d, 'expiry_date.lte': in30d }, select: certSelect, limit: 500 });
 
-  const expiredList = Array.isArray(expired) ? expired : [];
-  const criticalList = Array.isArray(crit7) ? crit7 : [];
-  const warningList = Array.isArray(warn30) ? warn30 : [];
+  const expiredRaw = Array.isArray(expired) ? expired : [];
+  const criticalRaw = Array.isArray(crit7) ? crit7 : [];
+  const warningRaw = Array.isArray(warn30) ? warn30 : [];
+  const { active, superseded } = await filterSupersededCertificates(db, [...expiredRaw, ...criticalRaw, ...warningRaw], approvedCerts, today);
+  const expiredList = active.filter(c => c.expiry_date < today);
+  const criticalList = active.filter(c => c.expiry_date >= today && c.expiry_date <= in7d);
+  const warningList = active.filter(c => c.expiry_date > in7d && c.expiry_date <= in30d);
+  await closeSupersededExpiryNotifications(db, superseded);
 
   let pushCount = 0;
+  let notificationCount = 0;
   if (expiredList.length > 0) {
+    notificationCount += await createExpiryNotifications(db, expiredList, 'cert_expired', 'Certificate Expired',
+      c => `"${c.name || c.cert_number}" expired on ${c.expiry_date}.`);
     const payload = { title: `⚠️ ${expiredList.length} Certs Expired`, body: expiredList.slice(0, 3).map(c => c.name || c.cert_number).join(', '), url: '/notifications.html', tag: 'cert-expired' };
     await sendPushToRoles(db, env, ['admin', 'manager'], payload); pushCount++;
     const uploaderIds = [...new Set(expiredList.map(c => c.uploaded_by).filter(Boolean))];
@@ -3491,6 +3573,8 @@ async function handleCheckExpiry(env) {
     }
   }
   if (criticalList.length > 0) {
+    notificationCount += await createExpiryNotifications(db, criticalList, 'cert_expiring_critical', 'Certificate Expiring Within 7 Days',
+      c => `"${c.name || c.cert_number}" will expire on ${c.expiry_date}.`);
     const payload = { title: `🔴 ${criticalList.length} Certs Expiring (7d)`, body: criticalList.slice(0, 3).map(c => `${c.name || c.cert_number} (${c.expiry_date})`).join(', '), url: '/notifications.html', tag: 'cert-expiring-critical' };
     await sendPushToRoles(db, env, ['admin', 'manager'], payload); pushCount++;
 
@@ -3502,6 +3586,8 @@ async function handleCheckExpiry(env) {
     }
   }
   if (warningList.length > 0 && new Date().getUTCDay() === 1) {
+    notificationCount += await createExpiryNotifications(db, warningList, 'cert_expiring_warning', 'Certificate Expiring Within 30 Days',
+      c => `"${c.name || c.cert_number}" will expire on ${c.expiry_date}.`);
     await sendPushToRoles(db, env, ['admin', 'manager'], { title: `🟡 ${warningList.length} Certs Expiring (30d)`, body: `${warningList.length} certificates due soon.`, url: '/notifications.html', tag: 'cert-expiring-warning' });
     pushCount++;
 
@@ -3512,12 +3598,80 @@ async function handleCheckExpiry(env) {
       pushCount++;
     }
   }
-  return { checked: true, expired: expiredList.length, critical: criticalList.length, warning: warningList.length, pushesSent: pushCount };
+  return { checked: true, expired: expiredList.length, critical: criticalList.length, warning: warningList.length, superseded: superseded.length, notificationsCreated: notificationCount, pushesSent: pushCount };
 }
 
 function datePlusDays(days) {
   const d = new Date(); d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().split('T')[0];
+}
+
+function renewalKey(cert) {
+  return `${cert.asset_id || ''}::${String(cert.cert_type || '').trim().toUpperCase()}`;
+}
+
+async function filterSupersededCertificates(db, candidates, approvedCerts, today) {
+  const latestByAssetType = new Map();
+  for (const cert of approvedCerts) {
+    if (!cert.asset_id || !cert.cert_type || !cert.expiry_date) continue;
+    const key = renewalKey(cert);
+    const current = latestByAssetType.get(key);
+    if (!current || String(cert.expiry_date) > String(current.expiry_date)) latestByAssetType.set(key, cert);
+  }
+  const active = [];
+  const superseded = [];
+  for (const cert of candidates) {
+    const replacement = latestByAssetType.get(renewalKey(cert));
+    const isRenewed = replacement && replacement.id !== cert.id && String(replacement.expiry_date) > String(cert.expiry_date) && String(replacement.expiry_date) >= today;
+    if (isRenewed) {
+      superseded.push({ oldCert: cert, newCert: replacement });
+      await createRenewalNotification(db, cert, replacement);
+    } else {
+      active.push(cert);
+    }
+  }
+  return { active, superseded };
+}
+
+async function closeSupersededExpiryNotifications(db, superseded) {
+  const now = new Date().toISOString();
+  for (const item of superseded) {
+    await db.update('notifications', { is_read: true, read_at: now }, {
+      filters: { 'ref_id.eq': item.oldCert.id, 'type.in': ['cert_expired', 'cert_expiring_critical', 'cert_expiring_warning'], 'is_read.is': false }
+    }).catch(() => {});
+  }
+}
+
+async function notificationRecipients(db, cert) {
+  const recipients = new Set();
+  const { data: users } = await db.from('users', { filters: { 'role.in': ['admin', 'manager'], 'is_active.is': true }, select: 'id', limit: 500 });
+  for (const user of Array.isArray(users) ? users : []) if (user.id) recipients.add(user.id);
+  if (cert.uploaded_by) recipients.add(cert.uploaded_by);
+  return [...recipients];
+}
+
+async function insertNotificationOnce(db, userId, type, title, body, refId) {
+  if (!userId || !refId) return 0;
+  const { data: existing } = await db.from('notifications', { filters: { 'user_id.eq': userId, 'type.eq': type, 'ref_id.eq': refId, 'is_read.is': false }, select: 'id', limit: 1 });
+  if (Array.isArray(existing) && existing.length) return 0;
+  await db.insert('notifications', { user_id: userId, type, title, body, ref_type: 'certificate', ref_id: refId, is_read: false }).catch(() => {});
+  return 1;
+}
+
+async function createExpiryNotifications(db, certs, type, title, bodyForCert) {
+  let count = 0;
+  for (const cert of certs) {
+    const recipients = await notificationRecipients(db, cert);
+    for (const userId of recipients) count += await insertNotificationOnce(db, userId, type, title, bodyForCert(cert), cert.id);
+  }
+  return count;
+}
+
+async function createRenewalNotification(db, oldCert, newCert) {
+  const title = 'Certificate Renewal Detected';
+  const body = `"${oldCert.name || oldCert.cert_number}" was replaced by "${newCert.name || newCert.cert_number}" for the same asset and certificate type.`;
+  const recipients = await notificationRecipients(db, oldCert);
+  for (const userId of recipients) await insertNotificationOnce(db, userId, 'cert_renewed', title, body, newCert.id);
 }
 
 // ── Entry point ──
