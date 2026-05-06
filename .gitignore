@@ -1,1 +1,43 @@
-Nothing should be ignored based on the provided file changes. The modification of 'app.js' is a source file that should be tracked in version control, and there are no build artifacts, dependencies, or temporary files listed in the changes that would warrant adding ignore rules.
+# Compiled and build artifacts
+*.pyc
+__pycache__/
+
+# Dependencies
+.venv/
+venv/
+node_modules/
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# MyPy cache
+.mypy_cache/
+__pycache__/
+
+# Pytest cache
+.pytest_cache/

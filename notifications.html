@@ -890,12 +890,19 @@ function renderNotifs() {
   // KPI strip removed by request.
 
   /* Tab counts */
-  document.getElementById('tabAll').textContent     = allActive.length;
-  document.getElementById('tabExpiry').textContent  = allActive.filter(n=>n.type==='expiry').length;
-  document.getElementById('tabApproval').textContent= allActive.filter(n=>n.type==='approval').length;
-  document.getElementById('tabSystem').textContent  = allActive.filter(n=>n.type==='system').length;
-  document.getElementById('tabUnread').textContent  = allActive.filter(n=>!n.read && !n.is_read && !n.isRead).length;
-  document.getElementById('sidebarBadge').textContent = allActive.filter(n=>!n.read && !n.is_read && !n.isRead).length;
+  const tabAll = document.getElementById('tabAll');
+  const tabExpiry = document.getElementById('tabExpiry');
+  const tabApproval = document.getElementById('tabApproval');
+  const tabSystem = document.getElementById('tabSystem');
+  const tabUnread = document.getElementById('tabUnread');
+  const sidebarBadge = document.getElementById('sidebarBadge');
+  
+  if (tabAll) tabAll.textContent = allActive.length;
+  if (tabExpiry) tabExpiry.textContent = allActive.filter(n=>n.type==='expiry').length;
+  if (tabApproval) tabApproval.textContent = allActive.filter(n=>n.type==='approval').length;
+  if (tabSystem) tabSystem.textContent = allActive.filter(n=>n.type==='system').length;
+  if (tabUnread) tabUnread.textContent = allActive.filter(n=>!n.read && !n.is_read && !n.isRead).length;
+  if (sidebarBadge) sidebarBadge.textContent = allActive.filter(n=>!n.read && !n.is_read && !n.isRead).length;
 
   const list = document.getElementById('notifList');
 
