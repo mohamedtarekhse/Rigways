@@ -1436,7 +1436,10 @@ function renderTable() {
       c.approvalStatus,
       c.expiryDate,
       c.notes,
-      CLIENTS_MAP[c.client]
+      c.inspector_id,
+      c.related_standard,
+      CLIENTS_MAP[c.client],
+      (window._assetMap && window._assetMap[c.asset_id]) || ''
     ].filter(Boolean).map(v => String(v).toLowerCase());
     
     return searchTerms.some(term => term.includes(search));

@@ -1663,13 +1663,23 @@ function renderTable() {
   if (inspDateF) data = data.filter(a => (a.inspectionDate || '') === inspDateF);
 
   /* Search */
-  if (search) data = data.filter(a =>
-    a.name.toLowerCase().includes(search) ||
-    a.assetId.toLowerCase().includes(search) ||
-    a.serial.toLowerCase().includes(search) ||
-    a.location.toLowerCase().includes(search) ||
-    a.type.toLowerCase().includes(search)
-  );
+  if (search) data = data.filter(a => {
+    const terms = [
+      a.name,
+      a.assetId,
+      a.serial,
+      a.location,
+      a.type,
+      a.manufacturer,
+      a.model,
+      a.description,
+      a.notes,
+      a.client,
+      CLIENTS_MAP[a.client],
+      window._funcLocsCache?.find(l => l.id === a.location)?.name || ''
+    ].filter(Boolean).map(v => String(v).toLowerCase());
+    return terms.some(t => t.includes(search));
+  });
 
   /* Sort */
   data.sort((a, b) => {
