@@ -221,7 +221,28 @@ export async function handleCertificates(request, env, path) {
         }
       }
     }
-    const withNames = await _withUserNames(db, Array.isArray(data) ? data : [], 'uploaded_by');
+    
+    // Fetch functional location names for enrichment
+    const flCodes = [...new Set((data || []).map(c => c.functional_location).filter(Boolean))];
+    let flNameMap = {};
+    if (flCodes.length > 0) {
+      const { data: flRows } = await db.from('functional_locations', {
+        filters: { 'fl_id.in': flCodes },
+        select: 'fl_id,name',
+      });
+      flNameMap = (flRows || []).reduce((acc, row) => {
+        acc[row.fl_id] = row.name || '';
+        return acc;
+      }, {});
+    }
+    
+    // Enrich certificates with functional location names
+    const enrichedCerts = (data || []).map(cert => ({
+      ...cert,
+      functionalLocationName: flNameMap[cert.functional_location] || '',
+    }));
+    
+    const withNames = await _withUserNames(db, enrichedCerts, 'uploaded_by');
     return ok({ certificates: withNames, limit, offset }, env);
   }
 

@@ -45,9 +45,30 @@ export async function handleUsers(request, env, path) {
     const filters = {};
     if (url.searchParams.get('role'))   filters['role.eq']      = url.searchParams.get('role');
     if (url.searchParams.get('active')) filters['is_active.is'] = url.searchParams.get('active') === 'true';
-    const { data, error } = await db.from('users', { select: SAFE, filters, limit, offset, order: 'created_at.desc' });
+    const { data: users, error } = await db.from('users', { select: SAFE, filters, limit, offset, order: 'created_at.desc' });
     if (error) return serverErr(env);
-    return ok({ users: data || [], limit, offset }, env);
+    
+    // Fetch functional location names for enrichment
+    const flCodes = [...new Set((users || []).map(u => u.functional_location).filter(Boolean))];
+    let flNameMap = {};
+    if (flCodes.length > 0) {
+      const { data: flRows } = await db.from('functional_locations', {
+        filters: { 'fl_id.in': flCodes },
+        select: 'fl_id,name',
+      });
+      flNameMap = (flRows || []).reduce((acc, row) => {
+        acc[row.fl_id] = row.name || '';
+        return acc;
+      }, {});
+    }
+    
+    // Enrich users with functional location names
+    const enrichedUsers = (users || []).map(user => ({
+      ...user,
+      functional_location_name: flNameMap[user.functional_location] || '',
+    }));
+    
+    return ok({ users: enrichedUsers, limit, offset }, env);
   }
 
   /* GET ONE */
