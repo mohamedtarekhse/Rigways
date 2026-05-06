@@ -1243,6 +1243,18 @@ function toggleLang()      { SapLang.toggle(); }
 function toggleSidebar()   { SapSidebar.toggle(); }
 function toggleUserMenu()  { SapShell.toggleUserMenu(); }
 function logout()          { SapSession.logout(); }
+function refreshData()     {
+  if (typeof SapToast !== 'undefined') SapToast.info('Refreshing', 'Reloading data from database...');
+  if (typeof loadAssets === 'function') loadAssets();
+  else if (typeof loadCerts === 'function') loadCerts();
+  else if (typeof loadClients === 'function') loadClients();
+  else if (typeof loadInspectors === 'function') loadInspectors();
+  else if (typeof loadLocations === 'function') loadLocations();
+  else if (typeof loadJobs === 'function') loadJobs();
+  else if (typeof loadNotifications === 'function') loadNotifications();
+  else if (typeof loadFiles === 'function') loadFiles();
+  else window.location.reload();
+}
 
 /* ================================================================
    EXPORTS (for module environments / bundlers)
