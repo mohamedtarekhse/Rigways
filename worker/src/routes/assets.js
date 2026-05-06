@@ -8,6 +8,49 @@ import { validate, pick, compact }           from '../utils/validate.js';
 const TYPES    = ['Hoisting Equipment','Drilling Equipment','Mud System Low Pressure','Mud System High Pressure','Wirelines','Structure','Well Control','Tubular'];
 const STATUSES = ['operation','stacked'];
 
+async function resolveClientAliases(db, rawClientId) {
+  const key = String(rawClientId || '').trim();
+  if (!key) return [];
+  const out = new Set([key]);
+  const queries = [
+    { 'id.eq': key },
+    { 'client_id.eq': key },
+  ];
+  for (const filters of queries) {
+    const { data } = await db.from('clients', { filters, select:'id,client_id', limit:1 });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row?.id) out.add(String(row.id));
+    if (row?.client_id) out.add(String(row.client_id));
+  }
+  return Array.from(out);
+}
+
+async function resolveFunctionalLocationAliases(db, rawLocation, rawClientId) {
+  const key = String(rawLocation || '').trim();
+  if (!key) return [];
+  const filtersToTry = [
+    { 'fl_id.eq': key },
+    { 'name.eq': key },
+    { 'id.eq': key },
+  ];
+  const clientAliases = await resolveClientAliases(db, rawClientId);
+  for (const clientId of clientAliases) {
+    if (!clientId) continue;
+    filtersToTry.push({ 'fl_id.eq': key, 'client_id.eq': clientId });
+    filtersToTry.push({ 'name.eq': key, 'client_id.eq': clientId });
+  }
+
+  const rows = [];
+  for (const filters of filtersToTry) {
+    const { data } = await db.from('functional_locations', {
+      filters,
+      select:'id,fl_id,name,client_id',
+      limit:10,
+    });
+    for (const row of Array.isArray(data) ? data : []) rows.push(row);
+  }
+  return buildFunctionalLocationAliases(key, rows);
+}
 
 async function resolveAssetId(db, rawId) {
   if (!rawId) return null;
@@ -135,6 +178,24 @@ export async function handleAssets(request, env, path) {
     let { data, error } = await db.from('assets', { select:'*', filters, limit, offset, order:'created_at.desc' });
     if (error) return serverErr(env);
 
+    // Backward-compat fallback: some deployments store assets.client_id as clients.id,
+    // while session.customerId contains clients.client_id (or vice versa).
+    if (isRestricted && (!Array.isArray(data) || data.length === 0)) {
+      const clientAliases = session.customerId ? await resolveClientAliases(db, session.customerId) : [''];
+      for (const clientAlias of clientAliases) {
+        const f2 = { ...filters };
+        if (clientAlias) f2['client_id.eq'] = clientAlias;
+        const retry = await db.from('assets', { select:'*', filters: f2, limit, offset, order:'created_at.desc' });
+        if (retry.error) continue;
+        const rows = Array.isArray(retry.data) ? retry.data : [];
+        if (rows.length) {
+          data = rows;
+          break;
+        }
+        if (Array.isArray(data) && data.length) break;
+      }
+    }
+
     return ok({ assets: data || [], limit, offset }, env);
   }
 
@@ -144,7 +205,8 @@ export async function handleAssets(request, env, path) {
     const asset = Array.isArray(data) ? data[0] : data;
     if (!asset) return notFound('Asset', env);
     if (['user','technician'].includes(session.role) && session.customerId) {
-      if (asset.client_id !== session.customerId) return forbidden(env);
+      const aliases = await resolveClientAliases(db, session.customerId);
+      if (!aliases.includes(String(asset.client_id || ''))) return forbidden(env);
     }
     return ok(asset, env);
   }

@@ -1355,7 +1355,7 @@ async function loadNotifications() {
     const allAssets = ((as.data || as).assets || []);
     const assetsList = Array.isArray(allAssets) ? allAssets : [];
     const assetNumberById = new Map(assetsList.map(a => [a.id, a.asset_number || a.id]));
-    const assetLocById = new Map(assetsList.map(a => [a.id, a.functional_location_name || a.functional_location || a.location || '']));
+    const assetLocById = new Map(assetsList.map(a => [a.id, a.functional_location || a.location || '']));
 
     // Today for expiry math
     const todayMs = new Date().setHours(0,0,0,0);
@@ -1363,46 +1363,44 @@ async function loadNotifications() {
     // ── Derive expiry notifications from certificate data ──────────────
     const expiryNotifs = [];
 
-    // Group certificates by asset and type to handle suppression (new uploads stop old alerts)
-    const certGroups = new Map();
+    // Certs expiring within 30 days
     (Array.isArray(allCerts) ? allCerts : []).forEach(cert => {
-      if (!cert.asset_id) return;
-      const rawType = String(cert.cert_type || '');
-      const baseType = rawType.split(' — ')[0] || rawType;
-      const subType = cert.lifting_subtype || '';
-      const groupKey = `${cert.asset_id}|${baseType}|${subType}`;
-
-      if (!certGroups.has(groupKey)) {
-        certGroups.set(groupKey, { latestApproved: null, hasPending: false });
-      }
-      const group = certGroups.get(groupKey);
-
-      if (cert.approval_status === 'pending') {
-        group.hasPending = true;
-      } else if (cert.approval_status === 'approved' && cert.expiry_date) {
-        // Keep only the one that expires furthest in the future (latest renewal)
-        if (!group.latestApproved || new Date(cert.expiry_date) > new Date(group.latestApproved.expiry_date)) {
-          group.latestApproved = cert;
-        }
-      }
-    });
-
-    // Generate alerts only for the latest approved cert if no renewal is pending
-    certGroups.forEach((group) => {
-      if (group.hasPending || !group.latestApproved) return;
-      
-      const cert = group.latestApproved;
+      if (!cert?.expiry_date || cert.approval_status !== 'approved') return;
       const expiryMs = new Date(cert.expiry_date).setHours(0,0,0,0);
-      const days = Math.ceil((expiryMs - todayMs) / 86400000);
-      
-      if (days > 30) return; // Not expiring yet
-
+      const days     = Math.ceil((expiryMs - todayMs) / 86400000);
+      if (days < 0 || days > 30) return;
+      const priority = days <= 7 ? 'critical' : days <= 14 ? 'high' : 'medium';
       const assetLabel = assetNumberById.get(cert.asset_id) || cert.asset_id || '—';
       const funcLoc = assetLocById.get(cert.asset_id) || '';
-      const clientName = cert.client_name || ((window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(cert.client_id) : (cert.client_id || ''));
+      expiryNotifs.push({
+        id:        'exp-' + cert.id,
+        type:      'expiry',
+        titleEn:   `Certificate Expiring: ${h(cert.name || cert.cert_number || cert.id)}`,
+        descEn:    `Expires on ${h(cert.expiry_date)} — ${days} day${days !== 1 ? 's' : ''} remaining. Asset: ${h(assetLabel)}`,
+        priority,
+        daysLeft:  days,
+        client:    cert.client_id,
+        clientName: (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(cert.client_id) : (cert.client_id || ''),
+        certId:    cert.cert_number || cert.id,
+        jobNumber: cert.notes || '',
+        read:      false,
+        is_read:   false,
+        isRead:    false,
+        dismissed: false,
+        time:      h(cert.expiry_date),
+        link:      'certificates.html',
+        functionalLocation: funcLoc,
+      });
+    });
 
+    // Certs already expired (approved but past expiry date)
+    allCerts.forEach(cert => {
+      if (!cert?.expiry_date || cert.approval_status !== 'approved') return;
+      const expiryMs = new Date(cert.expiry_date).setHours(0,0,0,0);
+      const days     = Math.ceil((expiryMs - todayMs) / 86400000);
       if (days < 0) {
-        // Already Expired
+        const assetLabel = assetNumberById.get(cert.asset_id) || cert.asset_id || '—';
+        const funcLoc = assetLocById.get(cert.asset_id) || '';
         expiryNotifs.push({
           id:        'expired-' + cert.id,
           type:      'expiry',
@@ -1411,29 +1409,7 @@ async function loadNotifications() {
           priority:  'critical',
           daysLeft:  days,
           client:    cert.client_id,
-          clientName: clientName,
-          certId:    cert.cert_number || cert.id,
-          jobNumber: cert.notes || '',
-          read:      false,
-          is_read:   false,
-          isRead:    false,
-          dismissed: false,
-          time:      h(cert.expiry_date),
-          link:      'certificates.html',
-          functionalLocation: funcLoc,
-        });
-      } else {
-        // Expiring Soon
-        const priority = days <= 7 ? 'critical' : days <= 14 ? 'high' : 'medium';
-        expiryNotifs.push({
-          id:        'exp-' + cert.id,
-          type:      'expiry',
-          titleEn:   `Certificate Expiring: ${h(cert.name || cert.cert_number || cert.id)}`,
-          descEn:    `Expires on ${h(cert.expiry_date)} — ${days} day${days !== 1 ? 's' : ''} remaining. Asset: ${h(assetLabel)}`,
-          priority,
-          daysLeft:  days,
-          client:    cert.client_id,
-          clientName: clientName,
+          clientName: (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(cert.client_id) : (cert.client_id || ''),
           certId:    cert.cert_number || cert.id,
           jobNumber: cert.notes || '',
           read:      false,
@@ -1467,10 +1443,10 @@ async function loadNotifications() {
         priority,
         daysLeft:  null,
         client:    n.client_id || null,
-        clientName: n.client_name || ((window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(n.client_id || '') : (n.client_id || '')),
+        clientName: (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(n.client_id || '') : (n.client_id || ''),
         certId:    n.ref_type === 'certificate' ? n.ref_id : null,
         jobNumber: '',
-        functionalLocation: n.functional_location_name || '',
+        functionalLocation: '',
         read:      n.is_read,
         isRead:    n.is_read,
         dismissed: false,
