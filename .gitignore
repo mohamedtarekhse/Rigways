@@ -1,24 +1,31 @@
-# Database migrations
-migrations/*.sql
-
-# Dependencies
-node_modules/
-.venv/
-venv/
+# Compiled and build artifacts
+*.pyc
 __pycache__/
-*.egg-info/
+*.o
+*.obj
+*.class
+*.exe
+*.dll
+*.so
+*.a
+*.out
 dist/
 build/
 target/
-.gradle/
 
-# Logs
-*.log
-
-# Environment variables
+# Dependencies
+node_modules/
+venv/
+.venv/
 .env
 .env.local
-*.env.*
+.env.*
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
 
 # Editors
 .vscode/
@@ -26,25 +33,22 @@ target/
 *.swp
 *.swo
 
-# OS generated files
+# System files
 .DS_Store
 Thumbs.db
 
-# Testing
-.coverage
-htmlcov/
+# Coverage
 coverage/
-.pytest_cache/
-.mypy_cache/
+htmlcov/
+.coverage
 
-# Compiled files
-*.pyc
+# Python specific
+.mypy_cache/
+.pytest_cache/
+
+# Java/Gradle
+.gradle/
 *.class
-*.o
-*.obj
-*.so
-*.dll
-*.exe
 
 # Compressed files
 *.zip
