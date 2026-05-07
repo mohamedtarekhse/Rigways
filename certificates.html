@@ -57,6 +57,22 @@
     .file-chip:hover { background: var(--sap-brand-light); }
     .file-chip svg { width: 12px; height: 12px; color: var(--sap-error); }
 
+    /* Form Validation Styles */
+    .sap-input--error {
+      border-color: var(--sap-error) !important;
+      background-color: var(--sap-error-bg) !important;
+    }
+    .sap-field-error-msg {
+      color: var(--sap-error);
+      font-size: 11px;
+      font-weight: 600;
+      margin-top: 4px;
+      display: none; /* Hidden by default */
+    }
+    .sap-input--error + .sap-field-error-msg {
+      display: block;
+    }
+
     /* Edit-window countdown */
     .edit-window-badge {
       display: inline-flex; align-items: center; gap: 4px;
@@ -2206,6 +2222,68 @@ function uploadCertificateFileWithProgress({ url, formData, token, onProgress })
   });
 }
 
+/* ── Form Validation Helper ── */
+function validateCertForm() {
+  const requiredFields = [
+    { id: 'f_name', label: 'Certificate Name' },
+    { id: 'f_certType', label: 'Certificate Type' },
+    { id: 'f_issuedBy', label: 'Issued By' },
+    { id: 'f_issueDate', label: 'Inspection Date' },
+    { id: 'f_period', label: 'Period' },
+    { id: 'f_expiryDate', label: 'Expiry Date' }
+  ];
+  
+  let isValid = true;
+  let firstErrorEl = null;
+  const errors = [];
+
+  // Reset previous errors
+  document.querySelectorAll('.sap-input--error').forEach(el => el.classList.remove('sap-input--error'));
+
+  requiredFields.forEach(field => {
+    const el = document.getElementById(field.id);
+    if (!el) return;
+    
+    if (!el.value || el.value.trim() === '') {
+      el.classList.add('sap-input--error');
+      errors.push(field.label);
+      if (!firstErrorEl) firstErrorEl = el;
+      isValid = false;
+    }
+  });
+
+  // Special check for Lifting Sub-type
+  const certType = document.getElementById('f_certType')?.value;
+  if (certType === 'LIFTING') {
+    const subEl = document.getElementById('f_liftingSubtype');
+    if (subEl && (!subEl.value || subEl.value.trim() === '')) {
+      subEl.classList.add('sap-input--error');
+      errors.push('Lifting Sub-type');
+      if (!firstErrorEl) firstErrorEl = subEl;
+      isValid = false;
+    }
+  }
+
+  // File or Link check (only for new certs)
+  const editId = document.getElementById('editCertId')?.value;
+  if (!editId && !selectedFile) {
+    const externalLink = document.getElementById('certExternalLink')?.value?.trim();
+    if (!externalLink) {
+      const zone = document.getElementById('uploadZone');
+      if (zone) zone.classList.add('sap-input--error');
+      errors.push('Certificate File or Link');
+      isValid = false;
+    }
+  }
+
+  if (!isValid) {
+    showToast('error', 'Validation Error', `Please fill all required fields: ${errors.join(', ')}`);
+    if (firstErrorEl) firstErrorEl.focus();
+  }
+
+  return isValid;
+}
+
 /* ── Save ── */
 async function saveCert() {
   const jobNumber      = document.getElementById('f_jobNumber')?.value?.trim() || '';
@@ -2224,28 +2302,21 @@ async function saveCert() {
   const jobForUpload      = selectedJobId ? JOBS_BY_ID[selectedJobId] : null;
   const effectiveClient   = isTechnician ? String(jobForUpload?.client_id || '').trim() : client;
 
-  if (!name || !certType || !effectiveIssuedBy || !issueDate || !expiryDate) {
-    showToast('error','Required Fields','Please fill all required fields.'); return;
-  }
+  // Clear previous validation errors
+  document.querySelectorAll('.sap-input--error').forEach(el => el.classList.remove('sap-input--error'));
+
+  if (!validateCertForm()) return;
+
   if (isTechnician && !selectedJobId) {
+    document.getElementById('f_jobSelect')?.classList.add('sap-input--error');
     showToast('error','Job Required','Please select an assigned active/reopened job.');
     return;
   }
-  if (isTechnician && !effectiveClient) {
-    showToast('error','Job Client Missing','Selected job is missing client mapping. Contact administrator.');
-    return;
-  }
-  if (certType === 'LIFTING' && !liftingSubtype) {
-    showToast('error','Lifting Sub-type Required','Please select a lifting sub-type.'); return;
-  }
-  if (!editId && !selectedFile) {
-    const externalLink = document.getElementById('certExternalLink')?.value?.trim() || '';
-    if (!externalLink) {
-      showToast('error','File or Link Required','Please upload the certificate file or provide an external link.'); return;
-    }
-  }
+  
   if (issueDate && expiryDate && new Date(expiryDate) <= new Date(issueDate)) {
-    showToast('error','Invalid Date','Expiry date must be after issue date.'); return;
+    document.getElementById('f_expiryDate')?.classList.add('sap-input--error');
+    showToast('error','Invalid Date','Expiry date must be after inspection date.'); 
+    return;
   }
 
   const saveBtn = document.querySelector('[onclick*="saveCert"]');

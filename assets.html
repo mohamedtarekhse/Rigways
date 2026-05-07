@@ -170,6 +170,12 @@
       cursor: pointer;
     }
 
+    /* Form Validation Styles */
+    .sap-input--error {
+      border-color: var(--sap-error) !important;
+      background-color: var(--sap-error-bg) !important;
+    }
+
     /* ── Mass action bar (Gmail-style second row) ── */
     .mass-action-bar {
       display: none;
@@ -2226,6 +2232,48 @@ function closeModal(force) {
   document.getElementById('assetModal').classList.remove('open');
 }
 
+/* ── Form Validation Helper ── */
+function validateAssetForm() {
+  const requiredFields = [
+    { id: 'f_name', label: 'Asset Name' },
+    { id: 'f_type', label: 'Asset Type' },
+    { id: 'f_serial', label: 'Serial Number' },
+    { id: 'f_status', label: 'Status' },
+    { id: 'f_location', label: 'Functional Location' },
+    { id: 'f_zone_equipment', label: 'Zone/Room' },
+    { id: 'f_client', label: 'Client' }
+  ];
+  
+  let isValid = true;
+  let firstErrorEl = null;
+  const errors = [];
+
+  // Reset previous errors
+  document.querySelectorAll('.sap-input--error').forEach(el => el.classList.remove('sap-input--error'));
+
+  requiredFields.forEach(field => {
+    const el = document.getElementById(field.id);
+    if (!el) return;
+    
+    // Check if client is required (it might be hidden if session.customerId exists)
+    if (field.id === 'f_client' && session.customerId) return;
+
+    if (!el.value || el.value.trim() === '') {
+      el.classList.add('sap-input--error');
+      errors.push(field.label);
+      if (!firstErrorEl) firstErrorEl = el;
+      isValid = false;
+    }
+  });
+
+  if (!isValid) {
+    showToast('error', 'Validation Error', `Please fill all required fields: ${errors.join(', ')}`);
+    if (firstErrorEl) firstErrorEl.focus();
+  }
+
+  return isValid;
+}
+
 async function saveAsset(e) {
   if (e && e.preventDefault) e.preventDefault();
   const name     = document.getElementById('f_name').value.trim();
@@ -2233,24 +2281,13 @@ async function saveAsset(e) {
   const status   = document.getElementById('f_status').value;
   const location = document.getElementById('f_location').value;
   const appliedStandard = document.getElementById('f_appliedStandard').value.trim();
-  const client   = document.getElementById('f_client').value || session.customerId;
-  if (!name || !type || !status || !location || !client) {
-    showToast('error', 'Required Fields', 'Please fill all required fields.');
-    return;
-  }
-
-  const serial = document.getElementById('f_serial').value.trim();
   const zoneEquipment = document.getElementById('f_zone_equipment').value.trim();
-  if (!serial) {
-    showToast('error', 'Required', 'Serial Number is required.');
-    document.getElementById('f_serial').focus();
-    return;
-  }
-  if (!zoneEquipment) {
-    showToast('error', 'Required', 'Zone of Equipment is required.');
-    document.getElementById('f_zone_equipment').focus();
-    return;
-  }
+  const client   = document.getElementById('f_client').value || session.customerId;
+
+  // Clear previous validation errors
+  document.querySelectorAll('.sap-input--error').forEach(el => el.classList.remove('sap-input--error'));
+
+  if (!validateAssetForm()) return;
 
   const editId  = document.getElementById('editAssetId').value;
   const saveBtn = document.getElementById('saveBtn');
