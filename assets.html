@@ -2345,6 +2345,7 @@ async function saveAsset(e) {
     closeModal(true);
     await loadAssets();
   } catch(err) {
+    console.error('saveAsset error:', err);
     showToast('error', 'Network Error', 'Could not save asset. Please try again.');
   } finally {
     if (saveBtn) { saveBtn.disabled = false; const lbl = document.getElementById('saveBtnLabel'); if (lbl) lbl.textContent = 'Save Asset'; }

@@ -2364,6 +2364,7 @@ async function saveCert() {
     // For new records the UUID comes back from the server
     if (!certUUID) certUUID = savedCert.id || savedCert.cert_number;
   } catch(e) {
+    console.error('saveCert error:', e);
     showToast('error','Network Error','Could not save certificate.');
     if (saveBtn) { saveBtn.disabled = false; const _lbl3 = document.getElementById('saveBtnLabel'); if (_lbl3) _lbl3.textContent = 'Save Certificate'; }
     return;

@@ -964,6 +964,7 @@ async function handleAssets(request, env, path) {
   if (!asId && method === 'POST') {
     if (!requireRole(session, ['admin', 'manager'])) return forbidden(env);
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    console.log('[handleAssets] Creating asset:', body);
     const { valid, errors } = validate(body, {
       asset_number: { required: false, type: 'string', minLength: 1, maxLength: 50 },
       name: { required: true, type: 'string', minLength: 2, maxLength: 200 },
@@ -1006,20 +1007,7 @@ async function handleAssets(request, env, path) {
         asset_type: body.asset_type,
         status: body.status || 'operation',
         client_id: body.client_id || null,
-        functional_location: await (async () => {
-          const fl = body.functional_location;
-          if (!fl) return null;
-          const { data: flRows } = await db.from('functional_locations', { 
-            filters: { 'fl_id.eq': fl }, 
-            select: 'id,client_id', 
-            limit: 1 
-          });
-          const flRow = Array.isArray(flRows) ? flRows[0] : flRows;
-          if (!flRow) return null;
-          // Only use if client matches (if client_id is provided)
-          if (body.client_id && flRow.client_id !== body.client_id) return null;
-          return fl;
-        })(),
+        functional_location: body.functional_location || null,
         serial_number: body.serial_number || null,
         manufacturer: body.manufacturer || null,
         model: body.model || null,
@@ -1787,6 +1775,7 @@ async function handleCertificates(request, env, path) {
   if (!certId && method === 'POST') {
     if (!requireRole(session, ['admin', 'manager', 'technician'])) return forbidden(env);
     let body; try { body = await request.json(); } catch { return badReq('Invalid JSON', 'BAD_JSON', env); }
+    console.log('[handleCertificates] Creating certificate:', body);
     const { valid, errors } = validate(body, {
       name: { required: true, type: 'string', minLength: 2, maxLength: 200 },
       cert_type: { required: true, type: 'string', minLength: 2, maxLength: 100 },
@@ -1823,6 +1812,15 @@ async function handleCertificates(request, env, path) {
 
     // NOTE: job/assignment/status and job-asset matching constraints are temporarily disabled.
 
+    // Validate functional_location exists before assigning to avoid FK violation
+    let functional_location = null;
+    if (asset.functional_location) {
+      const { data: flRows } = await db.from('functional_locations', { filters: { 'fl_id.eq': asset.functional_location }, select: 'fl_id', limit: 1 });
+      if (Array.isArray(flRows) ? flRows[0] : flRows) {
+        functional_location = asset.functional_location;
+      }
+    }
+
     const { data, error } = await db.insert('certificates', {
       name: body.name,
       cert_type: body.cert_type,
@@ -1837,13 +1835,7 @@ async function handleCertificates(request, env, path) {
       file_name: body.file_name || null,
       file_url: body.file_url || null,
       notes: body.notes || null,
-      // Validate functional_location exists before assigning to avoid FK violation
-      functional_location: await (async () => {
-        const fl = asset.functional_location;
-        if (!fl) return null;
-        const { data: flRows } = await db.from('functional_locations', { filters: { 'fl_id.eq': fl }, select: 'fl_id', limit: 1 });
-        return (Array.isArray(flRows) ? flRows[0] : flRows) ? fl : null;
-      })(),
+      functional_location,
       approval_status: session.role === 'admin' ? 'approved' : 'pending',
       uploaded_by: session.sub,
     });
