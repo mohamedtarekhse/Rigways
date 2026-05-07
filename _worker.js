@@ -69,7 +69,10 @@ const unauth = (env, request = null) => json({ success: false, error: 'Unauthori
 const forbidden = (env, request = null) => json({ success: false, error: 'Forbidden', code: 'FORBIDDEN' }, 403, env, request);
 const notFound = (res, env, request = null) => json({ success: false, error: `${res} not found`, code: 'NOT_FOUND' }, 404, env, request);
 const conflict = (error, env, request = null) => json({ success: false, error, code: 'CONFLICT' }, 409, env, request);
-const serverErr = (env, msg, request = null) => json({ success: false, error: msg ? 'Server error: ' + msg : 'Internal server error', code: 'SERVER_ERROR' }, 500, env, request);
+const serverErr = (env, msg, request = null) => {
+  const errorMsg = msg ? 'Server error: ' + msg : 'Internal server error';
+  return json({ success: false, error: errorMsg, code: 'SERVER_ERROR' }, 500, env, request);
+};
 
 // ── validate.js ──
 // worker/src/utils/validate.js
@@ -1003,7 +1006,20 @@ async function handleAssets(request, env, path) {
         asset_type: body.asset_type,
         status: body.status || 'operation',
         client_id: body.client_id || null,
-        functional_location: body.functional_location || null,
+        functional_location: await (async () => {
+          const fl = body.functional_location;
+          if (!fl) return null;
+          const { data: flRows } = await db.from('functional_locations', { 
+            filters: { 'fl_id.eq': fl }, 
+            select: 'id,client_id', 
+            limit: 1 
+          });
+          const flRow = Array.isArray(flRows) ? flRows[0] : flRows;
+          if (!flRow) return null;
+          // Only use if client matches (if client_id is provided)
+          if (body.client_id && flRow.client_id !== body.client_id) return null;
+          return fl;
+        })(),
         serial_number: body.serial_number || null,
         manufacturer: body.manufacturer || null,
         model: body.model || null,
@@ -1821,11 +1837,20 @@ async function handleCertificates(request, env, path) {
       file_name: body.file_name || null,
       file_url: body.file_url || null,
       notes: body.notes || null,
-      functional_location: asset.functional_location || null,
+      // Validate functional_location exists before assigning to avoid FK violation
+      functional_location: await (async () => {
+        const fl = asset.functional_location;
+        if (!fl) return null;
+        const { data: flRows } = await db.from('functional_locations', { filters: { 'fl_id.eq': fl }, select: 'fl_id', limit: 1 });
+        return (Array.isArray(flRows) ? flRows[0] : flRows) ? fl : null;
+      })(),
       approval_status: session.role === 'admin' ? 'approved' : 'pending',
       uploaded_by: session.sub,
     });
-    if (error) return serverErr(env);
+    if (error) {
+      console.error('[Certificates] Insert failed:', error);
+      return serverErr(env, error.message || JSON.stringify(error));
+    }
     const cert = Array.isArray(data) ? data[0] : data;
     await _recordCertificateHistory(db, cert, session, 'create');
     if (cert.approval_status === 'approved') {
@@ -2483,11 +2508,14 @@ async function _withUploaderUsername(db, rows, field = 'uploaded_by') {
     limit: userIds.length + 5,
   });
   const map = new Map((Array.isArray(users) ? users : []).map(u => [u.id, u.username]));
-  return rows.map(r => ({
-    ...r,
-    uploaded_by_username: field === 'uploaded_by' ? (map.get(r.uploaded_by) || null) : undefined,
-    changed_by_username: field === 'changed_by' ? (map.get(r.changed_by) || null) : undefined,
-  }));
+  return rows.map(r => {
+    if (!r) return r;
+    return {
+      ...r,
+      uploaded_by_username: field === 'uploaded_by' ? (map.get(r.uploaded_by) || null) : undefined,
+      changed_by_username: field === 'changed_by' ? (map.get(r.changed_by) || null) : undefined,
+    };
+  });
 }
 
 async function _recordCertificateHistory(db, cert, session, action) {
