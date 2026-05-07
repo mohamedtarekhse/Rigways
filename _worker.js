@@ -19,8 +19,9 @@ function securityHeaders(request, env = {}) {
     "img-src 'self' data: blob: https:",
     "font-src 'self' data: https://fonts.gstatic.com",
     "connect-src 'self' https: wss: http://localhost:8787 http://127.0.0.1:8787",
-    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com",
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com blob:",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "worker-src 'self' blob:",
     "upgrade-insecure-requests",
   ].join('; ');
   return {

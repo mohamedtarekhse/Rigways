@@ -4,14 +4,15 @@
   <meta charset="UTF-8"/>
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+    script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com blob:;
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com;
-    img-src 'self' data: blob:;
-    connect-src 'self' https: http://localhost:8787 http://127.0.0.1:8787;
-    worker-src 'self';
+    img-src 'self' data: blob: https:;
+    connect-src 'self' https: wss: http://localhost:8787 http://127.0.0.1:8787;
     object-src 'none';
+    worker-src 'self' blob:;
     base-uri 'self';
+    upgrade-insecure-requests;
   "/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <link rel="manifest" href="manifest.json"/>
@@ -813,12 +814,14 @@ async function loadFilterSources() {
         if (!FILTER_LOCATIONS_BY_CLIENT.has(clientName)) FILTER_LOCATIONS_BY_CLIENT.set(clientName, new Set());
         FILTER_LOCATIONS_BY_CLIENT.get(clientName).add(locName);
         
-        // Store mapping from BOTH fl_id and UUID to name
-        if (l.fl_id) FUNC_LOC_NAME_BY_ID.set(String(l.fl_id).trim(), locName);
-        if (l.id) FUNC_LOC_NAME_BY_ID.set(String(l.id).trim(), locName);
+        // Store mapping from BOTH fl_id and UUID to name (case-insensitive for reliability)
+        if (l.fl_id) FUNC_LOC_NAME_BY_ID.set(String(l.fl_id).trim().toLowerCase(), locName);
+        if (l.id) FUNC_LOC_NAME_BY_ID.set(String(l.id).trim().toLowerCase(), locName);
       });
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('loadFilterSources error:', e);
+  }
 }
 
 function populateFilters(source = NOTIFICATIONS) {
@@ -1372,7 +1375,7 @@ async function loadNotifications() {
     const assetNumberById = new Map(assetsList.map(a => [a.id, a.asset_number || a.id]));
     const assetLocById = new Map(assetsList.map(a => {
       const locId = a.functional_location || a.location || '';
-      const locName = FUNC_LOC_NAME_BY_ID.get(String(locId).trim()) || locId;
+      const locName = FUNC_LOC_NAME_BY_ID.get(String(locId).trim().toLowerCase()) || locId;
       return [a.id, locName];
     }));
 
@@ -1454,7 +1457,19 @@ async function loadNotifications() {
     });
 
     // ── Map DB notifications (approval events, system messages) ────────
-    const mappedDbNotifs = dbNotifs.map(n => {
+    const mappedDbNotifs = dbNotifs.filter(n => {
+      // Logic to hide notifications for older certificates if a newer one exists
+      if (n.ref_type === 'certificate' && n.ref_id) {
+        const cert = certsArray.find(c => c.id === n.ref_id);
+        if (cert) {
+          const key = `${cert.asset_id}|${cert.name}`;
+          const latest = latestCertsMap.get(key);
+          // If this cert is NOT the latest approved one for its asset+type, we hide its notification
+          if (latest && cert.id !== latest.id) return false;
+        }
+      }
+      return true;
+    }).map(n => {
       // Derive display type from DB type field
       let type     = 'system';
       let priority = 'info';
@@ -1464,6 +1479,11 @@ async function loadNotifications() {
         priority = (n.body || '').toLowerCase().includes('approved') ? 'success' : 'critical';
       }
       if (n.type === 'expiry' || n.type === 'cert_expiry') { type = 'expiry'; priority = 'high'; }
+      if (n.type === 'asset_transfer') { type = 'system'; priority = 'info'; }
+
+      const cert = n.ref_type === 'certificate' ? certsArray.find(c => c.id === n.ref_id) : null;
+      const asset = n.ref_type === 'asset' ? assetsList.find(a => a.id === n.ref_id) : (cert ? assetsList.find(a => a.id === cert.asset_id) : null);
+      const funcLoc = asset ? (assetLocById.get(asset.id) || '') : '';
 
       return {
         ...n,
@@ -1475,8 +1495,8 @@ async function loadNotifications() {
         client:    n.client_id || null,
         clientName: (window.SapClients && typeof window.SapClients.display === 'function') ? window.SapClients.display(n.client_id || '') : (n.client_id || ''),
         certId:    n.ref_type === 'certificate' ? n.ref_id : null,
-        jobNumber: '',
-        functionalLocation: n.ref_type === 'certificate' ? (assetLocById.get((Array.isArray(allCerts) ? allCerts : []).find(c => c.id === n.ref_id)?.asset_id) || '') : '',
+        jobNumber: cert ? (cert.notes || '') : '',
+        functionalLocation: funcLoc,
         read:      n.is_read,
         isRead:    n.is_read,
         dismissed: false,

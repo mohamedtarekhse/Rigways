@@ -1167,6 +1167,13 @@ body.density-ultra  .sap-table tbody tr:nth-child(even) {
 }
 .sap-input.error, .sap-select.error { border-color: var(--sap-error); }
 .sap-input:disabled, .sap-select:disabled { background: #f5f6f7; cursor: not-allowed; color: var(--sap-text-disabled); }
+.sap-input--error {
+  border-color: var(--sap-error) !important;
+  box-shadow: 0 0 0 2px rgba(187, 0, 0, 0.1) !important;
+}
+.sap-input--error:focus {
+  box-shadow: 0 0 0 2px rgba(187, 0, 0, 0.2) !important;
+}
 
 /* Enhanced field states for better accessibility */
 .sap-field.has-focus .sap-label {
