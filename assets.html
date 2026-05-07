@@ -175,6 +175,22 @@
       border-color: var(--sap-error) !important;
       background-color: var(--sap-error-bg) !important;
     }
+    .sap-field-error-msg {
+      color: var(--sap-error);
+      font-size: 11px;
+      font-weight: 600;
+      margin-top: 4px;
+      display: none; /* Hidden by default */
+    }
+    .sap-input--error + .sap-field-error-msg {
+      display: block;
+    }
+    .sap-input--error + .sap-select-wrapper + .sap-field-error-msg {
+      display: block;
+    }
+    .sap-input--error ~ .sap-field-error-msg {
+      display: block;
+    }
 
     /* ── Mass action bar (Gmail-style second row) ── */
     .mass-action-bar {
@@ -782,6 +798,7 @@
           <div class="sap-field">
             <label class="sap-label">Asset Name <span class="required">*</span></label>
             <input type="text" id="f_name" class="sap-input" required/>
+            <span class="sap-field-error-msg">Asset name is required</span>
           </div>
 
           <!-- Asset Type -->
@@ -798,6 +815,7 @@
               <option value="Well Control">Well Control</option>
               <option value="Tubular">Tubular</option>
             </select>
+            <span class="sap-field-error-msg">Please select an asset type</span>
           </div>
 
           <!-- Applied Standard — shown when a type is selected -->
@@ -814,6 +832,7 @@
           <div class="sap-field">
             <label class="sap-label">Serial Number <span class="required">*</span></label>
             <input type="text" id="f_serial" class="sap-input" placeholder="Must be unique across all assets"/>
+            <span class="sap-field-error-msg">Serial Number is required</span>
           </div>
 
           <!-- Status -->
@@ -823,6 +842,7 @@
               <option value="operation">Operation</option>
               <option value="stacked">Stacked</option>
             </select>
+            <span class="sap-field-error-msg">Please select a status</span>
             <!-- Technician: show approval notice -->
             <div class="approval-info-box" id="statusApprovalNote" style="display:none;margin-top:8px;">
               <strong>⚠ <span>Approval Required</span></strong><br/>
@@ -835,6 +855,7 @@
             <label class="sap-label">Zone of Equipment <span class="required">*</span></label>
             <input type="text" id="f_zone_equipment" class="sap-input"
               placeholder="e.g. Drill Floor, Pump Room, BOP Deck, Pipe Rack…"/>
+            <span class="sap-field-error-msg">Zone/Room is required</span>
           </div>
 
           <!-- Functional Location -->
@@ -852,6 +873,7 @@
                 Add New
               </button>
             </div>
+            <span class="sap-field-error-msg">Please select a functional location</span>
             <!-- Inline add form — hidden by default -->
             <div id="inlineFuncLocForm" style="display:none;margin-top:8px;background:var(--sap-brand-light);border:1px solid var(--sap-info-border);border-radius:6px;padding:10px 12px;">
               <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--sap-brand);margin-bottom:8px;">New Functional Location</div>
@@ -889,6 +911,7 @@
             <select id="f_client" class="sap-select" required onchange="onAssetClientChange()">
               <option value="">Select client…</option>
             </select>
+            <span class="sap-field-error-msg">Please select a client</span>
           </div>
 
           <!-- Notes -->
@@ -2246,7 +2269,6 @@ function validateAssetForm() {
   
   let isValid = true;
   let firstErrorEl = null;
-  const errors = [];
 
   // Reset previous errors
   document.querySelectorAll('.sap-input--error').forEach(el => el.classList.remove('sap-input--error'));
@@ -2260,14 +2282,13 @@ function validateAssetForm() {
 
     if (!el.value || el.value.trim() === '') {
       el.classList.add('sap-input--error');
-      errors.push(field.label);
       if (!firstErrorEl) firstErrorEl = el;
       isValid = false;
     }
   });
 
   if (!isValid) {
-    showToast('error', 'Validation Error', `Please fill all required fields: ${errors.join(', ')}`);
+    showToast('error', 'Validation Error', 'Please check the highlighted fields below.');
     if (firstErrorEl) firstErrorEl.focus();
   }
 

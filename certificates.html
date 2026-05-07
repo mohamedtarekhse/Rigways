@@ -728,6 +728,7 @@
           <div class="sap-field">
             <label class="sap-label">Job Number <span class="required">*</span></label>
             <input type="text" id="f_jobNumber" class="sap-input" placeholder="e.g. JOB-2024-010 — groups all certs done in one job"/>
+            <span class="sap-field-error-msg">Job Number is required</span>
           </div>
           <div class="sap-field">
             <label class="sap-label">Select Job</label>
@@ -748,6 +749,7 @@
           <div class="sap-field">
             <label class="sap-label">Certificate Name / Title <span class="required">*</span></label>
             <input type="text" id="f_name" class="sap-input"/>
+            <span class="sap-field-error-msg">Certificate title is required</span>
           </div>
 
           <!-- Cert Type -->
@@ -763,6 +765,7 @@
               <option>NDT</option>
               <option>TUBULAR</option>
             </select>
+            <span class="sap-field-error-msg">Please select a certificate type</span>
           </div>
 
           <!-- Lifting Sub-type — shown only when LIFTING is selected -->
@@ -774,6 +777,7 @@
               <option>LIFTING GEAR</option>
               <option>LIFTING PERSONNEL</option>
             </select>
+            <span class="sap-field-error-msg">Please select a lifting sub-type</span>
           </div>
 
           <!-- Issued By — inspector dropdown -->
@@ -787,12 +791,14 @@
               <option>Layla Bin Rashid</option>
               <option>Khalid Al-Mansouri</option>
             </select>
+            <span class="sap-field-error-msg">Please select an inspector</span>
           </div>
 
           <!-- Issue Date -->
           <div class="sap-field">
             <label class="sap-label">Inspection Date <span class="required">*</span></label>
             <input type="date" id="f_issueDate" class="sap-input" onchange="calculateExpiryDate()"/>
+            <span class="sap-field-error-msg">Inspection date is required</span>
           </div>
 
           <!-- Period -->
@@ -807,12 +813,14 @@
               <option value="60">5 Years</option>
               <option value="120">10 Years</option>
             </select>
+            <span class="sap-field-error-msg">Period is required for expiry calculation</span>
           </div>
 
           <!-- Expiry Date -->
           <div class="sap-field">
             <label class="sap-label">Expiry Date <span class="required">*</span></label>
             <input type="date" id="f_expiryDate" class="sap-input"/>
+            <span class="sap-field-error-msg">Expiry date is required</span>
           </div>
 
           <!-- Client -->
@@ -821,6 +829,7 @@
             <select id="f_client" class="sap-select">
               <option value="">Select client…</option>
             </select>
+            <span class="sap-field-error-msg">Please select a client</span>
           </div>
 
         </div><!-- /grid -->
@@ -834,6 +843,7 @@
             <div class="upload-zone__title"><span>Click to upload</span> <span>or drag & drop</span></div>
             <div class="upload-zone__hint">PDF, JPG, PNG up to 200MB</div>
           </div>
+          <span class="sap-field-error-msg">Certificate file is required</span>
           <div id="uploadPreview" style="display:none;" class="upload-preview">
             <div class="upload-preview__icon" id="previewIcon">📄</div>
             <div class="upload-preview__info">
@@ -2235,7 +2245,6 @@ function validateCertForm() {
   
   let isValid = true;
   let firstErrorEl = null;
-  const errors = [];
 
   // Reset previous errors
   document.querySelectorAll('.sap-input--error').forEach(el => el.classList.remove('sap-input--error'));
@@ -2246,7 +2255,6 @@ function validateCertForm() {
     
     if (!el.value || el.value.trim() === '') {
       el.classList.add('sap-input--error');
-      errors.push(field.label);
       if (!firstErrorEl) firstErrorEl = el;
       isValid = false;
     }
@@ -2258,7 +2266,6 @@ function validateCertForm() {
     const subEl = document.getElementById('f_liftingSubtype');
     if (subEl && (!subEl.value || subEl.value.trim() === '')) {
       subEl.classList.add('sap-input--error');
-      errors.push('Lifting Sub-type');
       if (!firstErrorEl) firstErrorEl = subEl;
       isValid = false;
     }
@@ -2271,13 +2278,12 @@ function validateCertForm() {
     if (!externalLink) {
       const zone = document.getElementById('uploadZone');
       if (zone) zone.classList.add('sap-input--error');
-      errors.push('Certificate File or Link');
       isValid = false;
     }
   }
 
   if (!isValid) {
-    showToast('error', 'Validation Error', `Please fill all required fields: ${errors.join(', ')}`);
+    showToast('error', 'Validation Error', 'Please check the highlighted fields below.');
     if (firstErrorEl) firstErrorEl.focus();
   }
 
